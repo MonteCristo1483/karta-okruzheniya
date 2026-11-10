@@ -1,1 +1,9 @@
 .env
+node_modules/
+.next/
+pycache/
+*.pyc
+data/raw/
+data/processed/
+*.pmtiles
+.DS_Store
