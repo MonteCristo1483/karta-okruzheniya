@@ -15,7 +15,7 @@ import urllib.request
 from email.message import Message
 from pathlib import Path
 
-URL = "https://download.geofabrik.de/russia/central-federal-district/moscow-latest.osm.pbf"
+URL = "https://download.geofabrik.de/russia/central-fed-district-latest.osm.pbf"
 TARGET = Path(__file__).resolve().parent.parent / "data" / "raw" / "moscow.osm.pbf"
 CHUNK_SIZE = 1 << 20  # 1 МиБ
 ATTEMPTS = 5
