@@ -1,0 +1,21 @@
+services:
+  postgis:
+    image: postgis/postgis:16-3.4
+    container_name: okrug-postgis
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: okrug
+      POSTGRES_USER: okrug
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-okrug_local_dev}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgis_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U okrug -d okrug"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgis_data:
