@@ -1,0 +1,58 @@
+{
+  "meta": {
+    "version": 1,
+    "based_on": "SPEC §3"
+  },
+  "index": {
+    "base": 5,
+    "min": 0,
+    "max": 10,
+    "rounding_decimals": 1
+  },
+  "bonuses": {
+    "comment": "Бонус категории = max * multiplier, где multiplier — по времени пешком до ближайшего объекта типа из poi_types; дальше последнего порога — 0.",
+    "time_thresholds_min": [
+      { "up_to": 5, "multiplier": 1.0 },
+      { "up_to": 10, "multiplier": 0.667 },
+      { "up_to": 15, "multiplier": 0.333 }
+    ],
+    "categories": {
+      "transport": { "max": 1.5, "poi_types": ["subway_entrance"] },
+      "schools": { "max": 1.0, "poi_types": ["school"] },
+      "parks": { "max": 1.0, "poi_types": ["park"] },
+      "kindergartens": { "max": 0.5, "poi_types": ["kindergarten"] },
+      "shops": { "max": 0.5, "poi_types": ["shop"] }
+    }
+  },
+  "penalties": {
+    "comment": "Каждый штраф = max * weight * (1 - расстояние/радиус); max хранится отрицательным и суммируется: index = clamp(base + сумма бонусов + сумма штрафов, min, max). Объектов слоя в радиусе нет — штраф 0.",
+    "road": {
+      "label": "магистраль",
+      "max": -2.5,
+      "radius_m": 150,
+      "enabled": true,
+      "classes": { "trunk": 1.0, "primary": 0.7, "secondary": 0.4 }
+    },
+    "railway": {
+      "label": "ж/д",
+      "max": -1.5,
+      "radius_m": 300,
+      "enabled": true,
+      "classes": ["rail", "narrow_gauge", "light_rail"]
+    },
+    "construction": {
+      "label": "стройка",
+      "max": -1.0,
+      "radius_m": 300,
+      "enabled": false,
+      "comment": "Слой не импортирован (нет таблицы строек). Включить enabled после импорта разрешений на строительство / landuse=construction."
+    },
+    "industrial": {
+      "label": "промзона",
+      "max": -1.5,
+      "radius_m": 500,
+      "enabled": false,
+      "comment": "Слой не импортирован (landuse=industrial). Включить enabled после импорта."
+    }
+  }
+}

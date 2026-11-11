@@ -10,20 +10,20 @@
 - [ ] Выбрать рабочее название и проверить домен
 
 ## Неделя 1 — данные (репозиторий → агент)
-- [ ] T1. docker-compose с PostGIS (образ postgis/postgis, БД okrug, порт 5432)
-- [ ] T2. Скрипт pipeline/download_osm.py: скачать выгрузку OSM по Москве
+- [x] T1. docker-compose с PostGIS (образ postgis/postgis, БД okrug, порт 5432)
+- [x] T2. Скрипт pipeline/download_osm.py: скачать выгрузку OSM по Москве
       (geofabrik) в data/raw/moscow.osm.pbf; без коммита самого файла
-- [ ] T3. Скрипт импорта зданий: osmium → buildings геометрия + теги
+- [x] T3. Скрипт импорта зданий: osmium → buildings геометрия + теги
       (height, building:levels, addr*) в PostGIS, таблица buildings
-- [ ] T4. Фолбэк высоты: height = building:levels × 3, где height нет. Вьюха
+- [x] T4. Фолбэк высоты: height = building:levels × 3, где height нет. Вьюха
       buildings_with_height
-- [ ] T5. Импорт POI: schools, kindergartens, parks, subway entrances, shops
+- [x] T5. Импорт POI: schools, kindergartens, parks, subway entrances, shops
       из того же PBF в таблицу poi (type, geometry)
-- [ ] T6. Импорт дорог и ж/д: highway=* с классами trunk/primary/secondary,
+- [x] T6. Импорт дорог и ж/д: highway=* с классами trunk/primary/secondary,
       railway=* в таблицу linear (kind, class, geometry)
-- [ ] T7. Ограничить всё районом Пресненский (полигон в data/presnensky.geojson)
-- [ ] T8. Аудит: SQL-запросы «сколько зданий без высоты/адреса», отчёт в
-      data/audit.md — человек читает и решает, чего не хватает
+- [x] T7. Ограничить всё районом Пресненский (полигон в pipeline/presnensky.geojson)
+- [x] T8. Аудит: SQL-запросы «сколько зданий без высоты/адреса», отчёт в
+      pipeline/audit_presnya.md — человек читает и решает, чего не хватает
 
 ## Неделя 2 — скоринг
 - [ ] T9. config/scoring.json по SPEC.md разделу 3 (все числа из SPEC)
