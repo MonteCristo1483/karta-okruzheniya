@@ -182,10 +182,9 @@ def collect_penalties(cur, scope: str, scope_params: list, cfg: dict) -> tuple[d
     return penalties, skipped
 
 
-def main(argv: list[str]) -> int:
-    cfg = load_config()
+def run(scope: str, scope_params: list, cfg: dict) -> int:
+    """Посчитать и сохранить индексы для скоупа (SQL-фрагмент FROM)."""
     base = dec(cfg["index"]["base"])
-    scope, scope_params = scope_from_args(argv)
 
     with psycopg.connect(DB_DSN) as conn, conn.cursor() as cur:
         cur.execute(CREATE_TABLE)
@@ -221,6 +220,13 @@ def main(argv: list[str]) -> int:
         f"Готово: {len(building_ids):,} зданий, слои disabled пропущены: "
         f"{', '.join(skipped) if skipped else 'нет'}"
     )
+    return len(building_ids)
+
+
+def main(argv: list[str]) -> int:
+    cfg = load_config()
+    scope, scope_params = scope_from_args(argv)
+    run(scope, scope_params, cfg)
     return 0
 
 
