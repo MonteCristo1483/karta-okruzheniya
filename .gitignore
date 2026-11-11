@@ -7,3 +7,4 @@ data/raw/
 data/processed/
 *.pmtiles
 .DS_Store
+.venv/
