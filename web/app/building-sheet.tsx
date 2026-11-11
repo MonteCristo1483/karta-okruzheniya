@@ -1,3 +1,7 @@
+"use client";
+
+import { useRef } from "react";
+
 export type BonusEntry = {
   distance_m: number;
   minutes: number;
@@ -118,7 +122,14 @@ function Bars({
   );
 }
 
-export default function BuildingSheet({ building }: { building: SelectedBuilding | null }) {
+export default function BuildingSheet({
+  building,
+  onClose,
+}: {
+  building: SelectedBuilding | null;
+  onClose: () => void;
+}) {
+  const touchStartY = useRef<number | null>(null);
   const breakdown = building?.breakdown ?? null;
   const bonusRows = Object.entries(breakdown?.bonuses ?? {})
     .map(([key, entry]) => ({
@@ -144,17 +155,45 @@ export default function BuildingSheet({ building }: { building: SelectedBuilding
 
   return (
     <div
-      className={`fixed inset-x-0 bottom-0 z-10 transition-transform duration-300 ease-out ${
+      className={`pointer-events-none fixed inset-x-0 bottom-0 z-10 transition-transform duration-300 ease-out ${
         building ? "translate-y-0" : "translate-y-full"
       }`}
     >
       <div className="pointer-events-auto mx-auto w-full max-w-md rounded-t-3xl bg-white/95 px-5 pb-5 pt-3 shadow-2xl backdrop-blur">
-        <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-slate-200" />
+        <div
+          className="mx-auto mb-3 h-1.5 w-12 touch-none rounded-full bg-slate-200"
+          onTouchStart={(e) => {
+            touchStartY.current = e.touches[0]?.clientY ?? null;
+          }}
+          onTouchEnd={(e) => {
+            const start = touchStartY.current;
+            touchStartY.current = null;
+            const end = e.changedTouches[0]?.clientY;
+            if (start != null && end != null && end - start > 60) onClose();
+          }}
+        />
         {building && (
           <>
-            <h2 className="truncate text-lg font-bold text-slate-800">
-              {building.address ?? "Адрес не указан"}
-            </h2>
+            <div className="relative">
+              <h2 className="truncate pr-8 text-lg font-bold text-slate-800">
+                {building.address ?? "Адрес не указан"}
+              </h2>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Закрыть"
+                className="absolute -top-1 right-0 rounded-full bg-slate-100 p-1.5 text-slate-500 hover:bg-slate-200"
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                  <path
+                    d="M1 1l12 12M13 1L1 13"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </button>
+            </div>
 
             <div className="mt-3 flex items-center gap-4">
               <Ring index={building.index} />

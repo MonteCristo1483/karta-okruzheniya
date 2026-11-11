@@ -46,6 +46,7 @@ function footprintCenter(geometry: Geometry): [number, number] | null {
 export default function Map() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [selected, setSelected] = useState<SelectedBuilding | null>(null);
+  const deselectRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -153,15 +154,20 @@ export default function Map() {
         }
       };
 
+      const deselect = () => {
+        selectedId = null;
+        applySelection();
+        setSelected(null);
+      };
+      deselectRef.current = deselect;
+
       map.on("click", (e) => {
-        if (!map) return;
+        if (!map || !map.getLayer("buildings")) return;
         const feats = map.queryRenderedFeatures(e.point, { layers: ["buildings"] });
         const id = feats.length ? (feats[0].id as number) : null;
 
         if (id === null || id === selectedId) {
-          selectedId = null;
-          applySelection();
-          setSelected(null);
+          deselect();
           return;
         }
 
@@ -192,7 +198,7 @@ export default function Map() {
       });
 
       map.on("mousemove", (e) => {
-        if (!map) return;
+        if (!map || !map.getLayer("buildings")) return;
         const feats = map.queryRenderedFeatures(e.point, { layers: ["buildings"] });
         map.getCanvas().style.cursor = feats.length ? "pointer" : "";
       });
@@ -210,7 +216,7 @@ export default function Map() {
   return (
     <div className="relative h-full w-full">
       <div ref={containerRef} className="map-gradient h-full w-full" />
-      <BuildingSheet building={selected} />
+      <BuildingSheet building={selected} onClose={() => deselectRef.current?.()} />
       <div className="absolute bottom-2 right-3 max-w-md text-right text-[11px] leading-tight text-slate-500">
         © OpenStreetMap contributors, ODbL · Индекс окружения — справочная
         информация по открытым данным, не является замером или оценкой стоимости
