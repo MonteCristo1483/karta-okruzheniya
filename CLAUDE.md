@@ -31,7 +31,9 @@
 - config/scoring.json — все коэффициенты индекса
 - data/ — выгрузки (сырые не коммитятся)
 
-## Команды (заполнятся, когда появится каркас)
-- Пайплайн: (пока нет)
+## Команды
+- Пайплайн: зависимости — `pipeline/.venv/Scripts/python.exe -m pip install -r pipeline/requirements.txt`;
+  импорты — `pipeline/.venv/Scripts/python.exe pipeline/import_buildings.py` (и import_poi, import_linear,
+  extract_presnensky, scoring — по PLAN.md); БД поднимается `docker compose up -d`
 - Фронтенд: (пока нет)
-- Тесты: (пока нет)
+- Тесты: `pipeline/.venv/Scripts/python.exe -m unittest discover -s pipeline -p "test_*.py" -v`

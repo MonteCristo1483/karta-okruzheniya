@@ -90,6 +90,38 @@ def multiplier_for(minutes: Decimal, thresholds: list[dict]) -> Decimal:
     return Decimal(0)
 
 
+def bonus_for_distance(distance_m: Decimal, category_max: Decimal, cfg: dict) -> dict:
+    """Бонус категории за расстояние до ближайшего POI (по прямой)."""
+    minutes = walking_minutes(distance_m, dec(cfg["bonuses"]["walking_speed_kmh"]))
+    multiplier = multiplier_for(minutes, cfg["bonuses"]["time_thresholds_min"])
+    return {
+        "distance_m": float(round_dec(distance_m)),
+        "minutes": float(round_dec(minutes)),
+        "multiplier": float(multiplier),
+        "bonus": float(category_max * multiplier),
+    }
+
+
+def penalty_for_distance(
+    distance_m: Decimal,
+    penalty_max: Decimal,
+    weight: Decimal,
+    radius_m: Decimal,
+) -> Decimal:
+    """Штраф за близость линии; 0 на границе радиуса и дальше."""
+    if distance_m >= radius_m:
+        return Decimal(0)
+    return penalty_max * weight * (1 - distance_m / radius_m)
+
+
+def finalize_index(total: Decimal, cfg: dict) -> Decimal:
+    """Кламп в диапазон индекса и округление до десятых."""
+    low = dec(cfg["index"]["min"])
+    high = dec(cfg["index"]["max"])
+    decimals = int(cfg["index"]["rounding_decimals"])
+    return round_dec(clamp(total, low, high), decimals)
+
+
 def clamp(value: Decimal, low: Decimal, high: Decimal) -> Decimal:
     return max(low, min(value, high))
 
@@ -102,23 +134,13 @@ def scope_from_args(argv: list[str]) -> tuple[str, list]:
 
 
 def collect_bonuses(cur, scope: str, scope_params: list, cfg: dict) -> dict:
-    speed = dec(cfg["bonuses"]["walking_speed_kmh"])
-    thresholds = cfg["bonuses"]["time_thresholds_min"]
     bonuses: dict[str, dict] = {}
     for category, cat_cfg in cfg["bonuses"]["categories"].items():
         cur.execute(NEAREST_POI.format(scope=scope), [*scope_params, cat_cfg["poi_types"]])
         category_max = dec(cat_cfg["max"])
         per_building: dict[int, dict] = {}
         for osm_id, dist in cur.fetchall():
-            distance = dec(dist)
-            minutes = walking_minutes(distance, speed)
-            multiplier = multiplier_for(minutes, thresholds)
-            per_building[osm_id] = {
-                "distance_m": float(round_dec(distance)),
-                "minutes": float(round_dec(minutes)),
-                "multiplier": float(multiplier),
-                "bonus": float(category_max * multiplier),
-            }
+            per_building[osm_id] = bonus_for_distance(dec(dist), category_max, cfg)
         bonuses[category] = per_building
     return bonuses
 
@@ -149,7 +171,7 @@ def collect_penalties(cur, scope: str, scope_params: list, cfg: dict) -> tuple[d
         for osm_id, dist, cls in cur.fetchall():
             distance = dec(dist)
             weight = weight_of.get(cls, Decimal(1))
-            penalty = penalty_max * weight * (1 - distance / radius) if distance < radius else Decimal(0)
+            penalty = penalty_for_distance(distance, penalty_max, weight, radius)
             per_building[osm_id] = {
                 "distance_m": float(round_dec(distance)),
                 "class": cls,
@@ -163,9 +185,6 @@ def collect_penalties(cur, scope: str, scope_params: list, cfg: dict) -> tuple[d
 def main(argv: list[str]) -> int:
     cfg = load_config()
     base = dec(cfg["index"]["base"])
-    low = dec(cfg["index"]["min"])
-    high = dec(cfg["index"]["max"])
-    decimals = int(cfg["index"]["rounding_decimals"])
     scope, scope_params = scope_from_args(argv)
 
     with psycopg.connect(DB_DSN) as conn, conn.cursor() as cur:
@@ -188,7 +207,7 @@ def main(argv: list[str]) -> int:
                 entry = per_building.get(osm_id)
                 breakdown["penalties"][name] = entry
                 total += dec(entry["penalty"]) if entry else Decimal(0)
-            index = round_dec(clamp(total, low, high), decimals)
+            index = finalize_index(total, cfg)
             breakdown["index"] = float(index)
             buffer.append((osm_id, index, Jsonb(breakdown)))
             if len(buffer) >= BATCH_SIZE:
