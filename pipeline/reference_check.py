@@ -56,7 +56,9 @@ SELECT d.name,
        round(avg((s.breakdown->'bonuses'->'parks'->>'bonus')::numeric), 2) AS parks,
        round(avg((s.breakdown->'bonuses'->'shops'->>'bonus')::numeric), 2) AS shops,
        round(avg((s.breakdown->'penalties'->'road'->>'penalty')::numeric), 2) AS road,
-       round(avg((s.breakdown->'penalties'->'railway'->>'penalty')::numeric), 2) AS railway
+       round(avg((s.breakdown->'penalties'->'railway'->>'penalty')::numeric), 2) AS railway,
+       round(avg((s.breakdown->'penalties'->'industrial'->>'penalty')::numeric), 2) AS industrial,
+       round(avg((s.breakdown->'penalties'->'construction'->>'penalty')::numeric), 2) AS construction
 FROM districts d
 JOIN buildings b ON ST_Intersects(b.geometry, d.geometry)
 JOIN scores s ON s.building_id = b.osm_id
@@ -164,7 +166,8 @@ def main() -> int:
             row = cur.fetchone()
             print(
                 f"{ref['district']:<22} транспорт {row[1]:>5}  школы {row[2]:>5}  "
-                f"парки {row[3]:>5}  магазины {row[4]:>5}  дороги {row[5]:>6}  ж/д {row[6]:>6}"
+                f"парки {row[3]:>5}  магазины {row[4]:>5}  дороги {row[5]:>6}  "
+                f"ж/д {row[6]:>6}  промзона {row[7]:>6}  стройка {row[8]:>6}"
             )
 
     print(f"\nCSV: {OUT_CSV}")

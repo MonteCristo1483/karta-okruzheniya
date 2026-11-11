@@ -1,8 +1,8 @@
 {
   "meta": {
-    "version": 2,
+    "version": 3,
     "based_on": "SPEC §3",
-    "comment": "v2: включены слои штрафов стройка/промзона (таблица zones), бонус магазинов ограничен subtype (T13)."
+    "comment": "v2: включены слои штрафов стройка/промзона (таблица zones), бонус магазинов ограничен subtype (T13). v3: калибровка по эталону T12 — веса магистрали primary 0.85 / secondary 0.55, радиус 200 м (решение человека)."
   },
   "index": {
     "base": 5,
@@ -36,9 +36,9 @@
       "source": "linear",
       "label": "магистраль",
       "max": -2.5,
-      "radius_m": 150,
+      "radius_m": 200,
       "enabled": true,
-      "classes": { "trunk": 1.0, "primary": 0.7, "secondary": 0.4 }
+      "classes": { "trunk": 1.0, "primary": 0.85, "secondary": 0.55 }
     },
     "railway": {
       "source": "linear",
