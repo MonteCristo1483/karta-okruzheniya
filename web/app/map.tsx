@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import * as maplibregl from "maplibre-gl";
+import type { FeatureCollection, Geometry } from "geojson";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 const BUILDINGS_URL = "/data/presnya_buildings.geojson";
@@ -10,52 +11,184 @@ const BUILDINGS_URL = "/data/presnya_buildings.geojson";
 // его динамический URL (Turbopack и webpack одинаково).
 maplibregl.setWorkerUrl("/maplibre-gl-worker.mjs");
 
+const COLOR_LOW = "#dd9c93";
+const COLOR_MID = "#e9e3d6";
+const COLOR_HIGH = "#aad3b0";
+const COLOR_SELECTED = "#7fb069";
+const COLOR_DIM = "#b3bcc0";
+const COLOR_OUTLINE = "#4f9d64";
+
+function footprintCenter(geometry: Geometry): [number, number] | null {
+  const rings =
+    geometry.type === "Polygon"
+      ? [geometry.coordinates[0]]
+      : geometry.type === "MultiPolygon"
+        ? geometry.coordinates.map((polygon) => polygon[0])
+        : null;
+  if (!rings) return null;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const ring of rings) {
+    for (const [x, y] of ring) {
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y);
+      maxY = Math.max(maxY, y);
+    }
+  }
+  return [(minX + maxX) / 2, (minY + maxY) / 2];
+}
+
 export default function Map() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
+    const container = containerRef.current;
+    let cancelled = false;
+    let map: maplibregl.Map | null = null;
 
-    const map = new maplibregl.Map({
-      container: containerRef.current,
-      style: {
-        version: 8,
-        sources: {
-          buildings: { type: "geojson", data: BUILDINGS_URL },
-        },
-        layers: [
-          {
-            id: "buildings",
-            type: "fill-extrusion",
-            source: "buildings",
-            paint: {
-              "fill-extrusion-color": [
-                "step",
-                ["get", "index"],
-                "#dd9c93",
-                5,
-                "#e9e3d6",
-                7,
-                "#aad3b0",
-              ],
-              "fill-extrusion-height": ["coalesce", ["get", "height"], 9],
-              "fill-extrusion-base": 0,
-              "fill-extrusion-opacity": 0.95,
-            },
+    const init = async () => {
+      const data = (await (await fetch(BUILDINGS_URL)).json()) as FeatureCollection;
+      if (cancelled) return;
+      const allIds = data.features.map((f) => f.properties?.id as number);
+      let selectedId: number | null = null;
+
+      map = new maplibregl.Map({
+        container,
+        style: {
+          version: 8,
+          sources: {
+            buildings: { type: "geojson", data, promoteId: "id" },
           },
-        ],
-      },
-      center: [37.547, 55.762],
-      zoom: 14.3,
-      pitch: 60,
-      bearing: -18,
-      maxPitch: 72,
-      attributionControl: false,
-    });
+          layers: [
+            {
+              id: "buildings",
+              type: "fill-extrusion",
+              source: "buildings",
+              paint: {
+                // fill-extrusion-color поддерживает feature-state,
+                // fill-extrusion-opacity — нет, поэтому затемнение через цвет.
+                "fill-extrusion-color": [
+                  "case",
+                  ["to-boolean", ["feature-state", "selected"]],
+                  COLOR_SELECTED,
+                  ["to-boolean", ["feature-state", "inactive"]],
+                  COLOR_DIM,
+                  [
+                    "step",
+                    ["get", "index"],
+                    COLOR_LOW,
+                    5,
+                    COLOR_MID,
+                    7,
+                    COLOR_HIGH,
+                  ],
+                ],
+                "fill-extrusion-height": ["coalesce", ["get", "height"], 9],
+                "fill-extrusion-base": 0,
+                "fill-extrusion-opacity": 0.95,
+              },
+            },
+            {
+              id: "outline-halo",
+              type: "line",
+              source: "buildings",
+              paint: {
+                "line-color": COLOR_OUTLINE,
+                "line-width": 14,
+                "line-opacity": [
+                  "case",
+                  ["to-boolean", ["feature-state", "selected"]],
+                  0.25,
+                  0,
+                ],
+              },
+            },
+            {
+              id: "outline-core",
+              type: "line",
+              source: "buildings",
+              paint: {
+                "line-color": "#3d8b53",
+                "line-width": 3,
+                "line-opacity": [
+                  "case",
+                  ["to-boolean", ["feature-state", "selected"]],
+                  0.95,
+                  0,
+                ],
+              },
+            },
+          ],
+        },
+        center: [37.547, 55.762],
+        zoom: 14.3,
+        pitch: 60,
+        bearing: -18,
+        maxPitch: 72,
+        attributionControl: false,
+      });
 
-    map.addControl(new maplibregl.NavigationControl(), "top-right");
+      map.addControl(new maplibregl.NavigationControl(), "top-right");
 
-    return () => map.remove();
+      // Для проверок playwright: доступ к экземпляру карты.
+      (window as unknown as { __map?: maplibregl.Map }).__map = map;
+
+      const applySelection = () => {
+        if (!map) return;
+        for (const id of allIds) {
+          map.setFeatureState(
+            { source: "buildings", id },
+            {
+              selected: id === selectedId,
+              inactive: selectedId !== null && id !== selectedId,
+            },
+          );
+        }
+      };
+
+      map.on("click", (e) => {
+        if (!map) return;
+        const feats = map.queryRenderedFeatures(e.point, { layers: ["buildings"] });
+        const id = feats.length ? (feats[0].id as number) : null;
+
+        if (id === null || id === selectedId) {
+          selectedId = null;
+          applySelection();
+          return;
+        }
+
+        selectedId = id;
+        applySelection();
+
+        const center = footprintCenter(feats[0].geometry);
+        if (center) {
+          map.flyTo({
+            center,
+            zoom: Math.max(map.getZoom(), 15.2),
+            speed: 1.1,
+            curve: 1.3,
+          });
+        }
+      });
+
+      map.on("mousemove", (e) => {
+        if (!map) return;
+        const feats = map.queryRenderedFeatures(e.point, { layers: ["buildings"] });
+        map.getCanvas().style.cursor = feats.length ? "pointer" : "";
+      });
+    };
+
+    void init();
+
+    return () => {
+      cancelled = true;
+      map?.remove();
+      map = null;
+    };
   }, []);
 
   return (
