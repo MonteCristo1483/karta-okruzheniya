@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
 import type { FeatureCollection, Geometry } from "geojson";
 import "maplibre-gl/dist/maplibre-gl.css";
+import BuildingSheet from "./building-sheet";
+import type { BuildingBreakdown, SelectedBuilding } from "./building-sheet";
 
 const BUILDINGS_URL = "/data/presnya_buildings.geojson";
 
@@ -43,6 +45,7 @@ function footprintCenter(geometry: Geometry): [number, number] | null {
 
 export default function Map() {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [selected, setSelected] = useState<SelectedBuilding | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -158,11 +161,24 @@ export default function Map() {
         if (id === null || id === selectedId) {
           selectedId = null;
           applySelection();
+          setSelected(null);
           return;
         }
 
         selectedId = id;
         applySelection();
+
+        const props = feats[0].properties as {
+          index?: number;
+          address?: string;
+          breakdown?: BuildingBreakdown;
+        };
+        setSelected({
+          id,
+          index: props.index ?? null,
+          address: props.address ?? null,
+          breakdown: props.breakdown ?? null,
+        });
 
         const center = footprintCenter(feats[0].geometry);
         if (center) {
@@ -194,6 +210,7 @@ export default function Map() {
   return (
     <div className="relative h-full w-full">
       <div ref={containerRef} className="map-gradient h-full w-full" />
+      <BuildingSheet building={selected} />
       <div className="absolute bottom-2 right-3 max-w-md text-right text-[11px] leading-tight text-slate-500">
         © OpenStreetMap contributors, ODbL · Индекс окружения — справочная
         информация по открытым данным, не является замером или оценкой стоимости
