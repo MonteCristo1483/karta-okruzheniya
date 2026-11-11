@@ -160,6 +160,7 @@ export default function Map() {
   const [visible, setVisible] = useState<Visibility>(DEFAULT_VISIBILITY);
   const [theme, setTheme] = useState<Theme>("light"); // стабильно для SSR/гидрации
   const [mounted, setMounted] = useState(false);
+  const [fatalError, setFatalError] = useState<string | null>(null);
   const deselectRef = useRef<(() => void) | null>(null);
   const applyVisibilityRef = useRef<((v: Visibility) => void) | null>(null);
   const applyThemeRef = useRef<((t: Theme) => void) | null>(null);
@@ -206,15 +207,38 @@ export default function Map() {
     let map: maplibregl.Map | null = null;
 
     const init = async () => {
-      const [buildings, poi, redzones] = (await Promise.all(
-        [BUILDINGS_URL, POI_URL, REDZONES_URL].map(async (u) =>
-          (await fetch(u)).json(),
-        ),
-      )) as [
-        GCollection<{ id: number }>,
-        GCollection<PoiProps>,
-        GCollection<RedzoneProps>,
-      ];
+      const fetchJson = async (url: string): Promise<unknown> => {
+        let lastErr: unknown = null;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`HTTP ${res.status} по ${url}`);
+            return await res.json();
+          } catch (e) {
+            lastErr = e;
+          }
+        }
+        throw lastErr;
+      };
+
+      let buildings: GCollection<{ id: number }>;
+      let poi: GCollection<PoiProps>;
+      let redzones: GCollection<RedzoneProps>;
+      try {
+        [buildings, poi, redzones] = (await Promise.all(
+          [BUILDINGS_URL, POI_URL, REDZONES_URL].map(fetchJson),
+        )) as [
+          GCollection<{ id: number }>,
+          GCollection<PoiProps>,
+          GCollection<RedzoneProps>,
+        ];
+      } catch (e) {
+        console.error("Не удалось загрузить данные карты:", e);
+        setFatalError(
+          "Не удалось загрузить данные карты. Проверьте соединение и обновите страницу.",
+        );
+        return;
+      }
       if (cancelled) return;
       const palette = MAP_THEMES[themeRef.current];
 
@@ -256,7 +280,8 @@ export default function Map() {
       let poiMarkers: maplibregl.Marker[] = [];
       let redPins: maplibregl.Marker[] = [];
 
-      map = new maplibregl.Map({
+      try {
+        map = new maplibregl.Map({
         container,
         style: {
           version: 8,
@@ -345,9 +370,19 @@ export default function Map() {
         bearing: -18,
         maxPitch: 72,
         attributionControl: false,
-      });
+        });
+      } catch (e) {
+        console.error("WebGL-контекст не создан:", e);
+        if (!cancelled) {
+          setFatalError(
+            "Не удалось запустить WebGL2. Проверьте, что браузер и устройство поддерживают WebGL2, и обновите страницу.",
+          );
+        }
+        return;
+      }
 
       map.addControl(new maplibregl.NavigationControl(), "top-right");
+      map.on("error", (e) => console.error("map error:", e.error ?? e));
       (window as unknown as { __map?: maplibregl.Map }).__map = map;
 
       const rebuildOverlays = (sel: SelectedBuilding | null, vis: Visibility) => {
@@ -559,6 +594,11 @@ export default function Map() {
         onThemeToggle={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
       />
       <BuildingSheet building={selected} onClose={() => deselectRef.current?.()} />
+      {fatalError && (
+        <div className="absolute inset-x-4 top-1/3 z-20 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-800 shadow-lg dark:bg-red-950/70 dark:text-red-200">
+          {fatalError}
+        </div>
+      )}
       <div className="pointer-events-none absolute bottom-2 right-3 max-w-md text-right text-[11px] leading-tight text-slate-500 dark:text-slate-400">
         © OpenStreetMap contributors, ODbL · Индекс окружения — справочная
         информация по открытым данным, не является замером или оценкой стоимости
