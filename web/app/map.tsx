@@ -9,6 +9,8 @@ import type { BuildingBreakdown, SelectedBuilding } from "./building-sheet";
 import LayersPanel, { DEFAULT_VISIBILITY } from "./layers-panel";
 import type { Visibility } from "./layers-panel";
 import { geometryCenter, haversineM, nearestPosition } from "./geo-utils";
+import { initialTheme, THEME_KEY } from "./theme";
+import type { Theme } from "./theme";
 
 const BUILDINGS_URL = "/data/presnya_buildings.geojson";
 const POI_URL = "/data/presnya_poi.geojson";
@@ -18,13 +20,53 @@ const REDZONES_URL = "/data/presnya_redzones.geojson";
 // его динамический URL (Turbopack и webpack одинаково).
 maplibregl.setWorkerUrl("/maplibre-gl-worker.mjs");
 
-const COLOR_LOW = "#dd9c93";
-const COLOR_MID = "#e9e3d6";
-const COLOR_HIGH = "#aad3b0";
-const COLOR_SELECTED = "#7fb069";
-const COLOR_DIM = "#b3bcc0";
-const COLOR_OUTLINE = "#4f9d64";
-const COLOR_REDZONE = "#d98f86";
+// Палитры карты по темам (мягкие акценты, не неон — SPEC).
+const MAP_THEMES = {
+  light: {
+    low: "#dd9c93",
+    mid: "#e9e3d6",
+    high: "#aad3b0",
+    selected: "#7fb069",
+    dim: "#b3bcc0",
+    halo: "#4f9d64",
+    outlineCore: "#3d8b53",
+    redzone: "#d98f86",
+    route: "#5fa86b",
+    poiGreen: "#059669",
+    poiMetro: "#e11d48",
+    pill: "bg-white/90 text-slate-700",
+    redPill: "bg-white/95 text-red-700",
+    redIcon: "#b91c1c",
+  },
+  dark: {
+    low: "#a06a63",
+    mid: "#3d4653",
+    high: "#5d8a6a",
+    selected: "#6a9d76",
+    dim: "#343b46",
+    halo: "#7fb98a",
+    outlineCore: "#8fce9a",
+    redzone: "#8f5b55",
+    route: "#6a9d76",
+    poiGreen: "#7fb98a",
+    poiMetro: "#ef8fa4",
+    pill: "bg-slate-800/90 text-slate-200",
+    redPill: "bg-slate-800/95 text-red-300",
+    redIcon: "#f87171",
+  },
+} as const;
+
+type Palette = { [K in keyof (typeof MAP_THEMES)["light"]]: string };
+
+const buildingColorExpr = (p: Palette) =>
+  [
+    "case",
+    ["to-boolean", ["feature-state", "selected"]],
+    p.selected,
+    ["to-boolean", ["feature-state", "inactive"]],
+    p.dim,
+    ["step", ["get", "index"], p.low, 5, p.mid, 7, p.high],
+  ] as never;
 
 type PoiProps = { type: string; subtype: string | null; name: string | null };
 type RedzoneProps = { kind: string; class: string | null };
@@ -39,13 +81,9 @@ const POI_LABELS: Record<string, string> = {
   shop: "Магазин",
 };
 
-const POI_COLORS: Record<string, string> = {
-  school: "#059669",
-  kindergarten: "#059669",
-  park: "#059669",
-  subway_entrance: "#e11d48",
-  shop: "#059669",
-};
+function poiColor(type: string, p: Palette): string {
+  return type === "subway_entrance" ? p.poiMetro : p.poiGreen;
+}
 
 // POI type -> ключ слоя-чекбокса / ключа бонуса в breakdown
 const POI_TO_LAYER: Record<string, keyof Visibility> = {
@@ -86,8 +124,8 @@ function pillBase(extra: string): HTMLDivElement {
   return el;
 }
 
-function makePoiMarkerEl(color: string, text: string): HTMLDivElement {
-  const el = pillBase("bg-white/90 text-slate-700");
+function makePoiMarkerEl(color: string, text: string, pill: string): HTMLDivElement {
+  const el = pillBase(pill);
   const dot = document.createElement("span");
   dot.style.color = color;
   dot.textContent = "●";
@@ -97,8 +135,8 @@ function makePoiMarkerEl(color: string, text: string): HTMLDivElement {
   return el;
 }
 
-function makeRedPinEl(text: string): HTMLDivElement {
-  const el = pillBase("bg-white/95 text-red-700 red-pin");
+function makeRedPinEl(text: string, pill: string, iconColor: string): HTMLDivElement {
+  const el = pillBase(`${pill} red-pin`);
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("width", "12");
   svg.setAttribute("height", "12");
@@ -106,7 +144,7 @@ function makeRedPinEl(text: string): HTMLDivElement {
   svg.setAttribute("fill", "none");
   const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
   path.setAttribute("d", "M8 1.5 15 14H1L8 1.5Z");
-  path.setAttribute("stroke", "#b91c1c");
+  path.setAttribute("stroke", iconColor);
   path.setAttribute("stroke-width", "1.6");
   path.setAttribute("stroke-linejoin", "round");
   svg.append(path);
@@ -120,10 +158,15 @@ export default function Map() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [selected, setSelected] = useState<SelectedBuilding | null>(null);
   const [visible, setVisible] = useState<Visibility>(DEFAULT_VISIBILITY);
+  const [theme, setTheme] = useState<Theme>("light"); // стабильно для SSR/гидрации
+  const [mounted, setMounted] = useState(false);
   const deselectRef = useRef<(() => void) | null>(null);
   const applyVisibilityRef = useRef<((v: Visibility) => void) | null>(null);
+  const applyThemeRef = useRef<((t: Theme) => void) | null>(null);
   const selectedRef = useRef<SelectedBuilding | null>(null);
   const visibleRef = useRef<Visibility>(DEFAULT_VISIBILITY);
+  // Реальная тема для карты доступна сразу (карта — клиент-only).
+  const themeRef = useRef<Theme>(initialTheme());
 
   const updateSelected = (b: SelectedBuilding | null) => {
     selectedRef.current = b;
@@ -134,6 +177,27 @@ export default function Map() {
     visibleRef.current = visible;
     applyVisibilityRef.current?.(visible);
   }, [visible]);
+
+  // После монтирования синхронизируемся с localStorage (антфлеш-скрипт
+  // в layout уже выставил data-theme; здесь подхватываем UI).
+  useEffect(() => {
+    const real = initialTheme();
+    themeRef.current = real;
+    setMounted(true);
+    setTheme(real);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    themeRef.current = theme;
+    document.documentElement.dataset.theme = theme;
+    try {
+      localStorage.setItem(THEME_KEY, theme);
+    } catch {
+      // приватный режим — тема просто не сохранится
+    }
+    applyThemeRef.current?.(theme);
+  }, [theme, mounted]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -152,6 +216,7 @@ export default function Map() {
         GCollection<RedzoneProps>,
       ];
       if (cancelled) return;
+      const palette = MAP_THEMES[themeRef.current];
 
       const poiCenters = poi.features
         .map((f) => ({ f, center: geometryCenter(f.geometry) }))
@@ -206,7 +271,7 @@ export default function Map() {
               type: "fill",
               source: "redzones",
               filter: ["==", ["geometry-type"], "Polygon"],
-              paint: { "fill-color": COLOR_REDZONE, "fill-opacity": 0.14 },
+              paint: { "fill-color": palette.redzone, "fill-opacity": 0.14 },
             },
             {
               id: "redzones-line",
@@ -214,7 +279,7 @@ export default function Map() {
               source: "redzones",
               filter: ["==", ["geometry-type"], "LineString"],
               paint: {
-                "line-color": COLOR_REDZONE,
+                "line-color": palette.redzone,
                 "line-width": 2.5,
                 "line-opacity": 0.7,
               },
@@ -226,14 +291,7 @@ export default function Map() {
               paint: {
                 // fill-extrusion-color поддерживает feature-state,
                 // fill-extrusion-opacity — нет, поэтому затемнение через цвет.
-                "fill-extrusion-color": [
-                  "case",
-                  ["to-boolean", ["feature-state", "selected"]],
-                  COLOR_SELECTED,
-                  ["to-boolean", ["feature-state", "inactive"]],
-                  COLOR_DIM,
-                  ["step", ["get", "index"], COLOR_LOW, 5, COLOR_MID, 7, COLOR_HIGH],
-                ],
+                "fill-extrusion-color": buildingColorExpr(palette),
                 "fill-extrusion-height": ["coalesce", ["get", "height"], 9],
                 "fill-extrusion-base": 0,
                 "fill-extrusion-opacity": 0.95,
@@ -244,7 +302,7 @@ export default function Map() {
               type: "line",
               source: "buildings",
               paint: {
-                "line-color": COLOR_OUTLINE,
+                "line-color": palette.halo,
                 "line-width": 14,
                 "line-opacity": [
                   "case",
@@ -259,7 +317,7 @@ export default function Map() {
               type: "line",
               source: "buildings",
               paint: {
-                "line-color": "#3d8b53",
+                "line-color": palette.outlineCore,
                 "line-width": 3,
                 "line-opacity": [
                   "case",
@@ -274,7 +332,7 @@ export default function Map() {
               type: "line",
               source: "routes",
               paint: {
-                "line-color": "#5fa86b",
+                "line-color": palette.route,
                 "line-width": 3,
                 "line-opacity": 0.75,
               },
@@ -294,6 +352,7 @@ export default function Map() {
 
       const rebuildOverlays = (sel: SelectedBuilding | null, vis: Visibility) => {
         if (!map) return;
+        const theme = MAP_THEMES[themeRef.current];
         poiMarkers.forEach((m) => m.remove());
         poiMarkers = [];
         redPins.forEach((m) => m.remove());
@@ -318,7 +377,7 @@ export default function Map() {
           }
           poiMarkers.push(
             new maplibregl.Marker({
-              element: makePoiMarkerEl(POI_COLORS[f.properties.type] ?? "#059669", text),
+              element: makePoiMarkerEl(poiColor(f.properties.type, theme), text, theme.pill),
               anchor: "bottom",
             })
               .setLngLat(center)
@@ -346,7 +405,7 @@ export default function Map() {
             const text = `${PENALTY_LABELS[key] ?? key} · ${d < 15 ? "рядом" : `${d} м`}`;
             redPins.push(
               new maplibregl.Marker({
-                element: makeRedPinEl(text),
+                element: makeRedPinEl(text, theme.redPill, theme.redIcon),
                 anchor: "bottom",
               })
                 .setLngLat(bestPt as [number, number])
@@ -385,10 +444,22 @@ export default function Map() {
         rebuildOverlays(selectedRef.current, v);
       };
 
+      applyThemeRef.current = (t: Theme) => {
+        if (!map || !map.getLayer("buildings")) return;
+        const p = MAP_THEMES[t];
+        map.setPaintProperty("buildings", "fill-extrusion-color", buildingColorExpr(p));
+        map.setPaintProperty("outline-halo", "line-color", p.halo);
+        map.setPaintProperty("outline-core", "line-color", p.outlineCore);
+        map.setPaintProperty("redzones-fill", "fill-color", p.redzone);
+        map.setPaintProperty("redzones-line", "line-color", p.redzone);
+        map.setPaintProperty("routes-line", "line-color", p.route);
+        rebuildOverlays(selectedRef.current, visibleRef.current);
+      };
+
       let selectedId: number | null = null;
       const allIds = buildings.features.map((f) => f.properties.id);
 
-      map.on("load", () => rebuildOverlays(null, visibleRef.current));
+      map.on("load", () => applyThemeRef.current?.(themeRef.current));
 
       const applySelection = () => {
         if (!map) return;
@@ -484,9 +555,11 @@ export default function Map() {
         onToggle={(key) =>
           setVisible((v) => ({ ...v, [key]: !v[key] }))
         }
+        theme={theme}
+        onThemeToggle={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
       />
       <BuildingSheet building={selected} onClose={() => deselectRef.current?.()} />
-      <div className="pointer-events-none absolute bottom-2 right-3 max-w-md text-right text-[11px] leading-tight text-slate-500">
+      <div className="pointer-events-none absolute bottom-2 right-3 max-w-md text-right text-[11px] leading-tight text-slate-500 dark:text-slate-400">
         © OpenStreetMap contributors, ODbL · Индекс окружения — справочная
         информация по открытым данным, не является замером или оценкой стоимости
       </div>

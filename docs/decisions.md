@@ -23,3 +23,4 @@
 - 2026-11-11 — TypeScript 7 (tsgo) в веб-карте: `new Map<K, V>()` (глобальный) ломается с TS7009/TS2558 — используем Record вместо Map.
 - 2026-11-11 — Вьюхи PostGIS с `SELECT *` не подхватывают колонки, добавленные ALTER TABLE позже — нужен CREATE OR REPLACE VIEW (поймали при добавлении poi.subtype).
 - 2026-11-11 — maplibre v6: внутренности источника не доступны (`getSource('routes')._data` нет); для проверок данных в тестах — `querySourceFeatures` (с учётом дублей фичей по тайлам).
+- 2026-11-11 — Тёмная тема (M5a): CSS-токены в globals.css + `@custom-variant dark` на `[data-theme="dark"]`; палитры WebGL-слоёв — в TS (MAP_THEMES) и применяются через `setPaintProperty` при переключении (CSS в canvas не достать). Антифлеш — `next/script` beforeInteractive + `suppressHydrationWarning` на <html>, а состояние темы в React стартует со стабильного «light» и синхронизируется с localStorage после монтирования — иначе гидрационный mismatch (SSR не знает localStorage).

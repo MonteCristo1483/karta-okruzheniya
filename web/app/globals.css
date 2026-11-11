@@ -1,11 +1,29 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+:root {
+  --bg-top: #f7f2e8;
+  --bg-mid: #e9eff5;
+  --bg-bottom: #d9e6f0;
+}
+
+[data-theme="dark"] {
+  --bg-top: #1b222c;
+  --bg-mid: #232b37;
+  --bg-bottom: #2a3441;
+}
+
 html,
 body {
   height: 100%;
 }
 
-/* Пастельный фон вместо подложки-тайлов: молочный к нежно-голубому (диорама) */
+body {
+  background-color: var(--bg-mid);
+}
+
+/* Фон вместо подложки-тайлов: пастельная диорама / глубокий сине-серый (тёмная) */
 .map-gradient {
-  background: linear-gradient(180deg, #f7f2e8 0%, #e9eff5 55%, #d9e6f0 100%);
+  background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-mid) 55%, var(--bg-bottom) 100%);
 }
