@@ -10,7 +10,8 @@
     "rounding_decimals": 1
   },
   "bonuses": {
-    "comment": "Бонус категории = max * multiplier, где multiplier — по времени пешком до ближайшего объекта типа из poi_types; дальше последнего порога — 0.",
+    "comment": "Бонус категории = max * multiplier, где multiplier — по времени пешком до ближайшего объекта типа из poi_types; дальше последнего порога — 0. Время считается по прямой: мин = расстояние_м / (walking_speed_kmh * 1000 / 60); маршруты Valhalla придут позже.",
+    "walking_speed_kmh": 5,
     "time_thresholds_min": [
       { "up_to": 5, "multiplier": 1.0 },
       { "up_to": 10, "multiplier": 0.667 },
