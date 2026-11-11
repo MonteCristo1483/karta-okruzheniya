@@ -1,7 +1,8 @@
 {
   "meta": {
-    "version": 1,
-    "based_on": "SPEC §3"
+    "version": 2,
+    "based_on": "SPEC §3",
+    "comment": "v2: включены слои штрафов стройка/промзона (таблица zones), бонус магазинов ограничен subtype (T13)."
   },
   "index": {
     "base": 5,
@@ -10,7 +11,7 @@
     "rounding_decimals": 1
   },
   "bonuses": {
-    "comment": "Бонус категории = max * multiplier, где multiplier — по времени пешком до ближайшего объекта типа из poi_types; дальше последнего порога — 0. Время считается по прямой: мин = расстояние_м / (walking_speed_kmh * 1000 / 60); маршруты Valhalla придут позже.",
+    "comment": "Бонус категории = max * multiplier, где multiplier — по времени пешком до ближайшего объекта типа из poi_types; дальше последнего порога — 0. Время считается по прямой: мин = расстояние_м / (walking_speed_kmh * 1000 / 60); маршруты Valhalla придут позже. Если у категории задан subtypes, берутся только POI с таким subtype (колонка poi.subtype).",
     "walking_speed_kmh": 5,
     "time_thresholds_min": [
       { "up_to": 5, "multiplier": 1.0 },
@@ -22,12 +23,17 @@
       "schools": { "max": 1.0, "poi_types": ["school"] },
       "parks": { "max": 1.0, "poi_types": ["park"] },
       "kindergartens": { "max": 0.5, "poi_types": ["kindergarten"] },
-      "shops": { "max": 0.5, "poi_types": ["shop"] }
+      "shops": {
+        "max": 0.5,
+        "poi_types": ["shop"],
+        "subtypes": ["supermarket", "mall", "department_store", "greengrocer", "bakery", "butcher"]
+      }
     }
   },
   "penalties": {
-    "comment": "Каждый штраф = max * weight * (1 - расстояние/радиус); max хранится отрицательным и суммируется: index = clamp(base + сумма бонусов + сумма штрафов, min, max). Объектов слоя в радиусе нет — штраф 0.",
+    "comment": "Каждый штраф = max * weight * (1 - расстояние/радиус); max хранится отрицательным и суммируется: index = clamp(base + сумма бонусов + сумма штрафов, min, max). Объектов слоя в радиусе нет — штраф 0. source: 'linear' — расстояние до ближайшей линии таблицы linear (kind = названию штрафа, class из classes), 'zones' — до ближайшего полигона таблицы zones (kind = названию штрафа, без весов).",
     "road": {
+      "source": "linear",
       "label": "магистраль",
       "max": -2.5,
       "radius_m": 150,
@@ -35,6 +41,7 @@
       "classes": { "trunk": 1.0, "primary": 0.7, "secondary": 0.4 }
     },
     "railway": {
+      "source": "linear",
       "label": "ж/д",
       "max": -1.5,
       "radius_m": 300,
@@ -42,18 +49,20 @@
       "classes": ["rail", "narrow_gauge", "light_rail"]
     },
     "construction": {
+      "source": "zones",
       "label": "стройка",
       "max": -1.0,
       "radius_m": 300,
-      "enabled": false,
-      "comment": "Слой не импортирован (нет таблицы строек). Включить enabled после импорта разрешений на строительство / landuse=construction."
+      "enabled": true,
+      "comment": "Таблица zones: landuse=construction и building=construction (T13)."
     },
     "industrial": {
+      "source": "zones",
       "label": "промзона",
       "max": -1.5,
       "radius_m": 500,
-      "enabled": false,
-      "comment": "Слой не импортирован (landuse=industrial). Включить enabled после импорта."
+      "enabled": true,
+      "comment": "Таблица zones: landuse=industrial (T13)."
     }
   }
 }

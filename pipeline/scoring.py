@@ -3,7 +3,11 @@
 
 Пешее время до POI считается по прямой: мин = м / (walking_speed_kmh × 1000 / 60)
 (маршруты Valhalla — позже). Штраф начисляется только при расстоянии < радиуса
-слоя. Слои с enabled: false (стройка, промзона) пропускаются.
+слоя. Слои с enabled: false пропускаются.
+
+Источники штрафов (config: penalties.*.source):
+  linear — ближайшая линия из linear (kind = названию штрафа, веса по classes);
+  zones  — ближайший полигон из zones (kind = названию штрафа, без весов).
 
 Использование:
   python scoring.py             — все здания buildings_presnya
@@ -47,7 +51,7 @@ SELECT b.osm_id, ST_Distance(b.geometry::geography, p.geometry::geography)
 FROM {scope} b
 CROSS JOIN LATERAL (
     SELECT p.geometry FROM poi p
-    WHERE p.type = ANY(%s)
+    WHERE p.type = ANY(%s) {subtype_clause}
     ORDER BY p.geometry <-> b.geometry
     LIMIT 1
 ) p
@@ -64,6 +68,19 @@ CROSS JOIN LATERAL (
     ORDER BY l.geometry <-> b.geometry
     LIMIT 1
 ) l
+"""
+
+NEAREST_ZONE = """
+SELECT b.osm_id,
+       ST_Distance(b.geometry::geography, z.geometry::geography),
+       z.kind
+FROM {scope} b
+CROSS JOIN LATERAL (
+    SELECT z.geometry, z.kind FROM zones z
+    WHERE z.kind = %s
+    ORDER BY z.geometry <-> b.geometry
+    LIMIT 1
+) z
 """
 
 
@@ -108,7 +125,7 @@ def penalty_for_distance(
     weight: Decimal,
     radius_m: Decimal,
 ) -> Decimal:
-    """Штраф за близость линии; 0 на границе радиуса и дальше."""
+    """Штраф за близость линии/зоны; 0 на границе радиуса и дальше."""
     if distance_m >= radius_m:
         return Decimal(0)
     return penalty_max * weight * (1 - distance_m / radius_m)
@@ -136,7 +153,12 @@ def scope_from_args(argv: list[str]) -> tuple[str, list]:
 def collect_bonuses(cur, scope: str, scope_params: list, cfg: dict) -> dict:
     bonuses: dict[str, dict] = {}
     for category, cat_cfg in cfg["bonuses"]["categories"].items():
-        cur.execute(NEAREST_POI.format(scope=scope), [*scope_params, cat_cfg["poi_types"]])
+        subtypes = cat_cfg.get("subtypes")
+        subtype_clause = "AND p.subtype = ANY(%s)" if subtypes else ""
+        params = [*scope_params, cat_cfg["poi_types"]]
+        if subtypes:
+            params.append(subtypes)
+        cur.execute(NEAREST_POI.format(scope=scope, subtype_clause=subtype_clause), params)
         category_max = dec(cat_cfg["max"])
         per_building: dict[int, dict] = {}
         for osm_id, dist in cur.fetchall():
@@ -154,17 +176,19 @@ def collect_penalties(cur, scope: str, scope_params: list, cfg: dict) -> tuple[d
         if not pen_cfg.get("enabled", False):
             skipped.append(name)
             continue
-        classes = pen_cfg["classes"]
+        classes = pen_cfg.get("classes")
         if isinstance(classes, dict):
-            class_list = list(classes)
             weight_of = {cls: dec(w) for cls, w in classes.items()}
         else:
-            class_list = list(classes)
             weight_of = {}
-        cur.execute(
-            NEAREST_LINEAR.format(scope=scope),
-            [*scope_params, name, class_list],
-        )
+        if pen_cfg.get("source", "linear") == "zones":
+            cur.execute(NEAREST_ZONE.format(scope=scope), [*scope_params, name])
+        else:
+            class_list = list(classes) if classes else []
+            cur.execute(
+                NEAREST_LINEAR.format(scope=scope),
+                [*scope_params, name, class_list],
+            )
         radius = dec(pen_cfg["radius_m"])
         penalty_max = dec(pen_cfg["max"])
         per_building: dict[int, dict] = {}

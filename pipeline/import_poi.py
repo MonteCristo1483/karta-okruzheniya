@@ -8,10 +8,13 @@
   subway_entrance  — railway=subway_entrance
   shop             — любой тег shop=*
 
+Колонка subtype — значение исходного тега (shop=convenience -> 'convenience'),
+нужна для фильтрации мелких магазинов на этапе скоринга (config/scoring.json).
+
 Точки берутся из node; площадные объекты (закрытые way и multipolygon-
 отношения) приходят через area callback и сводятся к центроиду в SQL.
-Геометрия в WGS84 (EPSG:4326).
 
+Повторный запуск обновляет строки (upsert: type, subtype, geometry).
 Требования: запущенный PostGIS (docker compose up -d) и зависимости
 из pipeline/requirements.txt в pipeline/.venv.
 """
@@ -34,34 +37,40 @@ CREATE TABLE IF NOT EXISTS poi (
     osm_type TEXT NOT NULL,
     osm_id   BIGINT NOT NULL,
     type     TEXT NOT NULL,
+    subtype  TEXT,
     geometry GEOMETRY(POINT, 4326) NOT NULL,
     PRIMARY KEY (osm_type, osm_id)
 )
 """
+
+ALTER_TABLE = "ALTER TABLE poi ADD COLUMN IF NOT EXISTS subtype TEXT"
 
 CREATE_INDEX = """
 CREATE INDEX IF NOT EXISTS poi_geometry_idx ON poi USING GIST (geometry);
 CREATE INDEX IF NOT EXISTS poi_type_idx ON poi (type)
 """
 
-INSERT = """
-INSERT INTO poi (osm_type, osm_id, type, geometry)
-VALUES (%s, %s, %s, ST_Centroid(ST_GeomFromEWKB(decode(%s, 'hex'))))
-ON CONFLICT (osm_type, osm_id) DO NOTHING
+UPSERT = """
+INSERT INTO poi (osm_type, osm_id, type, subtype, geometry)
+VALUES (%s, %s, %s, %s, ST_Centroid(ST_GeomFromEWKB(decode(%s, 'hex'))))
+ON CONFLICT (osm_type, osm_id) DO UPDATE
+SET type = EXCLUDED.type, subtype = EXCLUDED.subtype, geometry = EXCLUDED.geometry
 """
 
 
-def classify(tags: osmium.osm.TagList) -> str | None:
+def classify(tags: osmium.osm.TagList) -> tuple[str, str] | None:
+    """-> (type, subtype); subtype — значение тега, определившего категорию."""
     if tags.get("railway") == "subway_entrance":
-        return "subway_entrance"
+        return ("subway_entrance", "subway_entrance")
     if tags.get("amenity") == "school":
-        return "school"
+        return ("school", "school")
     if tags.get("amenity") == "kindergarten":
-        return "kindergarten"
+        return ("kindergarten", "kindergarten")
     if tags.get("leisure") == "park":
-        return "park"
-    if tags.get("shop") is not None:
-        return "shop"
+        return ("park", "park")
+    shop = tags.get("shop")
+    if shop is not None:
+        return ("shop", shop)
     return None
 
 
@@ -75,29 +84,31 @@ class PoiImporter(osmium.SimpleHandler):
         self.skipped = 0
 
     def node(self, n: osmium.osm.Node) -> None:
-        poi_type = classify(n.tags)
-        if poi_type is None:
+        obj = classify(n.tags)
+        if obj is None:
             return
+        poi_type, subtype = obj
         try:
             wkb_hex = self.wkbfab.create_point(n)
         except RuntimeError:
             self.skipped += 1
             return
-        self.add("node", n.id, poi_type, wkb_hex)
+        self.add("node", n.id, poi_type, subtype, wkb_hex)
 
     def area(self, a: osmium.osm.Area) -> None:
-        poi_type = classify(a.tags)
-        if poi_type is None:
+        obj = classify(a.tags)
+        if obj is None:
             return
+        poi_type, subtype = obj
         try:
             wkb_hex = self.wkbfab.create_multipolygon(a)
         except RuntimeError:
             self.skipped += 1
             return
-        self.add("area", a.id, poi_type, wkb_hex)
+        self.add("area", a.id, poi_type, subtype, wkb_hex)
 
-    def add(self, osm_type: str, osm_id: int, poi_type: str, wkb_hex: str) -> None:
-        self.buffer.append((osm_type, osm_id, poi_type, wkb_hex))
+    def add(self, osm_type: str, osm_id: int, poi_type: str, subtype: str, wkb_hex: str) -> None:
+        self.buffer.append((osm_type, osm_id, poi_type, subtype, wkb_hex))
         self.count += 1
         if len(self.buffer) >= BATCH_SIZE:
             self.flush()
@@ -111,7 +122,7 @@ class PoiImporter(osmium.SimpleHandler):
     def flush(self) -> None:
         if not self.buffer:
             return
-        self.cursor.executemany(INSERT, self.buffer)
+        self.cursor.executemany(UPSERT, self.buffer)
         self.buffer.clear()
 
 
@@ -120,6 +131,7 @@ def main() -> int:
     print(f"Читаю {PBF_PATH} ...")
     with psycopg.connect(DB_DSN) as conn, conn.cursor() as cur:
         cur.execute(CREATE_TABLE)
+        cur.execute(ALTER_TABLE)
         cur.execute(CREATE_INDEX)
 
         importer = PoiImporter(cur)
