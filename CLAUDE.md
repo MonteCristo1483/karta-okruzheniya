@@ -30,6 +30,10 @@
 - /web — Next.js-фронтенд
 - config/scoring.json — все коэффициенты индекса
 - data/ — выгрузки (сырые не коммитятся)
+- docs/decisions.md — журнал ключевых решений и находок
+
+## Журнал решений
+Каждая значимая находка/решение — строка в docs/decisions.md (формат: дата — решение — почему).
 
 ## Команды
 - Пайплайн: зависимости — `pipeline/.venv/Scripts/python.exe -m pip install -r pipeline/requirements.txt`;

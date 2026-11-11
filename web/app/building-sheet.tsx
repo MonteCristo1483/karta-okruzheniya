@@ -159,7 +159,10 @@ export default function BuildingSheet({
         building ? "translate-y-0" : "translate-y-full"
       }`}
     >
-      <div className="pointer-events-auto mx-auto w-full max-w-md rounded-t-3xl bg-white/95 px-5 pb-5 pt-3 shadow-2xl backdrop-blur">
+      <div
+        id="building-sheet"
+        className="pointer-events-auto mx-auto w-full max-w-md rounded-t-3xl bg-white/95 px-5 pb-5 pt-3 shadow-2xl backdrop-blur"
+      >
         <div
           className="mx-auto mb-3 h-1.5 w-12 touch-none rounded-full bg-slate-200"
           onTouchStart={(e) => {

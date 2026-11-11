@@ -158,6 +158,8 @@ export default function Map() {
         selectedId = null;
         applySelection();
         setSelected(null);
+        // возвращаем вьюпорт на всю высоту (padding от шторки больше не нужен)
+        map?.easeTo({ padding: { top: 0, bottom: 0, left: 0, right: 0 }, duration: 300 });
       };
       deselectRef.current = deselect;
 
@@ -188,11 +190,21 @@ export default function Map() {
 
         const center = footprintCenter(feats[0].geometry);
         if (center) {
-          map.flyTo({
-            center,
-            zoom: Math.max(map.getZoom(), 15.2),
-            speed: 1.1,
-            curve: 1.3,
+          // Ждём две отрисовки, чтобы шторка с новым контентом заняла высоту,
+          // затем центрируем здание в видимой области (padding снизу).
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              if (!map) return;
+              const sheetEl = document.getElementById("building-sheet");
+              const bottom = (sheetEl?.offsetHeight ?? 0) + 24;
+              map.flyTo({
+                center,
+                zoom: Math.max(map.getZoom(), 15.2),
+                speed: 1.1,
+                curve: 1.3,
+                padding: { bottom },
+              });
+            });
           });
         }
       });
