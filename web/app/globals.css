@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+html,
+body {
+  height: 100%;
+}
+
+/* Пастельный фон вместо подложки-тайлов: молочный к нежно-голубому (диорама) */
+.map-gradient {
+  background: linear-gradient(180deg, #f7f2e8 0%, #e9eff5 55%, #d9e6f0 100%);
+}
