@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 
 export type BonusEntry = {
   distance_m: number;
@@ -44,6 +44,9 @@ const PENALTY_LABELS: Record<string, string> = {
   construction: "Стройка",
   industrial: "Промзона",
 };
+
+// Публичный URL статического экспорта на GitHub Pages (basePath из next.config).
+const PUBLIC_BASE = "https://montecristo1483.github.io/karta-okruzheniya";
 
 function formatSigned(value: number): string {
   return `${value > 0 ? "+" : "−"}${Math.abs(value).toFixed(1)}`;
@@ -132,6 +135,26 @@ export default function BuildingSheet({
   onClose: () => void;
 }) {
   const touchStartY = useRef<number | null>(null);
+  const [notice, setNotice] = useState<"idle" | "copied" | "manual">("idle");
+  const [shareUrl, setShareUrl] = useState("");
+  const noticeTimer = useRef<number | null>(null);
+
+  const share = async () => {
+    if (!building) return;
+    const url = `${PUBLIC_BASE}/?building=${building.id}`;
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("clipboard недоступен");
+      await navigator.clipboard.writeText(url);
+      if (noticeTimer.current) window.clearTimeout(noticeTimer.current);
+      setNotice("copied");
+      noticeTimer.current = window.setTimeout(() => setNotice("idle"), 2500);
+    } catch {
+      // http без secure-контекста (например, по IP в локальной сети) —
+      // буфер обмена недоступен, показываем ссылку для ручного копирования.
+      setShareUrl(url);
+      setNotice("manual");
+    }
+  };
   const breakdown = building?.breakdown ?? null;
   const bonusRows = Object.entries(breakdown?.bonuses ?? {})
     .map(([key, entry]) => ({
@@ -264,12 +287,29 @@ export default function BuildingSheet({
 
             <button
               type="button"
-              disabled
-              title="Появится в M5"
-              className="mt-4 w-full rounded-2xl bg-emerald-500 py-3.5 text-base font-semibold text-white opacity-50"
+              onClick={() => void share()}
+              className="mt-4 w-full rounded-2xl bg-emerald-500 py-3.5 text-base font-semibold text-white transition-colors hover:bg-emerald-600 active:bg-emerald-700"
             >
               Отправить клиенту
             </button>
+            {notice === "copied" && (
+              <div className="fixed bottom-6 left-1/2 z-20 -translate-x-1/2 rounded-full bg-slate-800 px-4 py-2 text-sm font-medium text-white shadow-lg dark:bg-slate-100 dark:text-slate-800">
+                Ссылка скопирована
+              </div>
+            )}
+            {notice === "manual" && (
+              <div className="mt-3 rounded-2xl bg-amber-50 px-4 py-3 dark:bg-amber-950/50">
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                  Автокопирование недоступно в этом браузере — скопируйте ссылку вручную:
+                </p>
+                <input
+                  readOnly
+                  value={shareUrl}
+                  onFocus={(e) => e.target.select()}
+                  className="mt-2 w-full rounded-lg border border-amber-200 bg-white px-2 py-1.5 font-mono text-xs text-slate-700 dark:border-amber-900 dark:bg-slate-900 dark:text-slate-200"
+                />
+              </div>
+            )}
             <p className="mt-2 text-center text-[11px] leading-tight text-slate-400">
               Справочная информация по открытым данным, не является замером или оценкой
               стоимости

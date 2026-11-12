@@ -12,13 +12,15 @@ import { geometryCenter, haversineM, nearestPosition } from "./geo-utils";
 import { initialTheme, THEME_KEY } from "./theme";
 import type { Theme } from "./theme";
 
-const BUILDINGS_URL = "/data/presnya_buildings.geojson";
-const POI_URL = "/data/presnya_poi.geojson";
-const REDZONES_URL = "/data/presnya_redzones.geojson";
+// Пути относительные — статический экспорт живёт в подпапке
+// basePath (/karta-okruzheniya на GitHub Pages).
+const BUILDINGS_URL = "data/presnya_buildings.geojson";
+const POI_URL = "data/presnya_poi.geojson";
+const REDZONES_URL = "data/presnya_redzones.geojson";
 
 // Воркер maplibre отдаём статикой из public/ — bundlers не резолвят
 // его динамический URL (Turbopack и webpack одинаково).
-maplibregl.setWorkerUrl("/maplibre-gl-worker.mjs");
+maplibregl.setWorkerUrl("maplibre-gl-worker.mjs");
 
 // Палитры карты по темам (мягкие акценты, не неон — SPEC).
 const MAP_THEMES = {
@@ -494,8 +496,6 @@ export default function Map() {
       let selectedId: number | null = null;
       const allIds = buildings.features.map((f) => f.properties.id);
 
-      map.on("load", () => applyThemeRef.current?.(themeRef.current));
-
       const applySelection = () => {
         if (!map) return;
         for (const id of allIds) {
@@ -518,20 +518,33 @@ export default function Map() {
       };
       deselectRef.current = deselect;
 
-      map.on("click", (e) => {
-        if (!map || !map.getLayer("buildings")) return;
-        const feats = map.queryRenderedFeatures(e.point, { layers: ["buildings"] });
-        const id = feats.length ? (feats[0].id as number) : null;
+      const flyToBuilding = (center: [number, number]) => {
+        // Ждём две отрисовки, чтобы шторка с новым контентом заняла высоту,
+        // затем центрируем здание в видимой области (padding снизу).
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            if (!map) return;
+            const sheetEl = document.getElementById("building-sheet");
+            const bottom = (sheetEl?.offsetHeight ?? 0) + 24;
+            map.flyTo({
+              center,
+              zoom: Math.max(map.getZoom(), 15.2),
+              speed: 1.1,
+              curve: 1.3,
+              padding: { bottom },
+            });
+          });
+        });
+      };
 
-        if (id === null || id === selectedId) {
-          deselect();
-          return;
-        }
-
+      // Общая логика выбора: клик по зданию и открытие по ?building=<osm_id>.
+      const selectById = (id: number) => {
+        const feature = buildings.features.find((f) => f.properties.id === id);
+        if (!feature) return;
         selectedId = id;
         applySelection();
 
-        const props = feats[0].properties as {
+        const props = feature.properties as {
           index?: number;
           address?: string;
           breakdown?: BuildingBreakdown;
@@ -545,25 +558,31 @@ export default function Map() {
         updateSelected(next);
         rebuildOverlays(next, visibleRef.current);
 
-        const center = geometryCenter(feats[0].geometry);
-        if (center) {
-          // Ждём две отрисовки, чтобы шторка с новым контентом заняла высоту,
-          // затем центрируем здание в видимой области (padding снизу).
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              if (!map) return;
-              const sheetEl = document.getElementById("building-sheet");
-              const bottom = (sheetEl?.offsetHeight ?? 0) + 24;
-              map.flyTo({
-                center,
-                zoom: Math.max(map.getZoom(), 15.2),
-                speed: 1.1,
-                curve: 1.3,
-                padding: { bottom },
-              });
-            });
-          });
+        const center = geometryCenter(feature.geometry);
+        if (center) flyToBuilding(center);
+      };
+
+      map.on("load", () => {
+        applyThemeRef.current?.(themeRef.current);
+        // Публичная ссылка «Отправить клиенту»: ?building=<osm_id>
+        const param = new URLSearchParams(window.location.search).get("building");
+        if (param !== null) {
+          const id = Number(param);
+          if (Number.isInteger(id) && allIds.includes(id)) selectById(id);
         }
+      });
+
+      map.on("click", (e) => {
+        if (!map || !map.getLayer("buildings")) return;
+        const feats = map.queryRenderedFeatures(e.point, { layers: ["buildings"] });
+        const id = feats.length ? (feats[0].id as number) : null;
+
+        if (id === null || id === selectedId) {
+          deselect();
+          return;
+        }
+
+        selectById(id);
       });
 
       map.on("mousemove", (e) => {

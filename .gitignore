@@ -11,3 +11,4 @@ data/processed/
 web/public/data/*.geojson
 web/public/maplibre-gl-worker.mjs
 web/tsconfig.tsbuildinfo
+web/dist/

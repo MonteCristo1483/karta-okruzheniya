@@ -7,7 +7,7 @@
     "build": "next build",
     "predev": "node scripts/copy-maplibre-worker.mjs",
     "prebuild": "node scripts/copy-maplibre-worker.mjs",
-    "start": "next start"
+    "deploy": "next build && npx gh-pages -d dist"
   },
   "dependencies": {
     "maplibre-gl": "6.17.0",
@@ -20,6 +20,7 @@
     "@types/node": "26.6.6",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
+    "gh-pages": "6.3.0",
     "postcss": "8.5.32",
     "tailwindcss": "4.3.5",
     "typescript": "7.0.2"
