@@ -25,9 +25,11 @@ maplibregl.setWorkerUrl("maplibre-gl-worker.mjs");
 // Палитры карты по темам (мягкие акценты, не неон — SPEC).
 const MAP_THEMES = {
   light: {
+    vlow: "#cf8579",
     low: "#dd9c93",
     mid: "#e9e3d6",
-    high: "#5a8a5a",
+    high: "#9cb98f",
+    vhigh: "#5a8a5a",
     selected: "#7fb069",
     dim: "#b3bcc0",
     halo: "#4f9d64",
@@ -42,9 +44,11 @@ const MAP_THEMES = {
     redIcon: "#b91c1c",
   },
   dark: {
-    low: "#a06a63",
+    vlow: "#8a574f",
+    low: "#b08a76",
     mid: "#3d4653",
     high: "#5d8a6a",
+    vhigh: "#82b58d",
     selected: "#6a9d76",
     dim: "#343b46",
     halo: "#7fb98a",
@@ -62,11 +66,14 @@ const MAP_THEMES = {
 
 type Palette = { [K in keyof (typeof MAP_THEMES)["light"]]: string };
 
-// FX-2: стопы градиента — квантили реального распределения индекса.
+// FX-2: пороги цвета — квантили реального распределения индекса.
 // Жёсткий step 5/7 после скоринга v4 давал ~56% зданий одним бежевым
-// (бэклог FX №2). Цвет — презентация: формула индекса (scoring.json)
-// не затрагивается. null = данных мало, фолбэк на старый step.
-type ColorStops = { low: number; mid: number; high: number };
+// (бэклог FX №2). Линейный градиент в RGB не подошёл: смешение пастелей
+// даёт выцветшие промежуточные тона. Поэтому — 5 ступеней (квинтили),
+// каждая по ~20% зданий, соседние оттенки близки по тону, но насыщенные.
+// Цвет — презентация: формула индекса (scoring.json) не затрагивается.
+// null = данных мало, фолбэк на старый step 5/7.
+type ColorStops = { t1: number; t2: number; t3: number; t4: number; mid: number };
 
 const buildingColorExpr = (p: Palette, s: ColorStops | null) =>
   [
@@ -76,18 +83,19 @@ const buildingColorExpr = (p: Palette, s: ColorStops | null) =>
     ["to-boolean", ["feature-state", "inactive"]],
     p.dim,
     s
-      ? [
-          "interpolate",
-          ["linear"],
-          // interpolate клэмпит за пределами стопов: хвосты <q10 и >q90
-          // получают крайние цвета, null-индекс — нейтральный.
+      ? // step: v < t1 → vlow … v ≥ t4 → vhigh; null-индекс → mid.
+        [
+          "step",
           ["coalesce", ["get", "index"], s.mid],
-          s.low,
+          p.vlow,
+          s.t1,
           p.low,
-          s.mid,
+          s.t2,
           p.mid,
-          s.high,
+          s.t3,
           p.high,
+          s.t4,
+          p.vhigh,
         ]
       : ["step", ["get", "index"], p.low, 5, p.mid, 7, p.high],
   ] as never;
@@ -341,16 +349,17 @@ export default function Map() {
         .sort((a, b) => a - b);
       const colorStops: ColorStops | null =
         indexValues.length >= 10
-          ? {
-              low: indexValues[Math.floor(0.1 * indexValues.length)],
-              mid: indexValues[Math.floor(0.5 * indexValues.length)],
-              high: indexValues[
-                Math.min(
-                  indexValues.length - 1,
-                  Math.floor(0.9 * indexValues.length),
-                )
-              ],
-            }
+          ? (() => {
+              const at = (p: number) =>
+                indexValues[Math.min(indexValues.length - 1, Math.floor(p * indexValues.length))];
+              return {
+                t1: at(0.2),
+                t2: at(0.4),
+                t3: at(0.6),
+                t4: at(0.8),
+                mid: at(0.5),
+              };
+            })()
           : null;
 
       const poiCenters = poi.features
