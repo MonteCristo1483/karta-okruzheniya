@@ -1,0 +1,14 @@
+.env
+node_modules/
+.next/
+pycache/
+*.pyc
+data/raw/
+data/processed/
+*.pmtiles
+.DS_Store
+.venv/
+web/public/data/*.geojson
+web/public/maplibre-gl-worker.mjs
+web/tsconfig.tsbuildinfo
+web/dist/
