@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Скоринг «Индекс окружения» (SPEC §3). Все коэффициенты — из config/scoring.json.
 
-Пешее время до POI считается по прямой: мин = м / (walking_speed_kmh × 1000 / 60)
-(маршруты Valhalla — позже). Штраф начисляется только при расстоянии < радиуса
-слоя. Слои с enabled: false пропускаются.
+Пешее время до POI: если для здания есть маршрут в таблице routes (V2,
+Valhalla) — берём его минуты и длину; иначе считаем по прямой:
+мин = м / (walking_speed_kmh × 1000 / 60). Штраф начисляется только при
+расстоянии < радиуса слоя. Слои с enabled: false пропускаются.
 
 Источники штрафов (config: penalties.*.source):
   linear — ближайшая линия из linear (kind = названию штрафа, веса по classes);
@@ -107,9 +108,10 @@ def multiplier_for(minutes: Decimal, thresholds: list[dict]) -> Decimal:
     return Decimal(0)
 
 
-def bonus_for_distance(distance_m: Decimal, category_max: Decimal, cfg: dict) -> dict:
-    """Бонус категории за расстояние до ближайшего POI (по прямой)."""
-    minutes = walking_minutes(distance_m, dec(cfg["bonuses"]["walking_speed_kmh"]))
+def bonus_for_minutes(
+    minutes: Decimal, distance_m: Decimal, category_max: Decimal, cfg: dict
+) -> dict:
+    """Бонус категории за готовое пешее время (маршрут Valhalla)."""
     multiplier = multiplier_for(minutes, cfg["bonuses"]["time_thresholds_min"])
     return {
         "distance_m": float(round_dec(distance_m)),
@@ -117,6 +119,12 @@ def bonus_for_distance(distance_m: Decimal, category_max: Decimal, cfg: dict) ->
         "multiplier": float(multiplier),
         "bonus": float(category_max * multiplier),
     }
+
+
+def bonus_for_distance(distance_m: Decimal, category_max: Decimal, cfg: dict) -> dict:
+    """Бонус категории за расстояние до ближайшего POI (по прямой)."""
+    minutes = walking_minutes(distance_m, dec(cfg["bonuses"]["walking_speed_kmh"]))
+    return bonus_for_minutes(minutes, distance_m, category_max, cfg)
 
 
 def penalty_for_distance(
@@ -150,7 +158,7 @@ def scope_from_args(argv: list[str]) -> tuple[str, list]:
     return "(SELECT * FROM buildings WHERE osm_id = ANY(%s))", [ids]
 
 
-def collect_bonuses(cur, scope: str, scope_params: list, cfg: dict) -> dict:
+def collect_bonuses(cur, scope: str, scope_params: list, cfg: dict, routes_map: dict) -> dict:
     bonuses: dict[str, dict] = {}
     for category, cat_cfg in cfg["bonuses"]["categories"].items():
         subtypes = cat_cfg.get("subtypes")
@@ -162,7 +170,14 @@ def collect_bonuses(cur, scope: str, scope_params: list, cfg: dict) -> dict:
         category_max = dec(cat_cfg["max"])
         per_building: dict[int, dict] = {}
         for osm_id, dist in cur.fetchall():
-            per_building[osm_id] = bonus_for_distance(dec(dist), category_max, cfg)
+            route = routes_map.get((osm_id, category))
+            if route is not None:
+                minutes, distance_m = route
+                per_building[osm_id] = bonus_for_minutes(
+                    minutes, distance_m, category_max, cfg
+                )
+            else:
+                per_building[osm_id] = bonus_for_distance(dec(dist), category_max, cfg)
         bonuses[category] = per_building
     return bonuses
 
@@ -215,7 +230,21 @@ def run(scope: str, scope_params: list, cfg: dict) -> int:
         cur.execute(BUILDING_IDS.format(scope=scope), scope_params)
         building_ids = [row[0] for row in cur.fetchall()]
 
-        bonuses = collect_bonuses(cur, scope, scope_params, cfg)
+        # Готовые пешие маршруты (Valhalla): (building_id, category) ->
+        # (минуты, длина_м). Зданий без маршрута — прямая (фолбэк).
+        routes_map: dict = {}
+        if building_ids:
+            cur.execute(
+                "SELECT building_id, category, minutes, distance_m "
+                "FROM routes WHERE building_id = ANY(%s)",
+                [building_ids],
+            )
+            routes_map = {
+                (bid, cat): (dec(mins), dec(dist))
+                for bid, cat, mins, dist in cur.fetchall()
+            }
+
+        bonuses = collect_bonuses(cur, scope, scope_params, cfg, routes_map)
         penalties, skipped = collect_penalties(cur, scope, scope_params, cfg)
 
         buffer: list[tuple] = []

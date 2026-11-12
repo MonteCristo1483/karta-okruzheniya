@@ -62,6 +62,13 @@ def classify(tags: osmium.osm.TagList) -> tuple[str, str] | None:
     """-> (type, subtype); subtype — значение тега, определившего категорию."""
     if tags.get("railway") == "subway_entrance":
         return ("subway_entrance", "subway_entrance")
+    # МЦД / электрички / городские платформы: для спальных районов это
+    # основной вид транспорта — без них бонус транспорта занижен (V4.1).
+    rail = tags.get("railway")
+    if rail in ("station", "halt", "platform"):
+        if tags.get("station") == "subway":
+            return None  # метро учитывается через subway_entrance
+        return ("rail_platform", rail)
     if tags.get("amenity") == "school":
         return ("school", "school")
     if tags.get("amenity") == "kindergarten":

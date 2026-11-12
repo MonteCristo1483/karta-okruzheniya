@@ -70,12 +70,25 @@ SELECT b.osm_id, ST_Y(ST_Centroid(b.geometry)), ST_X(ST_Centroid(b.geometry))
 FROM buildings_presnya b
 """
 
-POI = """
-SELECT p.osm_id, p.type, p.subtype, ST_Y(ST_Centroid(p.geometry)), ST_X(ST_Centroid(p.geometry))
+# Для калибровки (флаг --all): здания в эталонных районах.
+# POI берём с буфером 2 км — иначе у границы района ближайший вход в метро
+# «потерялся бы» за пределами полигона (соседний район).
+# Скоуп — ПЕРЕСЕЧЕНИЕ с эталонными районами: иначе в выборку попадает
+# Новая Москва (Троицк, Щербинка...) — 1.38 млн «сараев», расчёт
+# растягивается на часы и портит медианы (находка 12.11).
+# Пресненский в скоуп не входит: его маршруты считаются в обычном режиме.
+BUILDINGS_ALL = """
+SELECT DISTINCT b.osm_id, ST_Centroid(b.geometry) AS c
+FROM buildings b
+JOIN districts d ON ST_Intersects(b.geometry, d.geometry)
+WHERE d.osm_id = ANY(%s)
+"""
+
+POI_ALL = """
+SELECT DISTINCT p.osm_id, p.type, p.subtype,
+       ST_Y(ST_Centroid(p.geometry)), ST_X(ST_Centroid(p.geometry))
 FROM poi p
-CROSS JOIN presnensky pr
-WHERE ST_Intersects(p.geometry, pr.geometry)
-  AND p.type = ANY(%s)
+JOIN districts d ON ST_Intersects(p.geometry, ST_Buffer(d.geometry::geography, 2000)::geometry)
 """
 
 
@@ -150,34 +163,88 @@ def request_route(a: tuple[float, float], b: tuple[float, float]) -> dict | None
 
 
 def main() -> int:
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    scope_all = "--all" in sys.argv  # эталонные районы (калибровка) вместо Пресни
+    only = set(args)  # например: routes_valhalla.py transport — только эти категории
     cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    categories = {
+        k: v for k, v in cfg["bonuses"]["categories"].items() if not only or k in only
+    }
+    if not categories:
+        print("Не осталось категорий после фильтрации --only", file=sys.stderr)
+        return 2
 
+    # Скоуп по эталонному набору (data/reference_set.md → districts.osm_id):
+    # только 30 районов сверки + Пресненский (см. BUILDINGS_ALL).
+    if scope_all:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import reference_check
+        with psycopg.connect(DB_DSN) as conn, conn.cursor() as cur:
+            refs = reference_check.match_districts(
+                cur, reference_check.parse_reference()
+            )
+        district_ids = [r["osm_id"] for r in refs]
+        print(f"Эталонных районов: {len(district_ids)}")
+    else:
+        district_ids = []
+
+    # Ближайший POI ищем KNN-запросом по временным таблицам с индексами.
+    buildings_sql = BUILDINGS_ALL if scope_all else """
+        SELECT osm_id, ST_Centroid(geometry) AS c FROM buildings_presnya
+    """
+    buildings_params = [district_ids] if scope_all else []
+    poi_area_sql = """
+        (SELECT ST_Union(ST_Buffer(geometry::geography, 2000)::geometry)
+         FROM districts WHERE osm_id = ANY(%s))
+    """ if scope_all else "(SELECT geometry FROM presnensky)"
+    poi_area_params = [district_ids] if scope_all else []
+
+    tasks: list[tuple[int, str, tuple[float, float], tuple[float, float]]] = []
     with psycopg.connect(DB_DSN) as conn, conn.cursor() as cur:
         cur.execute(CREATE_TABLE)
+        # Материализуем здания и POI во временные таблицы с индексами:
+        # KNN по исходным таблицам с фильтром-union из подзапроса
+        # планировщиком выполнялся минутами (pg_stat_activity 12.11).
+        cur.execute("DROP TABLE IF EXISTS tmp_route_buildings")
+        cur.execute(f"""
+            CREATE TEMP TABLE tmp_route_buildings AS
+            SELECT b.osm_id, b.c
+            FROM ({buildings_sql}) b
+        """, buildings_params)
+        cur.execute("CREATE INDEX ON tmp_route_buildings USING gist (c)")
+        cur.execute(f"""
+            CREATE TEMP TABLE tmp_route_poi AS
+            SELECT p.osm_id, p.type, p.subtype, p.geometry
+            FROM poi p
+            WHERE ST_Intersects(p.geometry, {poi_area_sql})
+        """, poi_area_params)
+        cur.execute("CREATE INDEX ON tmp_route_poi USING gist (geometry)")
+        cur.execute("ANALYZE tmp_route_buildings")
+        cur.execute("ANALYZE tmp_route_poi")
         conn.commit()
 
-        cur.execute(BUILDINGS)
+        cur.execute("SELECT osm_id, ST_Y(c), ST_X(c) FROM tmp_route_buildings")
         buildings = [(r[0], (r[1], r[2])) for r in cur.fetchall()]
 
-        poi_by_cat: dict[str, list[tuple[int, float, float]]] = {}
-        for category, cat_cfg in cfg["bonuses"]["categories"].items():
-            cur.execute(POI, [cat_cfg["poi_types"]])
-            rows = cur.fetchall()
-            if "subtypes" in cat_cfg:
-                allowed = set(cat_cfg["subtypes"])
-                rows = [r for r in rows if r[2] in allowed]
-            poi_by_cat[category] = [(r[0], r[3], r[4]) for r in rows]
-
-    tasks = []
-    for osm_id, center in buildings:
-        for category, pois in poi_by_cat.items():
-            best = min(
-                pois,
-                key=lambda p: haversine_m(center[0], center[1], p[1], p[2]),
-                default=None,
-            )
-            if best is not None:
-                tasks.append((osm_id, category, center, (best[1], best[2])))
+        for category, cat_cfg in categories.items():
+            subtypes = cat_cfg.get("subtypes")
+            subtype_clause = "AND p.subtype = ANY(%s)" if subtypes else ""
+            cur.execute(f"""
+                SELECT b.osm_id,
+                       ST_Y(ST_Centroid(p.geometry)), ST_X(ST_Centroid(p.geometry))
+                FROM tmp_route_buildings b
+                CROSS JOIN LATERAL (
+                    SELECT p.geometry FROM tmp_route_poi p
+                    WHERE p.type = ANY(%s) {subtype_clause}
+                    ORDER BY p.geometry <-> b.c
+                    LIMIT 1
+                ) p
+            """, [cat_cfg["poi_types"], *([subtypes] if subtypes else [])])
+            nearest = {r[0]: (r[1], r[2]) for r in cur.fetchall()}
+            for osm_id, center in buildings:
+                best = nearest.get(osm_id)
+                if best is not None:
+                    tasks.append((osm_id, category, center, best))
 
     print(f"Зданий: {len(buildings):,}, пар здание+категория: {len(tasks):,}")
 
