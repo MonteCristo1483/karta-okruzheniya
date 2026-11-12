@@ -1,5 +1,10 @@
 import Map from "./map";
+import { MapErrorBoundary } from "./map-error-boundary";
 
 export default function Page() {
-  return <Map />;
+  return (
+    <MapErrorBoundary>
+      <Map />
+    </MapErrorBoundary>
+  );
 }
