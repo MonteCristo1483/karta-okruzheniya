@@ -117,6 +117,16 @@ const POI_TO_BONUS: Record<string, string> = {
 
 const BONUS_KEYS = ["transport", "schools", "parks", "kindergartens", "shops"];
 
+// Бонус -> ключ слоя-чекбокса: маршрут категории рисуется только когда
+// включён её слой (FX-1: роут исчезает вместе со слоем категории).
+const BONUS_TO_LAYER: Record<string, keyof Visibility> = {
+  transport: "metro",
+  schools: "schools",
+  parks: "parks",
+  kindergartens: "kindergartens",
+  shops: "shops",
+};
+
 const PENALTY_LABELS: Record<string, string> = {
   road: "Магистраль",
   railway: "Ж/д",
@@ -537,6 +547,8 @@ export default function Map() {
         if (selCenter) {
           const cached = routesRef.current;
           for (const cat of BONUS_KEYS) {
+            const layerKey = BONUS_TO_LAYER[cat];
+            if (layerKey && !vis[layerKey]) continue;
             const target = nearestPoi(cat, selCenter);
             if (!target) continue;
             const entry = cached?.[cat];
