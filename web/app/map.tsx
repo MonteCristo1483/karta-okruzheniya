@@ -27,13 +27,14 @@ const MAP_THEMES = {
   light: {
     low: "#dd9c93",
     mid: "#e9e3d6",
-    high: "#aad3b0",
+    high: "#5a8a5a",
     selected: "#7fb069",
     dim: "#b3bcc0",
     halo: "#4f9d64",
     outlineCore: "#3d8b53",
-    redzone: "#d98f86",
+    redzone: "#c4786a",
     route: "#5fa86b",
+    shadow: "#3d5a48",
     poiGreen: "#059669",
     poiMetro: "#e11d48",
     pill: "bg-white/90 text-slate-700",
@@ -49,7 +50,8 @@ const MAP_THEMES = {
     halo: "#7fb98a",
     outlineCore: "#8fce9a",
     redzone: "#8f5b55",
-    route: "#6a9d76",
+    route: "#5cc8be",
+    shadow: "#16202e",
     poiGreen: "#7fb98a",
     poiMetro: "#ef8fa4",
     pill: "bg-slate-800/90 text-slate-200",
@@ -156,6 +158,28 @@ function makeRedPinEl(text: string, pill: string, iconColor: string): HTMLDivEle
   return el;
 }
 
+// Маршрут «по крышам» → мягкая дуга: квадратичная кривая Безье, контрольная
+// точка сбоку от середины (линия огибает здания). Прямые отрезки не подходят —
+// сэмплируем кривую в полилинию.
+function curvedLine(a: Position, b: Position, bend = 0.25): Position[] {
+  const mx = (a[0] + b[0]) / 2;
+  const my = (a[1] + b[1]) / 2;
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const cx = mx - dy * bend;
+  const cy = my + dx * bend;
+  const pts: Position[] = [];
+  for (let i = 0; i <= 24; i++) {
+    const t = i / 24;
+    const u = 1 - t;
+    pts.push([
+      u * u * a[0] + 2 * u * t * cx + t * t * b[0],
+      u * u * a[1] + 2 * u * t * cy + t * t * b[1],
+    ]);
+  }
+  return pts;
+}
+
 export default function Map() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [selected, setSelected] = useState<SelectedBuilding | null>(null);
@@ -163,6 +187,8 @@ export default function Map() {
   const [theme, setTheme] = useState<Theme>("light"); // стабильно для SSR/гидрации
   const [mounted, setMounted] = useState(false);
   const [fatalError, setFatalError] = useState<string | null>(null);
+  // Splash: "show" → "fade" (карта готова или 2 с) → "gone".
+  const [splash, setSplash] = useState<"show" | "fade" | "gone">("show");
   const deselectRef = useRef<(() => void) | null>(null);
   const applyVisibilityRef = useRef<((v: Visibility) => void) | null>(null);
   const applyThemeRef = useRef<((t: Theme) => void) | null>(null);
@@ -175,6 +201,13 @@ export default function Map() {
     selectedRef.current = b;
     setSelected(b);
   };
+
+  // Splash: после fade убираем элемент из DOM.
+  useEffect(() => {
+    if (splash !== "fade") return;
+    const t = window.setTimeout(() => setSplash("gone"), 350);
+    return () => window.clearTimeout(t);
+  }, [splash]);
 
   useEffect(() => {
     visibleRef.current = visible;
@@ -207,6 +240,19 @@ export default function Map() {
     const container = containerRef.current;
     let cancelled = false;
     let map: maplibregl.Map | null = null;
+
+    // Тени зданий — только десктоп: на мобильном (<768px) выключаем слой.
+    const mobileMq = window.matchMedia("(max-width: 767px)");
+    const syncShadow = () => {
+      if (map?.getLayer("buildings-shadow")) {
+        map.setLayoutProperty(
+          "buildings-shadow",
+          "visibility",
+          mobileMq.matches ? "none" : "visible",
+        );
+      }
+    };
+    mobileMq.addEventListener("change", syncShadow);
 
     const init = async () => {
       const fetchJson = async (url: string): Promise<unknown> => {
@@ -312,6 +358,20 @@ export default function Map() {
               },
             },
             {
+              id: "buildings-shadow",
+              type: "fill-extrusion",
+              source: "buildings",
+              paint: {
+                // Мягкая «тень» под зданиями: смещённый полупрозрачный слой.
+                // На мобильном (<768px) выключается (производительность).
+                "fill-extrusion-color": palette.shadow,
+                "fill-extrusion-opacity": 0.1,
+                "fill-extrusion-height": ["coalesce", ["get", "height"], 9],
+                "fill-extrusion-base": 0,
+                "fill-extrusion-translate": [1.5, 1.5],
+              },
+            },
+            {
               id: "buildings",
               type: "fill-extrusion",
               source: "buildings",
@@ -334,7 +394,7 @@ export default function Map() {
                 "line-opacity": [
                   "case",
                   ["to-boolean", ["feature-state", "selected"]],
-                  0.25,
+                  0.45,
                   0,
                 ],
               },
@@ -360,8 +420,9 @@ export default function Map() {
               source: "routes",
               paint: {
                 "line-color": palette.route,
-                "line-width": 3,
-                "line-opacity": 0.75,
+                "line-width": 2,
+                "line-opacity": 0.7,
+                "line-dasharray": [4, 4],
               },
             },
           ],
@@ -386,6 +447,12 @@ export default function Map() {
       map.addControl(new maplibregl.NavigationControl(), "top-right");
       map.on("error", (e) => console.error("map error:", e.error ?? e));
       (window as unknown as { __map?: maplibregl.Map }).__map = map;
+
+      // Заставка: убираем, когда карта отрисована (idle) или через 2 с —
+      // что раньше.
+      const hideSplash = () => setSplash((s) => (s === "show" ? "fade" : s));
+      map.once("idle", hideSplash);
+      window.setTimeout(hideSplash, 2000);
 
       const rebuildOverlays = (sel: SelectedBuilding | null, vis: Visibility) => {
         if (!map) return;
@@ -459,7 +526,7 @@ export default function Map() {
               routeFeatures.push({
                 type: "Feature",
                 properties: { category: cat },
-                geometry: { type: "LineString", coordinates: [selCenter, target.center] },
+                geometry: { type: "LineString", coordinates: curvedLine(selCenter, target.center) },
               });
             }
           }
@@ -485,6 +552,7 @@ export default function Map() {
         if (!map || !map.getLayer("buildings")) return;
         const p = MAP_THEMES[t];
         map.setPaintProperty("buildings", "fill-extrusion-color", buildingColorExpr(p));
+        map.setPaintProperty("buildings-shadow", "fill-extrusion-color", p.shadow);
         map.setPaintProperty("outline-halo", "line-color", p.halo);
         map.setPaintProperty("outline-core", "line-color", p.outlineCore);
         map.setPaintProperty("redzones-fill", "fill-color", p.redzone);
@@ -564,6 +632,14 @@ export default function Map() {
 
       map.on("load", () => {
         applyThemeRef.current?.(themeRef.current);
+        applyVisibilityRef.current?.(visibleRef.current);
+        if (map?.getLayer("buildings-shadow")) {
+          map.setLayoutProperty(
+            "buildings-shadow",
+            "visibility",
+            mobileMq.matches ? "none" : "visible",
+          );
+        }
         // Публичная ссылка «Отправить клиенту»: ?building=<osm_id>
         const param = new URLSearchParams(window.location.search).get("building");
         if (param !== null) {
@@ -596,6 +672,7 @@ export default function Map() {
 
     return () => {
       cancelled = true;
+      mobileMq.removeEventListener("change", syncShadow);
       map?.remove();
       map = null;
     };
@@ -616,6 +693,21 @@ export default function Map() {
       {fatalError && (
         <div className="absolute inset-x-4 top-1/3 z-20 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-800 shadow-lg dark:bg-red-950/70 dark:text-red-200">
           {fatalError}
+        </div>
+      )}
+      {splash !== "gone" && (
+        <div
+          className={`absolute inset-0 z-40 flex flex-col items-center justify-center gap-4 bg-[#6a9d76] transition-opacity duration-300 ${
+            splash === "fade" ? "opacity-0" : "opacity-100"
+          }`}
+          aria-hidden
+        >
+          <svg width="72" height="72" viewBox="0 0 512 512">
+            <circle cx="256" cy="256" r="130" fill="none" stroke="#ffffff" strokeWidth="64" />
+          </svg>
+          <div className="text-lg font-semibold tracking-wide text-white">
+            Карта окружения
+          </div>
         </div>
       )}
       <div className="pointer-events-none absolute bottom-2 right-3 max-w-md text-right text-[11px] leading-tight text-slate-500 dark:text-slate-400">

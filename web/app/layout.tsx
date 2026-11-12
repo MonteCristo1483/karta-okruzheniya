@@ -6,6 +6,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Карта окружения — Пресненский",
   manifest: "/karta-okruzheniya/manifest.json",
+  icons: { icon: "/karta-okruzheniya/icon.svg" },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",

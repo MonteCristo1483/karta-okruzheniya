@@ -18,7 +18,7 @@ export const DEFAULT_VISIBILITY: Visibility = {
   metro: true,
   shops: false,
   redzones: true,
-  routes: true,
+  routes: false,
 };
 
 const ITEMS: { key: LayerKey; label: string }[] = [
@@ -62,8 +62,13 @@ export default function LayersPanel({
   return (
     <div className="absolute left-3 top-3 z-10 rounded-2xl bg-white/90 p-3 shadow-lg backdrop-blur dark:bg-slate-900/90">
       <div className="mb-1.5 flex items-center justify-between gap-3">
-        <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-          Слои
+        <div className="flex items-center gap-1.5">
+          <svg width="16" height="16" viewBox="0 0 512 512" aria-hidden>
+            <circle cx="256" cy="256" r="130" fill="none" stroke="#6a9d76" strokeWidth="64" />
+          </svg>
+          <span className="text-sm font-bold text-slate-700 dark:text-slate-200">
+            Карта окружения
+          </span>
         </div>
         <button
           type="button"
