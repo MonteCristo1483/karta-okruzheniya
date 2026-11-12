@@ -44,7 +44,7 @@
 ## Недели 3–6 — карта
 Ядро первым: 3D-здания + выбор дома + подсветка/затемнение. Порядок — по SPEC.
 
-- [ ] M1. Каркас web/ (Next.js + TS strict + Tailwind) + MapLibre: диорама
+- [x] M1. Каркас web/ (Next.js + TS strict + Tailwind) + MapLibre: диорама
       Пресненского без подложки, fill-extrusion зданий по высоте, цвет по
       индексу (<5 красный, 5-7 нейтральный, >7 зелёный, пастель). Данные:
       pipeline/export_map_data.py → web/public/data/presnya_buildings.geojson
@@ -55,4 +55,21 @@
 - [x] M5a. Тёмная тема: design tokens, переключатель, localStorage
 - [x] M5b. «Отправить клиенту»: публичная ссылка /?building=<osm_id>,
       статический экспорт на GitHub Pages (деплой: npm run deploy, см. DEPLOY.md)
-- [ ] M6. Адаптив desktop: шторка сбоку, здание слева/справа от неё
+- [x] M6. Адаптив desktop: шторка сбоку, здание слева/справа от неё
+- [x] M7. UX и визуал мобильной карты: шторка со snap, дуги маршрутов,
+      splash screen, PWA-визуал, тень зданий
+
+## V-блок — пешие маршруты Valhalla (приоритет CTO 12.11: блокирует
+## и визуал маршрутов, и разморозку калибровки скоринга)
+Тайлы: data/processed/valhalla (3.5 ГБ, в git не коммитится, сборка ~12 мин).
+Сервис: docker run -d --name valhalla-svc \
+  -v $PWD/data/processed/valhalla:/custom_files -p 8002:8002 \
+  ghcr.io/valhalla/valhalla:latest valhalla_service /custom_files/valhalla.json
+- [x] V1. Тайлы Москвы собраны, valhalla_service поднят локально (без VPS)
+- [x] V2. pipeline/routes_valhalla.py: таблица routes — пеший маршрут
+      здание → ближайший POI каждой категории, 16 530 строк
+- [ ] V3. Экспорт маршрутов на фронт (per-building JSON) + реальные линии
+      вместо квадратичных Безье
+- [ ] V4. Скоринг по времени маршрута вместо прямой + перекалибровка
+      config/scoring.json (заморожен с 11.11)
+- [ ] V5. Эталонная проверка v4 (цель 24–27/30), коммит, деплой

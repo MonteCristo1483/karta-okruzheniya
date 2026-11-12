@@ -34,3 +34,8 @@
 - 2026-11-12 — M7: мягкая тень зданий — второй fill-extrusion слой с fill-extrusion-translate [1.5,1.5] и opacity 0.1 под основным; на мобильном (<768px) выключается через matchMedia + setLayoutProperty (производительность).
 - 2026-11-12 — M7: мобильная шторка — высоты 45dvh/85dvh/92px со snap-переходами (transition-[height,transform]), свайп по ручке меняет snap; в минимальном виде контент скрыт через CSS (md:hidden / hidden), десктоп остаётся auto-по-контенту.
 - 2026-11-12 — M7: иконка favicon — link rel="icon" на SVG через metadata.icons (app/icon.svg route удалили в M6, без metadata браузер запрашивает /favicon.ico → 404).
+
+## Пешие маршруты (V-блок)
+
+- 2026-11-12 — Valhalla поднят локально в Docker (образ ghcr.io/valhalla/valhalla, тайлы data/processed/valhalla, 3.5 ГБ, сборка из moscow.osm.pbf ~12 мин, сервис на :8002). VPS не нужен: роутер — часть пайплайна, в веб уходят готовые геометрии (принцип SPEC «всё считаем заранее»).
+- 2026-11-12 — WinError 10048 (исчерпание эфемерных портов Windows) при параллельных запросах к Valhalla сбрасывал ~6% маршрутов. Лечится keep-alive: requests.Session по одной на поток (threading.local); urllib без пула не годится. После фикса 16 530/16 530 без ошибок.
