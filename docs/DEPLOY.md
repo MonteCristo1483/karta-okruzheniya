@@ -44,6 +44,9 @@ http://localhost:3000/karta-okruzheniya/ (basePath действует и в dev)
 
 ## Важно
 
+- После деплоя проверь PWA в Chrome DevTools → Lighthouse → PWA (или вкладка
+  Application → Manifest: имя, иконки, цвета; Application → Service Workers:
+  sw.js активен в scope /karta-okruzheniya/).
 - `web/dist/` не коммитится (в `.gitignore`) — деплоится только в ветку `gh-pages`.
 - После смены `basePath` (переименование репозитория) править:
   `next.config.ts`, `PUBLIC_BASE` в `app/building-sheet.tsx`, этот файл.
