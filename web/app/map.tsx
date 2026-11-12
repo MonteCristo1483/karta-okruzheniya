@@ -62,14 +62,34 @@ const MAP_THEMES = {
 
 type Palette = { [K in keyof (typeof MAP_THEMES)["light"]]: string };
 
-const buildingColorExpr = (p: Palette) =>
+// FX-2: стопы градиента — квантили реального распределения индекса.
+// Жёсткий step 5/7 после скоринга v4 давал ~56% зданий одним бежевым
+// (бэклог FX №2). Цвет — презентация: формула индекса (scoring.json)
+// не затрагивается. null = данных мало, фолбэк на старый step.
+type ColorStops = { low: number; mid: number; high: number };
+
+const buildingColorExpr = (p: Palette, s: ColorStops | null) =>
   [
     "case",
     ["to-boolean", ["feature-state", "selected"]],
     p.selected,
     ["to-boolean", ["feature-state", "inactive"]],
     p.dim,
-    ["step", ["get", "index"], p.low, 5, p.mid, 7, p.high],
+    s
+      ? [
+          "interpolate",
+          ["linear"],
+          // interpolate клэмпит за пределами стопов: хвосты <q10 и >q90
+          // получают крайние цвета, null-индекс — нейтральный.
+          ["coalesce", ["get", "index"], s.mid],
+          s.low,
+          p.low,
+          s.mid,
+          p.mid,
+          s.high,
+          p.high,
+        ]
+      : ["step", ["get", "index"], p.low, 5, p.mid, 7, p.high],
   ] as never;
 
 type PoiProps = { type: string; subtype: string | null; name: string | null };
@@ -314,6 +334,25 @@ export default function Map() {
       if (cancelled) return;
       const palette = MAP_THEMES[themeRef.current];
 
+      // Стопы градиента цвета — по квантилям загруженных индексов (FX-2).
+      const indexValues = buildings.features
+        .map((f) => (f.properties as { index?: number }).index)
+        .filter((x): x is number => typeof x === "number" && Number.isFinite(x))
+        .sort((a, b) => a - b);
+      const colorStops: ColorStops | null =
+        indexValues.length >= 10
+          ? {
+              low: indexValues[Math.floor(0.1 * indexValues.length)],
+              mid: indexValues[Math.floor(0.5 * indexValues.length)],
+              high: indexValues[
+                Math.min(
+                  indexValues.length - 1,
+                  Math.floor(0.9 * indexValues.length),
+                )
+              ],
+            }
+          : null;
+
       const poiCenters = poi.features
         .map((f) => ({ f, center: geometryCenter(f.geometry) }))
         .filter(
@@ -402,7 +441,7 @@ export default function Map() {
               paint: {
                 // fill-extrusion-color поддерживает feature-state,
                 // fill-extrusion-opacity — нет, поэтому затемнение через цвет.
-                "fill-extrusion-color": buildingColorExpr(palette),
+                "fill-extrusion-color": buildingColorExpr(palette, colorStops),
                 "fill-extrusion-height": ["coalesce", ["get", "height"], 9],
                 "fill-extrusion-base": 0,
                 "fill-extrusion-opacity": 0.95,
@@ -582,7 +621,7 @@ export default function Map() {
       applyThemeRef.current = (t: Theme) => {
         if (!map || !map.getLayer("buildings")) return;
         const p = MAP_THEMES[t];
-        map.setPaintProperty("buildings", "fill-extrusion-color", buildingColorExpr(p));
+        map.setPaintProperty("buildings", "fill-extrusion-color", buildingColorExpr(p, colorStops));
         map.setPaintProperty("buildings-shadow", "fill-extrusion-color", p.shadow);
         map.setPaintProperty("outline-halo", "line-color", p.halo);
         map.setPaintProperty("outline-core", "line-color", p.outlineCore);
