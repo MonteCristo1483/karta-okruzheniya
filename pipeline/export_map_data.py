@@ -57,6 +57,14 @@ FROM (
 ) t
 """
 
+# Пешие маршруты (V2, Valhalla) — один файл на здание: при выборе дома
+# фронт догружает только его маршруты (~3 КБ), а не все 16 530 сразу.
+ROUTES_QUERY = """
+SELECT building_id, category, minutes, distance_m, ST_AsGeoJSON(geometry)
+FROM routes
+WHERE building_id IN (SELECT osm_id FROM buildings_presnya)
+"""
+
 
 def write_geojson(path: Path, features: list[dict]) -> None:
     payload = {"type": "FeatureCollection", "features": features}
@@ -110,9 +118,28 @@ def main() -> int:
             for kind, cls, geom_json in cur.fetchall()
         ]
 
+        cur.execute(ROUTES_QUERY)
+        per_building: dict[int, dict] = {}
+        for building_id, category, minutes, distance_m, geom_json in cur.fetchall():
+            entry = per_building.setdefault(building_id, {"categories": {}})
+            entry["categories"][category] = {
+                "minutes": float(minutes),
+                "distance_m": distance_m,
+                "geometry": json.loads(geom_json),
+            }
+
+    routes_dir = OUT_DIR / "routes"
+    routes_dir.mkdir(parents=True, exist_ok=True)
+    for building_id, entry in per_building.items():
+        (routes_dir / f"{building_id}.json").write_text(
+            json.dumps(entry, ensure_ascii=False, separators=(",", ":")),
+            encoding="utf-8",
+        )
+
     write_geojson(OUT_DIR / "presnya_buildings.geojson", buildings)
     write_geojson(OUT_DIR / "presnya_poi.geojson", poi)
     write_geojson(OUT_DIR / "presnya_redzones.geojson", redzones)
+    print(f"routes/: {len(per_building):,} файлов маршрутов")
     return 0
 
 

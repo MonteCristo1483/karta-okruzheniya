@@ -9,6 +9,7 @@ data/processed/
 .DS_Store
 .venv/
 web/public/data/*.geojson
+web/public/data/routes/
 web/public/maplibre-gl-worker.mjs
 web/tsconfig.tsbuildinfo
 web/dist/

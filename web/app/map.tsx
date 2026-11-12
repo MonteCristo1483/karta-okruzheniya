@@ -74,6 +74,15 @@ const buildingColorExpr = (p: Palette) =>
 
 type PoiProps = { type: string; subtype: string | null; name: string | null };
 type RedzoneProps = { kind: string; class: string | null };
+// Пешие маршруты (Valhalla) — файл на здание, грузится при выборе.
+type BuildingRoutes = {
+  categories: Record<
+    string,
+    { minutes: number; distance_m: number; geometry: { type: "LineString"; coordinates: Position[] } }
+  >;
+};
+type FlatRoutes = Record<string, { minutes: number; coordinates: Position[] }>;
+const ROUTES_URL = (id: number) => `data/routes/${id}.json`;
 type GFeature<P> = { type: "Feature"; geometry: Geometry; properties: P };
 type GCollection<P> = { type: "FeatureCollection"; features: GFeature<P>[] };
 
@@ -194,6 +203,11 @@ export default function Map() {
   const applyThemeRef = useRef<((t: Theme) => void) | null>(null);
   const selectedRef = useRef<SelectedBuilding | null>(null);
   const visibleRef = useRef<Visibility>(DEFAULT_VISIBILITY);
+  // Маршруты выбранного здания (Valhalla) и кэш по id.
+  // TS7 (tsgo): глобальный new Map<K,V>() ломается TS7009 — Record (decisions.md).
+  // undefined = не запрашивали, null = файла нет (не повторять), иначе маршруты.
+  const routesRef = useRef<FlatRoutes | null>(null);
+  const routesCacheRef = useRef<Record<number, FlatRoutes | null>>({});
   // Реальная тема для карты доступна сразу (карта — клиент-only).
   const themeRef = useRef<Theme>(initialTheme());
 
@@ -477,7 +491,8 @@ export default function Map() {
           let text = f.properties.name ?? POI_LABELS[f.properties.type] ?? f.properties.type;
           if (sel && selCenter && nearestByCat[bonusKey] === f) {
             const entry = sel.breakdown?.bonuses[bonusKey];
-            if (entry) text = `${text} · ${Math.round(entry.minutes)} мин`;
+            const minutes = routesRef.current?.[bonusKey]?.minutes ?? entry?.minutes;
+            if (minutes != null) text = `${text} · ${Math.round(minutes)} мин`;
           }
           poiMarkers.push(
             new maplibregl.Marker({
@@ -520,15 +535,19 @@ export default function Map() {
 
         const routeFeatures: Feature[] = [];
         if (selCenter) {
+          const cached = routesRef.current;
           for (const cat of BONUS_KEYS) {
             const target = nearestPoi(cat, selCenter);
-            if (target) {
-              routeFeatures.push({
-                type: "Feature",
-                properties: { category: cat },
-                geometry: { type: "LineString", coordinates: curvedLine(selCenter, target.center) },
-              });
-            }
+            if (!target) continue;
+            const entry = cached?.[cat];
+            // Реальная геометрия Valhalla; дуга Безье — фолбэк, пока файл
+            // маршрутов догружается (или если он недоступен).
+            const coordinates = entry?.coordinates ?? curvedLine(selCenter, target.center);
+            routeFeatures.push({
+              type: "Feature",
+              properties: { category: cat },
+              geometry: { type: "LineString", coordinates },
+            });
           }
         }
         routesData.features = routeFeatures;
@@ -579,12 +598,43 @@ export default function Map() {
 
       const deselect = () => {
         selectedId = null;
+        routesRef.current = null;
         applySelection();
         updateSelected(null);
         rebuildOverlays(null, visibleRef.current);
         map?.easeTo({ padding: { top: 0, bottom: 0, left: 0, right: 0 }, duration: 300 });
       };
       deselectRef.current = deselect;
+
+      // Маршруты здания: кэш + догрузка. null в кэше = «файла нет, не повторять».
+      const loadRoutes = async (id: number) => {
+        const cached = routesCacheRef.current[id];
+        if (cached !== undefined) {
+          routesRef.current = cached;
+          if (selectedRef.current?.id === id) {
+            rebuildOverlays(selectedRef.current, visibleRef.current);
+          }
+          return;
+        }
+        try {
+          const res = await fetch(ROUTES_URL(id));
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = (await res.json()) as BuildingRoutes;
+          const flat: FlatRoutes = {};
+          for (const [cat, e] of Object.entries(data.categories)) {
+            flat[cat] = { minutes: e.minutes, coordinates: e.geometry.coordinates };
+          }
+          routesCacheRef.current[id] = flat;
+          routesRef.current = flat;
+        } catch (e) {
+          console.error(`Маршруты для здания ${id} не загрузились:`, e);
+          routesCacheRef.current[id] = null;
+          routesRef.current = null;
+        }
+        if (selectedRef.current?.id === id) {
+          rebuildOverlays(selectedRef.current, visibleRef.current);
+        }
+      };
 
       const flyToBuilding = (center: [number, number]) => {
         // Ждём две отрисовки, чтобы шторка с новым контентом заняла высоту,
@@ -624,7 +674,9 @@ export default function Map() {
           breakdown: props.breakdown ?? null,
         };
         updateSelected(next);
+        routesRef.current = routesCacheRef.current[id] ?? null;
         rebuildOverlays(next, visibleRef.current);
+        void loadRoutes(id);
 
         const center = geometryCenter(feature.geometry);
         if (center) flyToBuilding(center);
