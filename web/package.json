@@ -7,7 +7,7 @@
     "build": "next build",
     "predev": "node scripts/copy-maplibre-worker.mjs",
     "prebuild": "node scripts/copy-maplibre-worker.mjs",
-    "deploy": "next build && npx gh-pages -d dist"
+    "deploy": "next build && npx gh-pages -d dist --nojekyll"
   },
   "dependencies": {
     "maplibre-gl": "6.17.0",

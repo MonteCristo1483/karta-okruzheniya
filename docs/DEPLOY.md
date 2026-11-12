@@ -15,7 +15,7 @@
 ```bash
 cd web
 npm install        # один раз, ставит gh-pages из devDependencies
-npm run deploy     # next build + пуш dist/ в ветку gh-pages
+npm run deploy     # next build + пуш dist/ в ветку gh-pages (.nojekyll добавляется сам)
 ```
 
 ## Способ 2 — вручную через настройки репозитория
