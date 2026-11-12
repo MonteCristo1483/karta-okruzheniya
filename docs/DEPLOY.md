@@ -18,6 +18,26 @@ npm install        # один раз, ставит gh-pages из devDependencies
 npm run deploy     # next build + пуш dist/ в ветку gh-pages (.nojekyll добавляется сам)
 ```
 
+ОГРАНИЧЕНИЕ: при тысячах файлов в dist (например data/routes/*.json)
+`gh-pages` падает с `spawn ENAMETOOLONG` — готовит один гигантский
+`git rm`, длиннее лимита командной строки Windows. Тогда — Способ 1б.
+
+## Способ 1б — git worktree вручную (деплой с большим числом файлов)
+
+```bash
+cd web && npm run build        # собрать
+cd ..                          # корень репозитория
+git fetch origin gh-pages
+git worktree add .deploy-tmp gh-pages   # если ветки нет локально:
+# git worktree add --track -b gh-pages .deploy-tmp origin/gh-pages
+cd .deploy-tmp
+git rm -rf --quiet .
+cp -r ../web/dist/. .
+touch .nojekyll                # без него Pages гоняет Jekyll и 404 на _next/
+git add -A && git commit -m "deploy" && git push origin gh-pages
+cd .. && git worktree remove --force .deploy-tmp
+```
+
 ## Способ 2 — вручную через настройки репозитория
 
 1. `cd web && npm run build` — собрать, результат в `web/dist/`.
