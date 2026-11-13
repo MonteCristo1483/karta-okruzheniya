@@ -3,7 +3,7 @@
 // network-first: после деплоя пользователь сразу видит новую версию и
 // свежие данные, офлайн — из кэша. Хэшированные чанки —
 // stale-while-revalidate: открываются мгновенно и при сети, и из кэша.
-const CACHE_NAME = "karta-okruzheniya-v3";
+const CACHE_NAME = "karta-okruzheniya-v4";
 const BASE = "/karta-okruzheniya";
 
 // Стабильные файлы, кэшируемые при установке. JS/CSS-чанки hashed —
@@ -54,11 +54,16 @@ async function staleWhileRevalidate(request) {
   return cached || fetched;
 }
 
-// HTML — сначала сеть: деплой виден сразу. Офлайн — кэш (PWA).
-async function networkFirst(request) {
+// HTML и данные — сначала сеть: деплой виден сразу. Офлайн — кэш (PWA).
+// bypassHttpCache: обход HTTP-кэша браузера — GitHub Pages отдаёт свежие
+// файлы по старым URL с max-age, без no-store SW упаковал бы устаревший
+// ответ в свой кэш (поймали на geojson после деплоя M8).
+async function networkFirst(request, bypassHttpCache) {
   const cache = await caches.open(CACHE_NAME);
   try {
-    const response = await fetch(request);
+    const response = await fetch(
+      bypassHttpCache ? new Request(request, { cache: "no-store" }) : request,
+    );
     if (response.ok) cache.put(request, response.clone());
     return response;
   } catch {
@@ -80,7 +85,7 @@ self.addEventListener("fetch", (event) => {
   const isData = url.pathname.startsWith(BASE + "/data/");
   event.respondWith(
     event.request.mode === "navigate" || isData
-      ? networkFirst(event.request)
+      ? networkFirst(event.request, true)
       : staleWhileRevalidate(event.request),
   );
 });

@@ -1,4 +1,4 @@
 :HL["/karta-okruzheniya/_next/static/chunks/0s5jesde-riki.css","style"]
 2:[["children",{"s":"__PAGE__","h":160}]]
 1:[["children",{"s":"/_not-found","h":96,"c":"$Q2"}]]
-0:{"b":"blSjw3WUXtFTdLTz9id2L","t":{"t":{"s":"","h":80,"c":"$Q1"}}}
+0:{"b":"WLVD5i88TpUE2zraLZRmM","t":{"t":{"s":"","h":80,"c":"$Q1"}}}
