@@ -1,7 +1,8 @@
-// Service Worker «Карта окружения»: stale-while-revalidate.
-// Сначала отвечаем из кэша, параллельно обновляем ресурс в фоне —
-// карта открывается мгновенно и при сети, и из кэша (PWA).
-const CACHE_NAME = "karta-okruzheniya-v1";
+// Service Worker «Карта окружения».
+// Навигации (HTML) — network-first: после деплоя пользователь сразу видит
+// новую версию, офлайн — из кэша. Хэшированные чанки и данные —
+// stale-while-revalidate: карта открывается мгновенно и при сети, и из кэша.
+const CACHE_NAME = "karta-okruzheniya-v2";
 const BASE = "/karta-okruzheniya";
 
 // Стабильные файлы, кэшируемые при установке. JS/CSS-чанки hashed —
@@ -49,16 +50,33 @@ async function staleWhileRevalidate(request) {
       return response;
     })
     .catch(() => cached);
-  // Навигация (?building=id) → при отсутствии сети отдаём index.html.
-  if (!cached && request.mode === "navigate") {
-    const page = await cache.match(BASE + "/index.html");
-    if (page) return page;
-  }
   return cached || fetched;
+}
+
+// HTML — сначала сеть: деплой виден сразу. Офлайн — кэш (PWA).
+async function networkFirst(request) {
+  const cache = await caches.open(CACHE_NAME);
+  try {
+    const response = await fetch(request);
+    if (response.ok) cache.put(request, response.clone());
+    return response;
+  } catch {
+    const cached = await cache.match(request, { ignoreSearch: true });
+    if (cached) return cached;
+    if (request.mode === "navigate") {
+      const page = await cache.match(BASE + "/index.html");
+      if (page) return page;
+    }
+    return Response.error();
+  }
 }
 
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (event.request.method !== "GET" || url.origin !== self.location.origin) return;
-  event.respondWith(staleWhileRevalidate(event.request));
+  event.respondWith(
+    event.request.mode === "navigate"
+      ? networkFirst(event.request)
+      : staleWhileRevalidate(event.request),
+  );
 });
