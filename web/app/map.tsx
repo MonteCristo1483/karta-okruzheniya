@@ -36,7 +36,6 @@ const MAP_THEMES = {
     outlineCore: "#3d8b53",
     redzone: "#c4786a",
     route: "#5fa86b",
-    shadow: "#3d5a48",
     poiGreen: "#059669",
     poiMetro: "#e11d48",
     pill: "bg-white/90 text-slate-700",
@@ -55,7 +54,6 @@ const MAP_THEMES = {
     outlineCore: "#8fce9a",
     redzone: "#8f5b55",
     route: "#5cc8be",
-    shadow: "#16202e",
     poiGreen: "#7fb98a",
     poiMetro: "#ef8fa4",
     pill: "bg-slate-800/90 text-slate-200",
@@ -293,19 +291,6 @@ export default function Map() {
     let cancelled = false;
     let map: maplibregl.Map | null = null;
 
-    // Тени зданий — только десктоп: на мобильном (<768px) выключаем слой.
-    const mobileMq = window.matchMedia("(max-width: 767px)");
-    const syncShadow = () => {
-      if (map?.getLayer("buildings-shadow")) {
-        map.setLayoutProperty(
-          "buildings-shadow",
-          "visibility",
-          mobileMq.matches ? "none" : "visible",
-        );
-      }
-    };
-    mobileMq.addEventListener("change", syncShadow);
-
     const init = async () => {
       const fetchJson = async (url: string): Promise<unknown> => {
         let lastErr: unknown = null;
@@ -419,10 +404,10 @@ export default function Map() {
               paint: { "fill-color": palette.redzone, "fill-opacity": 0.14 },
             },
             {
-              id: "redzones-line",
+              id: "redzones-road",
               type: "line",
               source: "redzones",
-              filter: ["==", ["geometry-type"], "LineString"],
+              filter: ["==", ["get", "kind"], "road"],
               paint: {
                 "line-color": palette.redzone,
                 "line-width": 2.5,
@@ -430,17 +415,16 @@ export default function Map() {
               },
             },
             {
-              id: "buildings-shadow",
-              type: "fill-extrusion",
-              source: "buildings",
+              // Ж/д — фоновый слой: тонкий пунктир, чтобы не шумел (FX-3).
+              id: "redzones-rail",
+              type: "line",
+              source: "redzones",
+              filter: ["==", ["get", "kind"], "railway"],
               paint: {
-                // Мягкая «тень» под зданиями: смещённый полупрозрачный слой.
-                // На мобильном (<768px) выключается (производительность).
-                "fill-extrusion-color": palette.shadow,
-                "fill-extrusion-opacity": 0.1,
-                "fill-extrusion-height": ["coalesce", ["get", "height"], 9],
-                "fill-extrusion-base": 0,
-                "fill-extrusion-translate": [1.5, 1.5],
+                "line-color": palette.redzone,
+                "line-width": 1.5,
+                "line-opacity": 0.45,
+                "line-dasharray": [3, 3],
               },
             },
             {
@@ -616,9 +600,10 @@ export default function Map() {
 
       applyVisibilityRef.current = (v: Visibility) => {
         if (!map) return;
-        if (map.getLayer("redzones-line")) {
+        if (map.getLayer("redzones-road")) {
           const rz = v.redzones ? "visible" : "none";
-          map.setLayoutProperty("redzones-line", "visibility", rz);
+          map.setLayoutProperty("redzones-road", "visibility", rz);
+          map.setLayoutProperty("redzones-rail", "visibility", rz);
           map.setLayoutProperty("redzones-fill", "visibility", rz);
         }
         if (map.getLayer("routes-line")) {
@@ -631,11 +616,11 @@ export default function Map() {
         if (!map || !map.getLayer("buildings")) return;
         const p = MAP_THEMES[t];
         map.setPaintProperty("buildings", "fill-extrusion-color", buildingColorExpr(p, colorStops));
-        map.setPaintProperty("buildings-shadow", "fill-extrusion-color", p.shadow);
         map.setPaintProperty("outline-halo", "line-color", p.halo);
         map.setPaintProperty("outline-core", "line-color", p.outlineCore);
         map.setPaintProperty("redzones-fill", "fill-color", p.redzone);
-        map.setPaintProperty("redzones-line", "line-color", p.redzone);
+        map.setPaintProperty("redzones-road", "line-color", p.redzone);
+        map.setPaintProperty("redzones-rail", "line-color", p.redzone);
         map.setPaintProperty("routes-line", "line-color", p.route);
         rebuildOverlays(selectedRef.current, visibleRef.current);
       };
@@ -745,13 +730,6 @@ export default function Map() {
       map.on("load", () => {
         applyThemeRef.current?.(themeRef.current);
         applyVisibilityRef.current?.(visibleRef.current);
-        if (map?.getLayer("buildings-shadow")) {
-          map.setLayoutProperty(
-            "buildings-shadow",
-            "visibility",
-            mobileMq.matches ? "none" : "visible",
-          );
-        }
         // Публичная ссылка «Отправить клиенту»: ?building=<osm_id>
         const param = new URLSearchParams(window.location.search).get("building");
         if (param !== null) {
@@ -784,7 +762,6 @@ export default function Map() {
 
     return () => {
       cancelled = true;
-      mobileMq.removeEventListener("change", syncShadow);
       map?.remove();
       map = null;
     };
