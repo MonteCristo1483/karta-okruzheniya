@@ -30,10 +30,12 @@ SELECT b.osm_id,
        s.index,
        s.breakdown,
        b.addr_street,
-       b.addr_housenumber
+       b.addr_housenumber,
+       y.building_year
 FROM buildings_presnya b
 JOIN buildings_with_height h ON h.osm_id = b.osm_id
 JOIN scores s ON s.building_id = b.osm_id
+LEFT JOIN building_year_match y ON y.osm_id = b.osm_id
 """
 
 POI_QUERY = """
@@ -92,10 +94,11 @@ def main() -> int:
                     "height": float(height) if height is not None else None,
                     "breakdown": breakdown,
                     "address": ", ".join(p for p in (street, housenumber) if p) or None,
+                    "year": year,
                 },
                 "geometry": json.loads(geom_json),
             }
-            for osm_id, geom_json, height, index, breakdown, street, housenumber in cur.fetchall()
+            for osm_id, geom_json, height, index, breakdown, street, housenumber, year in cur.fetchall()
         ]
 
         cur.execute(POI_QUERY, [shop_subtypes])

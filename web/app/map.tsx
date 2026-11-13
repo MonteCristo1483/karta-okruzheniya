@@ -763,12 +763,14 @@ export default function Map() {
         const props = feature.properties as {
           index?: number;
           address?: string;
+          year?: number | null;
           breakdown?: BuildingBreakdown;
         };
         const next: SelectedBuilding = {
           id,
           index: props.index ?? null,
           address: props.address ?? null,
+          year: props.year ?? null,
           breakdown: props.breakdown ?? null,
         };
         updateSelected(next);

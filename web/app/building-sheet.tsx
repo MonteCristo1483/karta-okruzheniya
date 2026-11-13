@@ -27,6 +27,7 @@ export type SelectedBuilding = {
   id: number;
   index: number | null;
   address: string | null;
+  year: number | null;
   breakdown: BuildingBreakdown | null;
 };
 
@@ -248,6 +249,11 @@ export default function BuildingSheet({
                 <h2 className="truncate pr-8 text-lg font-bold text-slate-800 dark:text-slate-100">
                   {building.address ?? "Адрес не указан"}
                 </h2>
+                {building.year !== null && (
+                  <div className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
+                    Год постройки — {building.year}
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={onClose}
