@@ -9,6 +9,7 @@ import type { BuildingBreakdown, SelectedBuilding } from "./building-sheet";
 import LayersPanel, { DEFAULT_VISIBILITY } from "./layers-panel";
 import type { Visibility } from "./layers-panel";
 import { geometryCenter, haversineM, nearestPosition } from "./geo-utils";
+import { ICON_PATHS, type IconKey } from "./icons";
 import { initialTheme, THEME_KEY } from "./theme";
 import type { Theme } from "./theme";
 
@@ -173,14 +174,59 @@ function pillBase(extra: string): HTMLDivElement {
   return el;
 }
 
-function makePoiMarkerEl(color: string, text: string, pill: string): HTMLDivElement {
-  const el = pillBase(pill);
-  const dot = document.createElement("span");
-  dot.style.color = color;
-  dot.textContent = "●";
-  const label = document.createElement("span");
-  label.textContent = text;
-  el.append(dot, label);
+// POI на карте — иконка в «перевернутой капле» (как на макетах /design).
+// Подпись («Школа · 7 мин») — только у ближайшего к выбранному дому POI.
+const POI_TO_ICON: Record<string, IconKey> = {
+  school: "school",
+  kindergarten: "kindergarten",
+  park: "park",
+  subway_entrance: "subway_entrance",
+  shop: "shop",
+};
+
+function makePoiPinEl(
+  icon: IconKey,
+  color: string,
+  label: string | null,
+  pill: string,
+): HTMLDivElement {
+  const NS = "http://www.w3.org/2000/svg";
+  const el = document.createElement("div");
+  el.className = "flex items-center gap-1";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("width", "24");
+  svg.setAttribute("height", "24");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  const pin = document.createElementNS(NS, "path");
+  pin.setAttribute(
+    "d",
+    "M12 1.5C7.3 1.5 3.5 5.3 3.5 10c0 5.6 8.5 12.6 8.5 12.6S20.5 15.6 20.5 10c0-4.7-3.8-8.5-8.5-8.5z",
+  );
+  pin.setAttribute("fill", color);
+  pin.setAttribute("stroke", "#ffffff");
+  pin.setAttribute("stroke-width", "1.4");
+  const hole = document.createElementNS(NS, "circle");
+  hole.setAttribute("cx", "12");
+  hole.setAttribute("cy", "10");
+  hole.setAttribute("r", "5.2");
+  hole.setAttribute("fill", "#ffffff");
+  const iconPath = document.createElementNS(NS, "path");
+  iconPath.setAttribute("d", ICON_PATHS[icon]);
+  // Иконка рисуется в 24×24 — сжимаем в белый круг капли.
+  iconPath.setAttribute("transform", "translate(12 10) scale(0.4) translate(-12 -12)");
+  iconPath.setAttribute("fill", "none");
+  iconPath.setAttribute("stroke", color);
+  iconPath.setAttribute("stroke-width", "2");
+  iconPath.setAttribute("stroke-linecap", "round");
+  iconPath.setAttribute("stroke-linejoin", "round");
+  svg.append(pin, hole, iconPath);
+  el.append(svg);
+  if (label) {
+    const span = document.createElement("span");
+    span.className = `rounded-full px-2 py-0.5 text-[11px] shadow ${pill}`;
+    span.textContent = label;
+    el.append(span);
+  }
   return el;
 }
 
@@ -530,15 +576,22 @@ export default function Map() {
           const layerKey = POI_TO_LAYER[f.properties.type];
           if (!layerKey || !vis[layerKey]) continue;
           const bonusKey = POI_TO_BONUS[f.properties.type];
-          let text = f.properties.name ?? POI_LABELS[f.properties.type] ?? f.properties.type;
+          let label: string | null = null;
           if (sel && selCenter && nearestByCat[bonusKey] === f) {
             const entry = sel.breakdown?.bonuses[bonusKey];
             const minutes = routesRef.current?.[bonusKey]?.minutes ?? entry?.minutes;
-            if (minutes != null) text = `${text} · ${Math.round(minutes)} мин`;
+            if (minutes != null) {
+              label = `${POI_LABELS[f.properties.type] ?? f.properties.type} · ${Math.round(minutes)} мин`;
+            }
           }
           poiMarkers.push(
             new maplibregl.Marker({
-              element: makePoiMarkerEl(poiColor(f.properties.type, theme), text, theme.pill),
+              element: makePoiPinEl(
+                POI_TO_ICON[f.properties.type] ?? "shop",
+                poiColor(f.properties.type, theme),
+                label,
+                theme.pill,
+              ),
               anchor: "bottom",
             })
               .setLngLat(center)

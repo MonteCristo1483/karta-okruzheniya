@@ -1,4 +1,5 @@
 import type { Theme } from "./theme";
+import { ICON_PATHS, type IconKey } from "./icons";
 
 export type LayerKey =
   | "schools"
@@ -21,15 +22,34 @@ export const DEFAULT_VISIBILITY: Visibility = {
   routes: false,
 };
 
-const ITEMS: { key: LayerKey; label: string }[] = [
-  { key: "schools", label: "Школы" },
-  { key: "kindergartens", label: "Сады" },
-  { key: "parks", label: "Парки" },
-  { key: "metro", label: "Метро" },
-  { key: "shops", label: "Магазины" },
-  { key: "redzones", label: "Красные зоны" },
-  { key: "routes", label: "Маршруты" },
+const ITEMS: { key: LayerKey; label: string; icon: IconKey }[] = [
+  { key: "schools", label: "Школы", icon: "school" },
+  { key: "kindergartens", label: "Сады", icon: "kindergarten" },
+  { key: "parks", label: "Парки", icon: "park" },
+  { key: "metro", label: "Метро", icon: "subway_entrance" },
+  { key: "shops", label: "Магазины", icon: "shop" },
+  { key: "redzones", label: "Красные зоны", icon: "redzones" },
+  { key: "routes", label: "Маршруты", icon: "routes" },
 ];
+
+function LayerIcon({ d }: { d: string }) {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="shrink-0 text-slate-400 dark:text-slate-500"
+      aria-hidden
+    >
+      <path d={d} />
+    </svg>
+  );
+}
 
 function SunIcon() {
   return (
@@ -60,13 +80,13 @@ export default function LayersPanel({
   onThemeToggle: () => void;
 }) {
   return (
-    <div className="absolute left-3 top-3 z-10 rounded-2xl bg-white/90 p-3 shadow-lg backdrop-blur dark:bg-slate-900/90">
-      <div className="mb-1.5 flex items-center justify-between gap-3">
+    <div className="absolute left-3 top-3 z-10 rounded-2xl bg-white/90 p-2.5 shadow-lg backdrop-blur dark:bg-slate-900/90">
+      <div className="mb-1 flex items-center justify-between gap-3">
         <div className="flex items-center gap-1.5">
-          <svg width="16" height="16" viewBox="0 0 512 512" aria-hidden>
+          <svg width="15" height="15" viewBox="0 0 512 512" aria-hidden>
             <circle cx="256" cy="256" r="130" fill="none" stroke="#6a9d76" strokeWidth="64" />
           </svg>
-          <span className="text-sm font-bold text-slate-700 dark:text-slate-200">
+          <span className="text-[13px] font-bold text-slate-700 dark:text-slate-200">
             Карта окружения
           </span>
         </div>
@@ -80,18 +100,19 @@ export default function LayersPanel({
           {theme === "dark" ? <SunIcon /> : <MoonIcon />}
         </button>
       </div>
-      <div className="space-y-1">
-        {ITEMS.map(({ key, label }) => (
+      <div className="space-y-0.5">
+        {ITEMS.map(({ key, label, icon }) => (
           <label
             key={key}
-            className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-slate-300"
+            className="flex cursor-pointer items-center gap-1.5 text-[13px] text-slate-700 dark:text-slate-300"
           >
             <input
               type="checkbox"
               checked={visibility[key]}
               onChange={() => onToggle(key)}
-              className="h-4 w-4 rounded accent-emerald-500"
+              className="h-3.5 w-3.5 rounded accent-emerald-500"
             />
+            <LayerIcon d={ICON_PATHS[icon]} />
             {label}
           </label>
         ))}
