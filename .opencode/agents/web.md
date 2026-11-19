@@ -12,13 +12,19 @@ permissions:
     resource: "*"
     effect: allow
   - action: shell
-    resource: "git push*"
+    resource: "*push*origin*main*"
     effect: deny
   - action: shell
-    resource: "git commit*"
+    resource: "*push*origin*gh-pages*"
     effect: deny
   - action: shell
-    resource: "npm run deploy*"
+    resource: "*push*--force*"
+    effect: deny
+  - action: shell
+    resource: "*push*--mirror*"
+    effect: deny
+  - action: shell
+    resource: "*run deploy*"
     effect: deny
   - action: shell
     resource: "git worktree*"
@@ -35,4 +41,5 @@ permissions:
 - Не меняй `config/scoring.json` и не пересчитывай баллы на клиенте: карточка только показывает то, что пришло из данных.
 - Презентационные пороги (красный флаг −0.2, главный минус −0.5) — это UI, не формула.
 - Проверяй на мобильной ширине; карточка должна открываться и быть читаемой без горизонтального скролла.
-- Не коммить, не пушь, не деплой. В конце отчёта: что изменено, как проверить руками, какие риски.
+- Коммить и пушь только свою ветку (`lane/web` или `task/*`). В `main` и `gh-pages` — никогда; деплой — только человек.
+- В конце отчёта: что изменено, как проверить руками, какие риски.

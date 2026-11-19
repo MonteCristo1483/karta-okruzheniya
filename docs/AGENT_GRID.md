@@ -8,8 +8,8 @@
 | Роль | Где работает | Что можно | Что нельзя |
 |---|---|---|---|
 | **Диспетчер** (главная сессия) | корень репозитория | приоритеты, review diff, тесты, merge, deploy | писать большие куски кода |
-| **Pipeline** | `C:\Users\starg\karta-pipeline` (worktree) | `pipeline/`, `config/`, `data/`, `docs/` | `web/`, commit, push, deploy |
-| **Web** | `C:\Users\starg\karta-web` (worktree) | `web/` | `pipeline/`, `config/`, `data/`, commit, push, deploy |
+| **Pipeline** | `C:\Users\starg\karta-pipeline` (worktree) | `pipeline/`, `config/`, `data/`, `docs/` | `web/`, push в `main`/`gh-pages`, deploy |
+| **Web** | `C:\Users\starg\karta-web` (worktree) | `web/` | `pipeline/`, `config/`, `data/`, push в `main`/`gh-pages`, deploy |
 | **Researcher** | subagent из диспетчера | читать, искать, webfetch | править файлы, запускать shell |
 | **Reviewer** | subagent из диспетчера | читать diff, `git diff/status/log` | править файлы, запускать тесты |
 
@@ -59,8 +59,8 @@ git worktree add C:\Users\starg\karta-pipeline -b lane/pipeline
 
 ## 4. Правила merge
 
-- Агент **не коммитит, не пушит, не деплоит**. Это делает диспетчер после
-  проверки diff и тестов.
+- Агент коммитит и пушит **только свою ветку** (`lane/*` или `task/*`). Merge
+  в `main` и деплой делает человек; PR открывает диспетчер.
 - Перед merge: `git diff`, `git status`, тесты, сборка.
 - Изменение формулы/данных — только с таблицей «до/после» по 10 домам.
 - Конфликт в `config/scoring.json` или `web/public/data` — стоп, решает
@@ -69,6 +69,11 @@ git worktree add C:\Users\starg\karta-pipeline -b lane/pipeline
   пока не проверен деплой.
 
 ## 5. Онлайн-фабрика (без команды и бюджета)
+
+С 19.11.2026 автономный цикл включён: `auto-pr.yml` открывает PR после
+push рабочей ветки, `auto-merge.yml` мержит его после зелёного CI,
+`deploy.yml` публикует сайт. Ручной approve деплоя снят по решению
+владельца; страховка — обязательный CI и валидатор данных.
 
 Целевая схема — три слоя:
 
@@ -101,7 +106,7 @@ git worktree add C:\Users\starg\karta-pipeline -b lane/pipeline
 ## 6. Что не делать
 
 - Не запускать двух агентов в одной папке.
-- Не давать агенту `git push` и `npm run deploy`.
+- Не давать агенту push в `main`/`gh-pages`, force-push и `npm run deploy`.
 - Не генерировать 3 306 OG-страниц, пока карточка не проверена на реальных
   домах.
 - Не добавлять платные API «на будущее».
