@@ -215,6 +215,27 @@ export default function BuildingSheet({
       value: entry.bonus,
     }));
 
+  // Компактная разбивка по макету: 3 бонуса + 3 штрафа с полосками.
+  const chipItems = [
+    ...bonusEntries
+      .filter(([, entry]) => entry.bonus > 0.005)
+      .slice(0, 3)
+      .map(([key, entry]) => ({
+        key: `b-${key}`,
+        label: BONUS_LABELS[key] ?? key,
+        value: entry.bonus,
+      })),
+    ...penaltyEntries
+      .filter(([, entry]) => entry.penalty < -0.005)
+      .slice(0, 3)
+      .map(([key, entry]) => ({
+        key: `p-${key}`,
+        label: PENALTY_LABELS[key] ?? key,
+        value: entry.penalty,
+      })),
+  ];
+  const chipMax = Math.max(1, ...chipItems.map((item) => Math.abs(item.value)));
+
   const severeFlags = redFlags.filter(([, entry]) => entry.penalty < SEVERE_PENALTY);
 
   const verdict = (() => {
@@ -448,6 +469,57 @@ export default function BuildingSheet({
                   )}
                 </div>
               </div>
+
+              {chipItems.length > 0 && (
+                <div className="mt-3 grid grid-cols-2 gap-1.5">
+                  {chipItems.map((item) => {
+                    const positive = item.value > 0;
+                    const width = Math.max(
+                      6,
+                      Math.min(100, (Math.abs(item.value) / chipMax) * 100),
+                    );
+                    return (
+                      <div
+                        key={item.key}
+                        className={`rounded-xl px-2 py-1.5 ${
+                          positive
+                            ? "bg-emerald-50 dark:bg-emerald-950/40"
+                            : "bg-red-50 dark:bg-red-950/50"
+                        }`}
+                      >
+                        <div className="flex items-baseline justify-between gap-1">
+                          <span
+                            className={`truncate text-[11px] font-medium ${
+                              positive
+                                ? "text-emerald-900 dark:text-emerald-200"
+                                : "text-red-900/80 dark:text-red-200/80"
+                            }`}
+                          >
+                            {item.label}
+                          </span>
+                          <span
+                            className={`shrink-0 text-[11px] font-bold ${
+                              positive
+                                ? "text-emerald-700 dark:text-emerald-300"
+                                : "text-red-700 dark:text-red-300"
+                            }`}
+                          >
+                            {formatSigned(item.value)}
+                          </span>
+                        </div>
+                        <div className="mt-1 h-1 overflow-hidden rounded-full bg-black/5 dark:bg-white/10">
+                          <div
+                            className={`h-full rounded-full ${
+                              positive ? "bg-emerald-400" : "bg-red-400"
+                            }`}
+                            style={{ width: `${width}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
               {redFlags.length > 0 ? (
                 <div className="mt-3 rounded-2xl bg-red-50 px-4 py-3 dark:bg-red-950/50">
