@@ -45,11 +45,19 @@ Write-Host "data/processed (включая Valhalla-тайлы)..."
 Copy-Tree (Join-Path $Repo "data\processed") (Join-Path $Dest "data\processed")
 
 if (-not $SkipDocker) {
+  # Docker пишет статус в stderr. На Windows PowerShell 5.1 при
+  # $ErrorActionPreference = "Stop" это превращается в terminating error
+  # (ловили: дамп пропускался на «Container ... Running»). Поэтому внутри
+  # блока ошибки проверяем явно по $LASTEXITCODE.
+  $prevEap = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  $pushed = $false
   try {
     docker info 2>$null | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "Docker daemon не запущен" }
     Push-Location $Repo
-    docker compose up -d postgis | Out-Null
+    $pushed = $true
+    docker compose up -d postgis 2>&1 | Out-Null
     $healthy = $false
     for ($i = 0; $i -lt 30; $i++) {
       $health = docker inspect --format "{{.State.Health.Status}}" okrug-postgis 2>$null
@@ -57,12 +65,16 @@ if (-not $SkipDocker) {
       Start-Sleep -Seconds 2
     }
     if (-not $healthy) { throw "PostGIS не стал healthy за 60 секунд" }
-    docker exec okrug-postgis pg_dump -U okrug -d okrug -Fc -f /tmp/okrug.dump
-    docker cp okrug-postgis:/tmp/okrug.dump (Join-Path $Dest "okrug.dump") | Out-Null
-    Pop-Location
+    docker exec okrug-postgis pg_dump -U okrug -d okrug -Fc -f /tmp/okrug.dump 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "pg_dump exit $LASTEXITCODE" }
+    docker cp okrug-postgis:/tmp/okrug.dump (Join-Path $Dest "okrug.dump") 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "docker cp exit $LASTEXITCODE" }
     Write-Host "PostGIS dump: ok"
   } catch {
     Write-Warning "PostGIS dump пропущен: $_"
+  } finally {
+    if ($pushed) { Pop-Location }
+    $ErrorActionPreference = $prevEap
   }
 }
 
