@@ -17,7 +17,6 @@ const PRECACHE = [
   BASE + "/data/presnya_buildings.geojson",
   BASE + "/data/presnya_poi.geojson",
   BASE + "/data/presnya_redzones.geojson",
-  BASE + "/data/basemap.geojson",
 ];
 
 self.addEventListener("install", (event) => {
