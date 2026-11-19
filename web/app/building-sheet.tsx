@@ -369,6 +369,12 @@ export default function BuildingSheet({
                 {building.year !== null && (
                   <div className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
                     Год постройки — {building.year}
+                    <span
+                      className="ml-1 text-xs text-slate-400 dark:text-slate-500"
+                      title="Источник: ГИС ЖКХ (dom.gosuslugi.ru)"
+                    >
+                      · ГИС ЖКХ
+                    </span>
                   </div>
                 )}
                 <button
