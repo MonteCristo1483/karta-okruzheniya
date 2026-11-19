@@ -381,28 +381,30 @@ export default function BuildingSheet({
                     </span>
                   </div>
                 )}
-                <div className="mt-2 flex items-center gap-1.5">
-                  <span className="text-xs text-slate-400 dark:text-slate-500">
-                    Зона пешком:
-                  </span>
-                  {[5, 10, 15].map((minutes) => {
-                    const active = contour === minutes;
-                    return (
-                      <button
-                        key={minutes}
-                        type="button"
-                        aria-pressed={active}
-                        onClick={() => onContourChange(active ? null : minutes)}
-                        className={`rounded-full px-2 py-0.5 text-xs font-medium transition ${
-                          active
-                            ? "bg-blue-600 text-white"
-                            : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-                        }`}
-                      >
-                        {minutes} мин
-                      </button>
-                    );
-                  })}
+                <div className="mt-2">
+                  <div className="mb-1 text-xs text-slate-400 dark:text-slate-500">
+                    Зона пешком
+                  </div>
+                  <div className="flex rounded-full bg-slate-100 p-0.5 dark:bg-slate-800">
+                    {[5, 10, 15].map((minutes) => {
+                      const active = contour === minutes;
+                      return (
+                        <button
+                          key={minutes}
+                          type="button"
+                          aria-pressed={active}
+                          onClick={() => onContourChange(active ? null : minutes)}
+                          className={`flex-1 rounded-full py-1 text-xs font-semibold transition-colors ${
+                            active
+                              ? "bg-emerald-500 text-white shadow-sm"
+                              : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                          }`}
+                        >
+                          {minutes} мин
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
                 <button
                   type="button"
