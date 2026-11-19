@@ -7,6 +7,8 @@
     "build": "next build",
     "predev": "node scripts/copy-maplibre-worker.mjs",
     "prebuild": "node scripts/copy-maplibre-worker.mjs",
+    "pages:one": "node scripts/generate-building-pages.mjs --id",
+    "pages:all": "node scripts/generate-building-pages.mjs",
     "deploy": "next build && npx gh-pages -d dist --nojekyll"
   },
   "dependencies": {
