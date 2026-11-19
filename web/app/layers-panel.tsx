@@ -80,7 +80,7 @@ export default function LayersPanel({
   onThemeToggle: () => void;
 }) {
   return (
-    <div className="absolute left-3 top-3 z-10 rounded-2xl bg-white/90 p-2.5 shadow-lg backdrop-blur dark:bg-slate-900/90">
+    <div className="absolute left-3 top-[4.5rem] z-10 rounded-2xl bg-white/90 p-2.5 shadow-lg backdrop-blur dark:bg-slate-900/90 md:top-3">
       <div className="mb-1 flex items-center justify-between gap-3">
         <div className="flex items-center gap-1.5">
           <svg width="15" height="15" viewBox="0 0 512 512" aria-hidden>

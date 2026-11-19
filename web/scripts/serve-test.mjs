@@ -33,6 +33,7 @@ createServer(async (req, res) => {
     const body = await readFile(file);
     res.writeHead(200, {
       "content-type": MIME[extname(file)] ?? "application/octet-stream",
+      "content-length": body.length,
       "cache-control": "no-cache",
     });
     res.end(body);

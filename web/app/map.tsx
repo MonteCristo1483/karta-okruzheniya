@@ -4,10 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
 import type { Feature, FeatureCollection, Geometry, Position } from "geojson";
 import "maplibre-gl/dist/maplibre-gl.css";
-import BuildingSheet from "./building-sheet";
+import BuildingSheet, { RED_FLAG_PENALTY } from "./building-sheet";
 import type { BuildingBreakdown, SelectedBuilding } from "./building-sheet";
 import LayersPanel, { DEFAULT_VISIBILITY } from "./layers-panel";
 import type { Visibility } from "./layers-panel";
+import SearchBox from "./search-box";
+import type { SearchItem } from "./search-box";
 import { geometryCenter, haversineM, nearestPosition } from "./geo-utils";
 import { ICON_PATHS, type IconKey } from "./icons";
 import { initialTheme, THEME_KEY } from "./theme";
@@ -36,6 +38,7 @@ const MAP_THEMES = {
     halo: "#4f9d64",
     outlineCore: "#3d8b53",
     redzone: "#c4786a",
+    street: "#bfb5a1",
     route: "#5fa86b",
     poiGreen: "#059669",
     poiMetro: "#e11d48",
@@ -54,6 +57,7 @@ const MAP_THEMES = {
     halo: "#7fb98a",
     outlineCore: "#8fce9a",
     redzone: "#8f5b55",
+    street: "#2b3540",
     route: "#5cc8be",
     poiGreen: "#7fb98a",
     poiMetro: "#ef8fa4",
@@ -112,6 +116,17 @@ type FlatRoutes = Record<string, { minutes: number; coordinates: Position[] }>;
 const ROUTES_URL = (id: number) => `data/routes/${id}.json`;
 type GFeature<P> = { type: "Feature"; geometry: Geometry; properties: P };
 type GCollection<P> = { type: "FeatureCollection"; features: GFeature<P>[] };
+
+type BuildingProps = {
+  id: number;
+  index?: number;
+  address?: string;
+  year?: number | null;
+  breakdown?: BuildingBreakdown;
+};
+
+// Порядок важен для стабильного типа percentiles в карточке.
+const PENALTY_KINDS = ["road", "railway", "construction", "industrial"] as const;
 
 const POI_LABELS: Record<string, string> = {
   school: "Школа",
@@ -275,12 +290,15 @@ export default function Map() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [selected, setSelected] = useState<SelectedBuilding | null>(null);
   const [visible, setVisible] = useState<Visibility>(DEFAULT_VISIBILITY);
+  const [searchItems, setSearchItems] = useState<SearchItem[]>([]);
+  const [deepLinkError, setDeepLinkError] = useState<string | null>(null);
   const [theme, setTheme] = useState<Theme>("light"); // стабильно для SSR/гидрации
   const [mounted, setMounted] = useState(false);
   const [fatalError, setFatalError] = useState<string | null>(null);
   // Splash: "show" → "fade" (карта готова или 2 с) → "gone".
   const [splash, setSplash] = useState<"show" | "fade" | "gone">("show");
   const deselectRef = useRef<(() => void) | null>(null);
+  const selectRef = useRef<((id: number) => void) | null>(null);
   const applyVisibilityRef = useRef<((v: Visibility) => void) | null>(null);
   const applyThemeRef = useRef<((t: Theme) => void) | null>(null);
   const selectedRef = useRef<SelectedBuilding | null>(null);
@@ -352,14 +370,14 @@ export default function Map() {
         throw lastErr;
       };
 
-      let buildings: GCollection<{ id: number }>;
+      let buildings: GCollection<BuildingProps>;
       let poi: GCollection<PoiProps>;
       let redzones: GCollection<RedzoneProps>;
       try {
         [buildings, poi, redzones] = (await Promise.all(
           [BUILDINGS_URL, POI_URL, REDZONES_URL].map(fetchJson),
         )) as [
-          GCollection<{ id: number }>,
+          GCollection<BuildingProps>,
           GCollection<PoiProps>,
           GCollection<RedzoneProps>,
         ];
@@ -406,6 +424,39 @@ export default function Map() {
         if (c) buildingCenters[f.properties.id] = c;
       }
 
+      // Поиск по адресу: только здания, у которых адрес есть в OSM
+      // (сейчас 2 511 из 3 306). Остальные находятся кликом по карте.
+      const searchIndex: SearchItem[] = [];
+      for (const f of buildings.features) {
+        if (!f.properties.address) continue;
+        searchIndex.push({
+          id: f.properties.id,
+          address: f.properties.address,
+          index: f.properties.index ?? null,
+          year: f.properties.year ?? null,
+        });
+      }
+      if (!cancelled) setSearchItems(searchIndex);
+
+      // Перцентили по штрафным слоям: доля домов, которые находятся дальше
+      // от объекта (тише), 0..1. Считаем один раз по загруженному geojson,
+      // чтобы карточка могла сказать «хуже 80% домов Пресни».
+      const penaltyDistances: Record<string, number[]> = {};
+      for (const kind of PENALTY_KINDS) {
+        penaltyDistances[kind] = buildings.features.map(
+          (f) =>
+            f.properties.breakdown?.penalties?.[kind]?.distance_m ??
+            Number.POSITIVE_INFINITY,
+        );
+      }
+      const percentileFor = (kind: string, distance: number): number => {
+        const values = penaltyDistances[kind];
+        if (!values?.length) return 0;
+        let farther = 0;
+        for (const d of values) if (d > distance) farther++;
+        return farther / values.length;
+      };
+
       const nearestPoi = (
         bonusKey: string,
         from: [number, number],
@@ -442,6 +493,28 @@ export default function Map() {
             routes: { type: "geojson", data: routesData },
           },
           layers: [
+            {
+              // Минимальная подложка: крупные улицы из того же redzones-слоя.
+              // Полноценная улично-дорожная сеть и подписи — после PMTiles.
+              id: "streets",
+              type: "line",
+              source: "redzones",
+              filter: ["==", ["get", "kind"], "road"],
+              layout: { "line-cap": "round", "line-join": "round" },
+              paint: {
+                "line-color": palette.street,
+                "line-width": [
+                  "match",
+                  ["get", "class"],
+                  "primary",
+                  6,
+                  "secondary",
+                  4.5,
+                  2.5,
+                ],
+                "line-opacity": 0.75,
+              },
+            },
             {
               id: "redzones-fill",
               type: "fill",
@@ -601,7 +674,7 @@ export default function Map() {
 
         if (sel?.breakdown && selCenter) {
           for (const [key, entry] of Object.entries(sel.breakdown.penalties)) {
-            if (!entry || entry.penalty >= -0.005) continue;
+            if (!entry || entry.penalty >= RED_FLAG_PENALTY) continue;
             const kind = PENALTY_TO_KIND[key];
             if (!kind) continue;
             let bestPt: Position | null = null;
@@ -672,6 +745,7 @@ export default function Map() {
         map.setPaintProperty("outline-halo", "line-color", p.halo);
         map.setPaintProperty("outline-core", "line-color", p.outlineCore);
         map.setPaintProperty("redzones-fill", "fill-color", p.redzone);
+        map.setPaintProperty("streets", "line-color", p.street);
         map.setPaintProperty("redzones-road", "line-color", p.redzone);
         map.setPaintProperty("redzones-rail", "line-color", p.redzone);
         map.setPaintProperty("routes-line", "line-color", p.route);
@@ -694,12 +768,20 @@ export default function Map() {
         }
       };
 
+      const setUrlBuilding = (id: number | null) => {
+        const url = new URL(window.location.href);
+        if (id === null) url.searchParams.delete("building");
+        else url.searchParams.set("building", String(id));
+        window.history.replaceState(null, "", url);
+      };
+
       const deselect = () => {
         selectedId = null;
         routesRef.current = null;
         applySelection();
         updateSelected(null);
         rebuildOverlays(null, visibleRef.current);
+        setUrlBuilding(null);
         map?.easeTo({ padding: { top: 0, bottom: 0, left: 0, right: 0 }, duration: 300 });
       };
       deselectRef.current = deselect;
@@ -758,22 +840,28 @@ export default function Map() {
         const feature = buildings.features.find((f) => f.properties.id === id);
         if (!feature) return;
         selectedId = id;
+        setDeepLinkError(null);
         applySelection();
 
-        const props = feature.properties as {
-          index?: number;
-          address?: string;
-          year?: number | null;
-          breakdown?: BuildingBreakdown;
-        };
+        const props = feature.properties;
+        const distanceOf = (kind: string) =>
+          props.breakdown?.penalties?.[kind]?.distance_m ??
+          Number.POSITIVE_INFINITY;
         const next: SelectedBuilding = {
           id,
           index: props.index ?? null,
           address: props.address ?? null,
           year: props.year ?? null,
           breakdown: props.breakdown ?? null,
+          percentiles: {
+            road: percentileFor("road", distanceOf("road")),
+            railway: percentileFor("railway", distanceOf("railway")),
+            construction: percentileFor("construction", distanceOf("construction")),
+            industrial: percentileFor("industrial", distanceOf("industrial")),
+          },
         };
         updateSelected(next);
+        setUrlBuilding(id);
         routesRef.current = routesCacheRef.current[id] ?? null;
         rebuildOverlays(next, visibleRef.current);
         void loadRoutes(id);
@@ -781,6 +869,7 @@ export default function Map() {
         const center = geometryCenter(feature.geometry);
         if (center) flyToBuilding(center);
       };
+      selectRef.current = selectById;
 
       map.on("load", () => {
         applyThemeRef.current?.(themeRef.current);
@@ -789,7 +878,13 @@ export default function Map() {
         const param = new URLSearchParams(window.location.search).get("building");
         if (param !== null) {
           const id = Number(param);
-          if (Number.isInteger(id) && allIds.includes(id)) selectById(id);
+          if (Number.isInteger(id) && allIds.includes(id)) {
+            selectById(id);
+          } else {
+            setDeepLinkError(
+              "Дом не найден. Возможно, ссылка устарела — выберите дом на карте или найдите по адресу.",
+            );
+          }
         }
       });
 
@@ -833,7 +928,28 @@ export default function Map() {
         theme={theme}
         onThemeToggle={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
       />
+      <SearchBox
+        items={searchItems}
+        onSelect={(id) => selectRef.current?.(id)}
+      />
       <BuildingSheet building={selected} onClose={() => deselectRef.current?.()} />
+      {deepLinkError && (
+        <div className="absolute bottom-6 left-1/2 z-20 w-[min(92vw,420px)] -translate-x-1/2 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800 shadow-xl dark:bg-amber-950/80 dark:text-amber-200">
+          <div className="flex items-start gap-2">
+            <span className="flex-1">{deepLinkError}</span>
+            <button
+              type="button"
+              onClick={() => setDeepLinkError(null)}
+              aria-label="Закрыть"
+              className="rounded-full p-0.5 text-amber-600 hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-900"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                <path d="M1 1l12 12M13 1L1 13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
       {fatalError && (
         <div className="absolute inset-x-4 top-1/3 z-20 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-800 shadow-lg dark:bg-red-950/70 dark:text-red-200">
           {fatalError}

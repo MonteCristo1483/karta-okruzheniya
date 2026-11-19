@@ -23,12 +23,18 @@ export type BuildingBreakdown = {
   penalties: Record<string, PenaltyEntry>;
 };
 
+export type Percentiles = Partial<
+  Record<"road" | "railway" | "construction" | "industrial", number>
+>;
+
 export type SelectedBuilding = {
   id: number;
   index: number | null;
   address: string | null;
   year: number | null;
   breakdown: BuildingBreakdown | null;
+  /** Доля домов района, которые находятся дальше от объекта (тише), 0..1. */
+  percentiles?: Percentiles;
 };
 
 const BONUS_LABELS: Record<string, string> = {
@@ -46,11 +52,27 @@ const PENALTY_LABELS: Record<string, string> = {
   industrial: "Промзона",
 };
 
+const PERCENTILE_LABELS: Record<string, string> = {
+  road: "близости к магистрали",
+  railway: "близости к ж/д",
+  construction: "близости к стройке",
+  industrial: "близости к промзоне",
+};
+
+// Пороги презентации, не формулы: что считаем красным флагом и что —
+// главной причиной. Баллы остаются в config/scoring.json.
+export const RED_FLAG_PENALTY = -0.2;
+export const SEVERE_PENALTY = -0.5;
+
 // Публичный URL статического экспорта на GitHub Pages (basePath из next.config).
 const PUBLIC_BASE = "https://montecristo1483.github.io/karta-okruzheniya";
 
 function formatSigned(value: number): string {
   return `${value > 0 ? "+" : "−"}${Math.abs(value).toFixed(1)}`;
+}
+
+function distancePhrase(distance: number): string {
+  return distance < 15 ? "рядом" : `в ${Math.round(distance)} м`;
 }
 
 function indexColor(index: number | null): string {
@@ -60,13 +82,13 @@ function indexColor(index: number | null): string {
   return "#7fb069";
 }
 
-function Ring({ index, size = 104 }: { index: number | null; size?: number }) {
-  const stroke = size > 60 ? 10 : 8;
+function Ring({ index, size = 84 }: { index: number | null; size?: number }) {
+  const stroke = size > 60 ? 9 : 7;
   const r = (size - stroke * 2 - 4) / 2;
   const c = 2 * Math.PI * r;
   const frac = index === null ? 0 : Math.max(0, Math.min(1, index / 10));
-  const fsMain = size > 60 ? 26 : 14;
-  const fsSub = size > 60 ? 12 : 8;
+  const fsMain = size > 60 ? 22 : 13;
+  const fsSub = size > 60 ? 10 : 7;
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0">
       <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#e2e8f0" strokeOpacity="0.8" strokeWidth={stroke} className="dark:stroke-slate-700 dark:stroke-opacity-40" />
@@ -151,12 +173,130 @@ export default function BuildingSheet({
     setSnap("mid");
   }, [building?.id]);
 
+  const breakdown = building?.breakdown ?? null;
+
+  const penaltyEntries = Object.entries(breakdown?.penalties ?? {})
+    .filter((entry): entry is [string, NonNullable<PenaltyEntry>] => entry[1] !== null)
+    .sort((a, b) => a[1].penalty - b[1].penalty);
+
+  const bonusEntries = Object.entries(breakdown?.bonuses ?? {})
+    .filter((entry): entry is [string, NonNullable<BonusEntry>] => entry[1] !== null)
+    .sort((a, b) => b[1].bonus - a[1].bonus);
+
+  const redFlags = penaltyEntries.filter(([, entry]) => entry.penalty < RED_FLAG_PENALTY).slice(0, 3);
+  const greenFacts = bonusEntries.filter(([, entry]) => entry.bonus > 0.05).slice(0, 3);
+
+  // Бонус 0 — это не только «нет объекта», но и «дальше 15 минут».
+  // Показываем такие категории отдельной осторожной строкой, чтобы
+  // «школа 18 мин» не выглядела как «школы нет».
+  const softMinuses = bonusEntries
+    .filter(([, entry]) => entry.bonus < 0.05 && entry.minutes > 15)
+    .slice(0, 2)
+    .map(
+      ([kind, entry]) =>
+        `${BONUS_LABELS[kind] ?? kind} — ${Math.round(entry.minutes)} мин`,
+    );
+
+  const penaltyRows = penaltyEntries
+    .filter(([, entry]) => entry.penalty < -0.005)
+    .map(([key, entry]) => ({
+      label: PENALTY_LABELS[key] ?? key,
+      value: entry.penalty,
+    }));
+
+  const bonusRows = bonusEntries
+    .filter(([, entry]) => entry.bonus > 0.005)
+    .map(([key, entry]) => ({
+      label: BONUS_LABELS[key] ?? key,
+      value: entry.bonus,
+    }));
+
+  const severeFlags = redFlags.filter(([, entry]) => entry.penalty < SEVERE_PENALTY);
+
+  const verdict = (() => {
+    if (!building) return "";
+    if (!breakdown) return "Недостаточно данных — проверьте окружение лично";
+    if (severeFlags.length >= 2) {
+      const [a, b] = severeFlags;
+      return `Шумное место: ${PENALTY_LABELS[a[0]]?.toLowerCase() ?? a[0]} ${distancePhrase(a[1].distance_m)} и ${PENALTY_LABELS[b[0]]?.toLowerCase() ?? b[0]} ${distancePhrase(b[1].distance_m)}`;
+    }
+    if (severeFlags.length === 1) {
+      const [kind, entry] = severeFlags[0];
+      return `Главный минус: ${PENALTY_LABELS[kind]?.toLowerCase() ?? kind} ${distancePhrase(entry.distance_m)}`;
+    }
+    if (greenFacts.length >= 3) return "Спокойный дом с хорошей инфраструктурой";
+    if (greenFacts.length >= 1) return "Есть плюсы, но проверьте детали";
+    return "Мало данных — проверьте окружение лично";
+  })();
+
+  const worstPercentile = (Object.entries(building?.percentiles ?? {}) as [
+    string,
+    number | undefined,
+  ][])
+    .filter(
+      ([kind, p]) =>
+        typeof p === "number" &&
+        p >= 0.6 &&
+        redFlags.some(([k]) => k === kind),
+    )
+    .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))[0];
+
+  const percentileLine = worstPercentile
+    ? `По ${PERCENTILE_LABELS[worstPercentile[0]] ?? worstPercentile[0]} хуже ${Math.round(
+        (worstPercentile[1] ?? 0) * 100,
+      )}% домов Пресни`
+    : null;
+
+  const bonusByKey = Object.fromEntries(bonusEntries) as Record<
+    string,
+    NonNullable<BonusEntry>
+  >;
+
+  const checks: string[] = [];
+  for (const [kind, entry] of redFlags) {
+    if (kind === "road" && entry.distance_m < 200) {
+      checks.push("Выйдите на балкон в час пик: слышно ли магистраль?");
+    } else if (kind === "railway" && entry.distance_m < 300) {
+      checks.push("Послушайте поезда вечером — ж/д рядом.");
+    } else if (kind === "construction") {
+      checks.push("Уточните, что строят и до какого года.");
+    } else if (kind === "industrial") {
+      checks.push("Проверьте, работает ли производство и есть ли выбросы.");
+    }
+  }
+  if (bonusByKey.transport && bonusByKey.transport.bonus < 0.05) {
+    checks.push("Пройдите маршрут до метро в час пик: в карточке больше 15 минут.");
+  }
+  if (bonusByKey.schools && bonusByKey.schools.bonus < 0.05) {
+    checks.push("Проверьте, как ребёнок дойдёт до школы.");
+  }
+  if (checks.length === 0) checks.push("Посмотрите двор вечером и парковку.");
+
+  const base = breakdown?.base ?? 5;
+  const bonusSum = bonusEntries.reduce((sum, [, entry]) => sum + entry.bonus, 0);
+  const penaltySum = penaltyEntries.reduce((sum, [, entry]) => sum + entry.penalty, 0);
+  const rawTotal = base + bonusSum + penaltySum;
+  const clamped =
+    building?.index !== null &&
+    building?.index !== undefined &&
+    Math.abs(rawTotal - building.index) > 0.05;
+
   const share = async () => {
     if (!building) return;
     const url = `${PUBLIC_BASE}/?building=${building.id}`;
+    const facts = redFlags
+      .slice(0, 2)
+      .map(
+        ([kind, entry]) =>
+          `${PENALTY_LABELS[kind]?.toLowerCase() ?? kind} ${distancePhrase(entry.distance_m)}`,
+      )
+      .join(", ");
+    const text = `${building.address ?? "Дом"} — индекс окружения ${
+      building.index?.toFixed(1) ?? "—"
+    }/10${facts ? `. ${facts}` : ""}. ${url}`;
     try {
       if (!navigator.clipboard?.writeText) throw new Error("clipboard недоступен");
-      await navigator.clipboard.writeText(url);
+      await navigator.clipboard.writeText(text);
       if (noticeTimer.current) window.clearTimeout(noticeTimer.current);
       setNotice("copied");
       noticeTimer.current = window.setTimeout(() => setNotice("idle"), 2500);
@@ -167,29 +307,6 @@ export default function BuildingSheet({
       setNotice("manual");
     }
   };
-
-  const breakdown = building?.breakdown ?? null;
-  const bonusRows = Object.entries(breakdown?.bonuses ?? {})
-    .map(([key, entry]) => ({
-      label: BONUS_LABELS[key] ?? key,
-      value: entry?.bonus ?? 0,
-    }))
-    .filter((row) => row.value > 0.005);
-  const penaltyRows = Object.entries(breakdown?.penalties ?? {})
-    .map(([key, entry]) => ({
-      label: PENALTY_LABELS[key] ?? key,
-      value: entry?.penalty ?? 0,
-    }))
-    .filter((row) => row.value < -0.005);
-  const facts = Object.entries(breakdown?.penalties ?? {})
-    .map(([key, entry]) => {
-      if (!entry || entry.penalty >= -0.005) return null;
-      const label = PENALTY_LABELS[key] ?? key;
-      if (entry.distance_m == null) return label;
-      const d = Math.round(entry.distance_m);
-      return d < 15 ? `${label} рядом` : `${label} в ${d} м`;
-    })
-    .filter((fact): fact is string => fact !== null);
 
   // Мобильные высоты (<768px): 45% по умолчанию, свайп вверх → 85%,
   // свайп вниз → минимальный вид. Десктоп (md:) — как раньше, по контенту.
@@ -271,45 +388,34 @@ export default function BuildingSheet({
                 </button>
               </div>
 
-              <div className="mt-3 flex items-center gap-4">
+              <div className="mt-3 flex items-start gap-3">
                 <Ring index={building.index} />
-                <div className="min-w-0 flex-1 space-y-3">
+                <div className="min-w-0 flex-1 pt-1">
                   <div className="text-xs text-slate-500 dark:text-slate-400">
                     Индекс окружения
                   </div>
-                  <Bars
-                    title="Бонусы"
-                    rows={bonusRows}
-                    colorClass="bg-emerald-400"
-                    trackValue={(v) => formatSigned(v)}
-                  />
-                  <Bars
-                    title="Штрафы"
-                    rows={penaltyRows}
-                    colorClass="bg-red-400"
-                    trackValue={(v) => formatSigned(v)}
-                  />
+                  <div className="mt-0.5 text-sm font-semibold leading-snug text-slate-800 dark:text-slate-100">
+                    {verdict}
+                  </div>
+                  {percentileLine && (
+                    <div className="mt-1 text-xs leading-snug text-slate-500 dark:text-slate-400">
+                      {percentileLine}
+                    </div>
+                  )}
+                  {breakdown && (
+                    <div className="mt-1 text-[11px] leading-tight text-slate-400 dark:text-slate-500">
+                      Из чего: {base.toFixed(1)} + {bonusSum.toFixed(1)} −{" "}
+                      {Math.abs(penaltySum).toFixed(1)} = {rawTotal.toFixed(1)}
+                      {clamped && building.index !== null
+                        ? ` → ${building.index.toFixed(1)}`
+                        : ""}
+                    </div>
+                  )}
                 </div>
               </div>
 
-              <div className="mt-4 flex rounded-xl bg-slate-100 p-1 text-sm font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                {["5 мин", "10 мин", "15 мин"].map((label, i) => (
-                  <button
-                    key={label}
-                    type="button"
-                    disabled
-                    title="Изохроны появятся в v1.1"
-                    className={`flex-1 rounded-lg py-2 ${
-                      i === 1 ? "bg-white text-slate-800 shadow dark:bg-slate-700 dark:text-slate-100" : ""
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-
-              {facts.length > 0 && (
-                <div className="mt-4 rounded-2xl bg-red-50 px-4 py-3 dark:bg-red-950/50">
+              {redFlags.length > 0 ? (
+                <div className="mt-3 rounded-2xl bg-red-50 px-4 py-3 dark:bg-red-950/50">
                   <div className="mb-1.5 flex items-center gap-2 text-sm font-bold text-red-700 dark:text-red-300">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
                       <path
@@ -321,16 +427,88 @@ export default function BuildingSheet({
                       <path d="M8 6.5v3.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
                       <circle cx="8" cy="11.6" r="0.9" fill="currentColor" />
                     </svg>
-                    Подводные камни
+                    Главные минусы
                   </div>
                   <ul className="space-y-1">
-                    {facts.map((fact) => (
-                      <li key={fact} className="text-sm text-red-900/80 dark:text-red-200/80">
-                        {fact}
+                    {redFlags.map(([kind, entry]) => (
+                      <li
+                        key={kind}
+                        className="flex items-baseline justify-between gap-3 text-sm text-red-900/80 dark:text-red-200/80"
+                      >
+                        <span>{PENALTY_LABELS[kind] ?? kind}</span>
+                        <span className="shrink-0 font-semibold">
+                          {distancePhrase(entry.distance_m)}
+                        </span>
                       </li>
                     ))}
                   </ul>
                 </div>
+              ) : (
+                <div className="mt-3 rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
+                  Явных красных флагов рядом нет — но проверьте лично.
+                </div>
+              )}
+
+              {greenFacts.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {greenFacts.map(([kind, entry]) => (
+                    <span
+                      key={kind}
+                      className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200"
+                    >
+                      {BONUS_LABELS[kind] ?? kind} · {Math.round(entry.minutes)} мин
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {softMinuses.length > 0 && (
+                <div className="mt-2 text-xs leading-snug text-amber-700 dark:text-amber-300">
+                  Далеко: {softMinuses.join(" · ")}
+                </div>
+              )}
+
+              <div className="mt-3 rounded-2xl bg-slate-50 px-4 py-3 dark:bg-slate-800/60">
+                <div className="mb-1.5 text-sm font-bold text-slate-700 dark:text-slate-200">
+                  Что проверить лично
+                </div>
+                <ul className="list-disc space-y-1 pl-4 text-sm text-slate-600 dark:text-slate-300">
+                  {checks.slice(0, 3).map((check) => (
+                    <li key={check}>{check}</li>
+                  ))}
+                </ul>
+              </div>
+
+              {breakdown && (
+                <details className="mt-3 rounded-2xl bg-slate-50 px-4 py-3 dark:bg-slate-800/60">
+                  <summary className="cursor-pointer text-sm font-semibold text-slate-700 dark:text-slate-200">
+                    Почему такой балл
+                  </summary>
+                  <div className="mt-3 space-y-3">
+                    <Bars
+                      title="Бонусы"
+                      rows={bonusRows}
+                      colorClass="bg-emerald-400"
+                      trackValue={(v) => formatSigned(v)}
+                    />
+                    <Bars
+                      title="Штрафы"
+                      rows={penaltyRows}
+                      colorClass="bg-red-400"
+                      trackValue={(v) => formatSigned(v)}
+                    />
+                    <div className="border-t border-slate-200 pt-2 text-xs leading-relaxed text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                      База {base.toFixed(1)} + бонусы {bonusSum.toFixed(1)} − штрафы{" "}
+                      {Math.abs(penaltySum).toFixed(1)} = {rawTotal.toFixed(1)}
+                      {clamped && building.index !== null && (
+                        <span className="font-semibold text-slate-700 dark:text-slate-200">
+                          {" "}
+                          → ограничено {building.index.toFixed(1)} (шкала 0…10)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </details>
               )}
 
               <button
@@ -338,11 +516,11 @@ export default function BuildingSheet({
                 onClick={() => void share()}
                 className="mt-4 w-full rounded-2xl bg-emerald-500 py-3.5 text-base font-semibold text-white transition-colors hover:bg-emerald-600 active:bg-emerald-700"
               >
-                Отправить клиенту
+                Поделиться
               </button>
               {notice === "copied" && (
                 <div className="fixed bottom-6 left-1/2 z-20 -translate-x-1/2 rounded-full bg-slate-800 px-4 py-2 text-sm font-medium text-white shadow-lg dark:bg-slate-100 dark:text-slate-800">
-                  Ссылка скопирована
+                  Ссылка и факты скопированы
                 </div>
               )}
               {notice === "manual" && (
