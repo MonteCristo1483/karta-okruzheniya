@@ -1,4 +1,4 @@
 :HL["/karta-okruzheniya/_next/static/chunks/3zpv6m7u902pt.css","style"]
 2:[["children",{"s":"__PAGE__","h":160}]]
 1:[["children",{"s":"/_not-found","h":96,"c":"$Q2"}]]
-0:{"b":"1bVmfo5-Okuuufr8TCVL7","t":{"t":{"s":"","h":80,"c":"$Q1"}}}
+0:{"b":"R5nUZn5bWT7D8gPRs1uvN","t":{"t":{"s":"","h":80,"c":"$Q1"}}}
