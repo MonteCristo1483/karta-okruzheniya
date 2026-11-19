@@ -1,11 +1,15 @@
-﻿name: Deploy (manual)
+﻿name: Deploy
 
 on:
+  # Автодеплой: любой merge в main публикует сайт.
+  push:
+    branches: [main]
+  # Ручной запуск остаётся для отката данных и повторной публикации.
   workflow_dispatch:
     inputs:
       data_ref:
         description: "Git branch containing data.zip"
-        required: true
+        required: false
         default: "data"
 
 permissions:
@@ -19,7 +23,6 @@ jobs:
   deploy:
     name: Build and publish
     runs-on: ubuntu-latest
-    environment: production
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -30,12 +33,20 @@ jobs:
           cache-dependency-path: web/package-lock.json
 
       - name: Download data snapshot
+        env:
+          DATA_REF: ${{ inputs.data_ref || 'data' }}
         run: |
-          git fetch origin "${{ inputs.data_ref }}" --depth=1
+          git fetch origin "$DATA_REF" --depth=1
           mkdir -p /tmp/data
-          git show "origin/${{ inputs.data_ref }}:data.zip" > /tmp/data/data.zip
+          git show "origin/$DATA_REF:data.zip" > /tmp/data/data.zip
           mkdir -p web/public/data
           unzip -q /tmp/data/data.zip -d web/public/data
+
+      # Страховка от публикации битых данных: та же проверка, что в PR
+      # по pipeline. Ненулевой exit code останавливает деплой, старый сайт
+      # продолжает работать.
+      - name: Validate data
+        run: python3 pipeline/validate_export.py web/public/data
 
       - name: Install
         working-directory: web
@@ -55,4 +66,3 @@ jobs:
           publish_dir: ./web/dist
           publish_branch: gh-pages
           enable_jekyll: false
-
