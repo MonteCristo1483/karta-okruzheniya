@@ -33,6 +33,10 @@ DB_DSN = "host=localhost port=5432 dbname=okrug user=okrug password=okrug_local_
 VALHALLA = "http://localhost:8002/route"
 WORKERS = 8
 BATCH = 500
+# Для каждой категории рассматриваем несколько ближайших POI и оставляем
+# самый быстрый пеший маршрут: «ближайший по прямой» может оказаться за
+# путями/рекой и дать обход в километры (найдено 19.11.2026).
+CANDIDATES = 3
 
 # Пул keep-alive соединений: один Session на поток (Session не потокобезопасен).
 _local = threading.local()
@@ -189,6 +193,10 @@ def main() -> int:
         district_ids = []
 
     # Ближайший POI ищем KNN-запросом по временным таблицам с индексами.
+    # Для Пресни POI берём с буфером 3 км: иначе у домов на границе района
+    # ближайший вход в метро/школа за границей отбрасывается и маршрут
+    # уходит в обход через весь район (найдено 19.11.2026: 2.6 км вместо
+    # 150 м у Тверского бульвара и Красной Пресни).
     buildings_sql = BUILDINGS_ALL if scope_all else """
         SELECT osm_id, ST_Centroid(geometry) AS c FROM buildings_presnya
     """
@@ -196,7 +204,7 @@ def main() -> int:
     poi_area_sql = """
         (SELECT ST_Union(ST_Buffer(geometry::geography, 2000)::geometry)
          FROM districts WHERE osm_id = ANY(%s))
-    """ if scope_all else "(SELECT geometry FROM presnensky)"
+    """ if scope_all else "(SELECT ST_Buffer(geometry::geography, 3000)::geometry FROM presnensky)"
     poi_area_params = [district_ids] if scope_all else []
 
     tasks: list[tuple[int, str, tuple[float, float], tuple[float, float]]] = []
@@ -225,31 +233,29 @@ def main() -> int:
 
         cur.execute("SELECT osm_id, ST_Y(c), ST_X(c) FROM tmp_route_buildings")
         buildings = [(r[0], (r[1], r[2])) for r in cur.fetchall()]
+        centers = dict(buildings)
 
         for category, cat_cfg in categories.items():
             subtypes = cat_cfg.get("subtypes")
             subtype_clause = "AND p.subtype = ANY(%s)" if subtypes else ""
             cur.execute(f"""
-                SELECT b.osm_id,
+                SELECT b.osm_id, p.osm_id,
                        ST_Y(ST_Centroid(p.geometry)), ST_X(ST_Centroid(p.geometry))
                 FROM tmp_route_buildings b
                 CROSS JOIN LATERAL (
-                    SELECT p.geometry FROM tmp_route_poi p
+                    SELECT p.osm_id, p.geometry FROM tmp_route_poi p
                     WHERE p.type = ANY(%s) {subtype_clause}
                     ORDER BY p.geometry <-> b.c
-                    LIMIT 1
+                    LIMIT %s
                 ) p
-            """, [cat_cfg["poi_types"], *([subtypes] if subtypes else [])])
-            nearest = {r[0]: (r[1], r[2]) for r in cur.fetchall()}
-            for osm_id, center in buildings:
-                best = nearest.get(osm_id)
-                if best is not None:
-                    tasks.append((osm_id, category, center, best))
+            """, [cat_cfg["poi_types"], *([subtypes] if subtypes else []), CANDIDATES])
+            for osm_id, _poi_id, plat, plon in cur.fetchall():
+                tasks.append((osm_id, category, centers[osm_id], (plat, plon)))
 
-    print(f"Зданий: {len(buildings):,}, пар здание+категория: {len(tasks):,}")
+    print(f"Зданий: {len(buildings):,}, кандидатов здание+категория: {len(tasks):,}")
 
-    done = errors = 0
-    buffer: list[tuple] = []
+    errors = 0
+    best: dict[tuple[int, str], tuple] = {}
     t0 = time.time()
 
     def worker(task):
@@ -266,24 +272,26 @@ def main() -> int:
         line = f"LINESTRING({', '.join(f'{lon} {lat}' for lon, lat in result['shape'])})"
         return (osm_id, category, result["distance_m"], result["minutes"], line)
 
-    with psycopg.connect(DB_DSN) as conn, conn.cursor() as cur:
-        with ThreadPoolExecutor(max_workers=WORKERS) as pool:
-            for row in pool.map(worker, tasks, chunksize=32):
-                if row is None:
-                    errors += 1
-                    continue
-                buffer.append(row)
-                done += 1
-                if len(buffer) >= BATCH:
-                    cur.executemany(UPSERT, buffer)
-                    conn.commit()
-                    buffer.clear()
-                    print(f"  {done:,}/{len(tasks):,} ({time.time() - t0:.0f} с)")
-        if buffer:
-            cur.executemany(UPSERT, buffer)
-            conn.commit()
+    with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+        for done, row in enumerate(pool.map(worker, tasks, chunksize=32), 1):
+            if row is None:
+                errors += 1
+            else:
+                key = (row[0], row[1])
+                current = best.get(key)
+                if current is None or row[3] < current[3]:
+                    best[key] = row
+            if done % 2000 == 0:
+                print(f"  {done:,}/{len(tasks):,} ({time.time() - t0:.0f} с)")
 
-    print(f"Готово: {done:,} маршрутов, ошибок: {errors}, {time.time() - t0:.0f} с")
+    with psycopg.connect(DB_DSN) as conn, conn.cursor() as cur:
+        cur.executemany(UPSERT, list(best.values()))
+        conn.commit()
+
+    print(
+        f"Готово: {len(best):,} маршрутов (лучших из кандидатов), "
+        f"ошибок: {errors}, {time.time() - t0:.0f} с"
+    )
     return 0 if errors == 0 else 1
 
 
