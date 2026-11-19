@@ -1,8 +1,8 @@
-# Data-релизы: как обновлять данные без ноутбука
+# Data-снимки и онлайн-деплой
 
-Данные (`web/public/data`) в git не хранятся: 20 МБ geojson + маршруты.
-Поэтому они живут отдельным артефактом — GitHub Release. Код и данные
-версионируются раздельно, сайт всегда знает, на какой снимок смотрит.
+Данные (`web/public/data`) в `main` не хранятся: 20 МБ geojson + маршруты.
+Они лежат отдельным снимком в ветке **`data`** как `data.zip`. Код и данные
+версионируются раздельно; сайт всегда знает, на какой снимок смотрит.
 
 ## 1. Собрать архив (на машине, где есть актуальные данные)
 
@@ -12,7 +12,7 @@ PowerShell из корня репозитория:
 Compress-Archive -Path web/public/data/* -DestinationPath data.zip -Force
 ```
 
-Внутри архива должны лежать:
+Внутри `data.zip`:
 
 ```text
 presnya_buildings.geojson
@@ -21,37 +21,52 @@ presnya_redzones.geojson
 routes/
 ```
 
-`data-*.zip` в `.gitignore` — в репозиторий не коммитим.
+`data.zip` в `.gitignore` — в `main` не коммитим.
 
-## 2. Опубликовать релиз
+## 2. Обновить ветку `data`
 
-1. Открой https://github.com/MonteCristo1483/karta-okruzheniya/releases/new
-2. Tag: `data-2026-11-19`
-3. Title: `Data snapshot 2026-11-19`
-4. Прикрепи `data.zip` (имя файла должно быть ровно `data.zip`).
-5. Publish release.
+Ветка `data` — отдельная, без кода. Первый раз она уже создана. Обновление:
 
-Проверка: в релизе должен быть asset `data.zip`.
+```powershell
+git fetch origin data
+git worktree add --detach C:\Users\starg\karta-data-branch
+cd C:\Users\starg\karta-data-branch
+git switch data
+git rm -rf .
+Copy-Item -Force <путь-к-репозиторию>\data.zip .\data.zip
+git add data.zip
+git commit -m "data snapshot YYYY-MM-DD"
+git push origin data
+cd <путь-к-репозиторию>
+git worktree remove --force C:\Users\starg\karta-data-branch
+```
+
+Если ветки `data` ещё нет:
+
+```powershell
+git checkout --orphan data
+git rm -rf .
+```
 
 ## 3. Запустить деплой
 
 GitHub → Actions → **Deploy (manual)** → Run workflow:
 
-- `data_tag`: `data-2026-11-19`
+- `data_ref`: `data`
 
-Workflow скачает `data.zip`, соберёт сайт на Linux и опубликует `gh-pages`.
-Локальный `C:\kimi-build`, кириллица и `ENAMETOOLONG` больше не участвуют.
+Workflow скачает `data.zip` из ветки, соберёт сайт на Linux и опубликует
+`gh-pages`. Локальный `C:\kimi-build`, кириллица и `ENAMETOOLONG` больше не
+участвуют.
 
 ## 4. Защита
 
 - Deploy запускается **только вручную** (`workflow_dispatch`), не на push.
-- Environment `production` можно защитить правилом «Required reviewers»:
-  Settings → Environments → production. Тогда деплой ждёт подтверждения.
-- Токен `GITHUB_TOKEN` живёт только внутри Actions; на ноутбук не попадает.
-- Ветку `gh-pages` лучше защитить от прямых push, оставив публикацию CI.
+- Environment `production` требует ревьюера; деплой ждёт подтверждения.
+- Ветка `gh-pages` защищена от force push и удаления.
+- `GITHUB_TOKEN` живёт только внутри Actions; на ноутбук не попадает.
 
 ## 5. Что дальше
 
-- `data.yml` будет собирать этот архив автоматически (PostGIS + OSM +
-  data.mos.ru), затем создавать релиз.
+- `data.yml` будет собирать `data.zip` автоматически (PostGIS + OSM +
+  data.mos.ru) и обновлять ветку `data`.
 - Valhalla — отдельной фазой: тяжёлые тайлы, кэш, только изменённые дома.

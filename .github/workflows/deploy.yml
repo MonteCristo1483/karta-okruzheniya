@@ -3,10 +3,10 @@
 on:
   workflow_dispatch:
     inputs:
-      data_tag:
-        description: "GitHub Release tag with data.zip"
+      data_ref:
+        description: "Git branch containing data.zip"
         required: true
-        default: "data-2026-11-19"
+        default: "data"
 
 permissions:
   contents: write
@@ -30,11 +30,10 @@ jobs:
           cache-dependency-path: web/package-lock.json
 
       - name: Download data snapshot
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
+          git fetch origin "${{ inputs.data_ref }}" --depth=1
           mkdir -p /tmp/data
-          gh release download "${{ inputs.data_tag }}" --pattern "data.zip" --dir /tmp/data
+          git show "origin/${{ inputs.data_ref }}:data.zip" > /tmp/data/data.zip
           mkdir -p web/public/data
           unzip -q /tmp/data/data.zip -d web/public/data
 
