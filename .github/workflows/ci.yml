@@ -3,9 +3,9 @@
 on:
   push:
     branches: [main]
-  # PR запускает auto-pr.yml через workflow_dispatch: PR, созданный
-  # GITHUB_TOKEN, GitHub помечает action_required и требует ручного approve.
+  # Ручной запуск и вызов из autopilot.yml.
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read

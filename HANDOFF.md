@@ -192,8 +192,7 @@ python -c "import zipfile,pathlib; root=pathlib.Path('web/public/data'); z=zipfi
 | `web/scripts/generate-building-pages.mjs` | прототип `/r/<id>` |
 | `.github/workflows/ci.yml` | тесты + сборка |
 | `.github/workflows/deploy.yml` | автодеплой после merge (ручной — откат) |
-| `.github/workflows/auto-pr.yml` | бот открывает PR по push ветки |
-| `.github/workflows/auto-merge.yml` | бот мержит PR после зелёного CI |
+| `.github/workflows/autopilot.yml` | тесты → PR → merge → deploy по push ветки |
 | `docs/DATA_RELEASE.md` | как обновлять снимок данных |
 | `docs/SECURITY.md` | модель угроз |
 | `docs/AGENT_GRID.md` | роли агентов и правила |

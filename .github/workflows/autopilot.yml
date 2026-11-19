@@ -1,0 +1,64 @@
+name: Autopilot
+
+# Полный цикл по push рабочей ветки:
+#   тесты -> PR (если его нет) -> squash-merge -> Deploy.
+# Всё в одном workflow: workflow_run не срабатывает после workflow_dispatch,
+# а PR, созданный GITHUB_TOKEN, GitHub помечает action_required.
+# Ветки main/gh-pages/data и dependabot не трогаем.
+
+on:
+  push:
+    branches-ignore:
+      - main
+      - gh-pages
+      - data
+      - "dependabot/**"
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: autopilot-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  tests:
+    name: Tests
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    name: PR, merge, deploy
+    needs: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Open PR if missing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          existing=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+          if [ -z "$existing" ]; then
+            gh pr create --base main --head "$BRANCH" --fill
+            existing=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number')
+            echo "Открыт PR #$existing"
+          else
+            echo "PR #$existing уже открыт"
+          fi
+
+      - name: Merge and deploy
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          number=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number')
+          gh pr merge "$number" --squash --delete-branch
+          # Пуш от GITHUB_TOKEN не запускает Deploy по push — вызываем явно.
+          gh workflow run deploy.yml --ref main -f data_ref=data
