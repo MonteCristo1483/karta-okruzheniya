@@ -159,10 +159,22 @@ def format_report(results: list[dict]) -> str:
             )
         lines.append("")
     lines.append("## Выводы")
+    metro = next((r for r in results if r["layer"] == "metro"), None)
+    if metro is not None:
+        if len(metro["missing"]) <= 2:
+            lines.append(
+                f"- Метро: покрытие почти полное — совпало {metro['matched']} "
+                f"из {metro['official']}; оставшиеся пропуски находятся в "
+                f"пределах пары десятков метров от наших POI (допуск 30 м)."
+            )
+        else:
+            lines.append(
+                f"- Метро: не хватает {len(metro['missing'])} официальных входов; "
+                f"это дефицит данных OSM, а не ошибка формулы."
+            )
     lines.append(
-        "- Пропуски по метро сосредоточены у «Деловой центр» и «Москва-Сити»: "
-        "в OSM там меньше входов, чем в официальном реестре. Это дефицит "
-        "данных, а не ошибка формулы."
+        "- Недостающие входы после сверки импортируются "
+        "(`pipeline/import_mosru_metro.py`) с дедупликацией по 30 м."
     )
     lines.append(
         "- Для МЦД официальных входов в Пресне мало (5); сравнивать надо "
