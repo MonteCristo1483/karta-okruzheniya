@@ -34,48 +34,51 @@ maplibregl.setWorkerUrl("maplibre-gl-worker.mjs");
 // Палитры карты по темам (мягкие акценты, не неон — SPEC).
 const MAP_THEMES = {
   light: {
-    vlow: "#cf8579",
-    low: "#dd9c93",
-    mid: "#e9e3d6",
-    high: "#9cb98f",
-    vhigh: "#5a8a5a",
-    selected: "#7fb069",
-    dim: "#b3bcc0",
-    halo: "#4f9d64",
-    outlineCore: "#3d8b53",
-    redzone: "#c4786a",
-    route: "#5fa86b",
-    poiGreen: "#059669",
+    vlow: "#b9a9b8",
+    low: "#aeb2c8",
+    mid: "#b6c1d8",
+    high: "#b5cbd2",
+    vhigh: "#a8cbb5",
+    selected: "#7fe0a0",
+    dim: "#c5cedb",
+    halo: "#54d989",
+    outlineCore: "#28b96a",
+    redzone: "#cf8c80",
+    route: "#2fb27a",
+    poiGreen: "#0e9f6e",
     poiMetro: "#e11d48",
-    iso: "#2563eb",
+    iso: "#2f7ff0",
     pill: "bg-white/90 text-slate-700",
     redPill: "bg-white/95 text-red-700",
     redIcon: "#b91c1c",
-    // Подложка (пастельная диорама дня)
-    land: "#f2ecdf",
-    landUse: "#eae2d2",
-    park: "#cfe1c2",
-    wood: "#c4dab6",
-    water: "#a9cfe6",
-    waterLine: "#93bfd8",
-    roadMinor: "#ffffff",
-    roadCasing: "#cabda6",
+    // Подложка (прохладная диорама дня)
+    land: "#e3eaf2",
+    landUse: "#dce5ef",
+    park: "#bfe0c2",
+    wood: "#aed4b2",
+    water: "#8fd0e8",
+    waterLine: "#6fb8d6",
+    roadMinor: "#fbfdff",
+    roadCasing: "#b9c8d8",
     roadMajor: "#ffffff",
-    label: "#4f473c",
-    labelHalo: "#f7f2e8",
-    labelWater: "#5b86a3",
-    labelWaterHalo: "#e8f2f8",
+    label: "#415064",
+    labelHalo: "#f2f6fa",
+    labelWater: "#2f7fa8",
+    labelWaterHalo: "#eaf6fb",
+    tree: "#6fae72",
+    treeDark: "#4f8f5a",
+    shadow: "#1a2430",
   },
   dark: {
-    vlow: "#8a574f",
-    low: "#b08a76",
-    mid: "#3d4653",
-    high: "#5d8a6a",
-    vhigh: "#82b58d",
-    selected: "#6a9d76",
-    dim: "#343b46",
-    halo: "#7fb98a",
-    outlineCore: "#8fce9a",
+    vlow: "#6a5a63",
+    low: "#5c6078",
+    mid: "#36435a",
+    high: "#3f5c6b",
+    vhigh: "#4b7564",
+    selected: "#6fe0a6",
+    dim: "#2a3340",
+    halo: "#7fe0aa",
+    outlineCore: "#8ef0b4",
     redzone: "#8f5b55",
     route: "#5cc8be",
     poiGreen: "#7fb98a",
@@ -85,19 +88,22 @@ const MAP_THEMES = {
     redPill: "bg-slate-800/95 text-red-300",
     redIcon: "#f87171",
     // Подложка (тёмный город)
-    land: "#171e28",
-    landUse: "#1b232f",
-    park: "#1f3329",
-    wood: "#1d3026",
-    water: "#193e5b",
-    waterLine: "#22506f",
-    roadMinor: "#283340",
-    roadCasing: "#39434f",
-    roadMajor: "#46525f",
-    label: "#b7c4d2",
-    labelHalo: "#141b24",
-    labelWater: "#79a7c7",
-    labelWaterHalo: "#10202e",
+    land: "#141b24",
+    landUse: "#19212c",
+    park: "#1d3a2b",
+    wood: "#1a3326",
+    water: "#0e3550",
+    waterLine: "#18496a",
+    roadMinor: "#2a3542",
+    roadCasing: "#3b4756",
+    roadMajor: "#4c5a6b",
+    label: "#c3d2e4",
+    labelHalo: "#0f1620",
+    labelWater: "#82c4e8",
+    labelWaterHalo: "#0b2233",
+    tree: "#2f6b4a",
+    treeDark: "#1e4a33",
+    shadow: "#000000",
   },
 } as const;
 
@@ -170,6 +176,20 @@ function basemapLayers(p: Palette): maplibregl.LayerSpecification[] {
       paint: {
         "fill-color": ["match", ["get", "class"], "wood", p.wood, p.park],
         "fill-opacity": 0.9,
+      },
+    },
+    {
+      // Деревья — декоративные точки в парках (оформление, не факт).
+      id: "bm-trees",
+      type: "circle",
+      source: "trees",
+      paint: {
+        "circle-color": p.tree,
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 13, 1.8, 15, 3.1, 17, 5.2],
+        "circle-stroke-color": p.treeDark,
+        "circle-stroke-width": 0.5,
+        "circle-opacity": 0.95,
+        "circle-blur": 0.1,
       },
     },
     {
@@ -265,6 +285,7 @@ function basemapPaint(p: Palette): Record<string, Record<string, unknown>> {
     "bm-land": { "background-color": p.land },
     "bm-landuse": { "fill-color": p.landUse },
     "bm-green": { "fill-color": ["match", ["get", "class"], "wood", p.wood, p.park] },
+    "bm-trees": { "circle-color": p.tree, "circle-stroke-color": p.treeDark },
     "bm-water": { "fill-color": p.water, "fill-outline-color": p.waterLine },
     "bm-river": { "line-color": p.water },
     "bm-waterway": { "line-color": p.waterLine },
@@ -272,6 +293,9 @@ function basemapPaint(p: Palette): Record<string, Record<string, unknown>> {
     "bm-road-minor": { "line-color": p.roadMinor },
     "bm-road-casing": { "line-color": p.roadCasing },
     "bm-road-major": { "line-color": p.roadMajor },
+    "glow-outer": { "circle-color": p.selected },
+    "glow-inner": { "circle-color": p.selected },
+    "buildings-shadow": { "fill-color": p.shadow },
   };
 }
 
@@ -323,6 +347,82 @@ function longestSegment(geom: Geometry): { a: Position; b: Position } | null {
 }
 
 // Один кандидат на имя: самые длинные и важные улицы, река/пруды, парки.
+function ringContains(pt: Position, ring: Position[]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0];
+    const yi = ring[i][1];
+    const xj = ring[j][0];
+    const yj = ring[j][1];
+    const cross = yi > pt[1] !== yj > pt[1] && pt[0] < ((xj - xi) * (pt[1] - yi)) / (yj - yi || 1e-12) + xi;
+    if (cross) inside = !inside;
+  }
+  return inside;
+}
+
+function polygonContains(pt: Position, rings: Position[][]): boolean {
+  if (!ringContains(pt, rings[0])) return false;
+  for (let i = 1; i < rings.length; i++) {
+    if (ringContains(pt, rings[i])) return false;
+  }
+  return true;
+}
+
+// Декоративные деревья в парках: ровная сетка с детерминированным
+// смещением, чтобы зелень не выглядела плоским пятном (как на макетах).
+// Это оформление, не факт из данных: в карточку и индекс не попадает.
+function buildTreePoints(features: GFeature<BasemapProps>[]): GCollection<{ size: number }> {
+  const points: GFeature<{ size: number }>[] = [];
+  let seed = 20261119;
+  const rand = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+  for (const f of features) {
+    if (f.properties.layer !== "green" || f.properties.class !== "park") continue;
+    let polys: Position[][][] = [];
+    if (f.geometry.type === "Polygon") polys = [f.geometry.coordinates];
+    else if (f.geometry.type === "MultiPolygon") polys = f.geometry.coordinates;
+    else continue;
+    for (const rings of polys) {
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (const ring of rings) {
+        for (const [x, y] of ring) {
+          minX = Math.min(minX, x);
+          maxX = Math.max(maxX, x);
+          minY = Math.min(minY, y);
+          maxY = Math.max(maxY, y);
+        }
+      }
+      const area = (maxX - minX) * (maxY - minY);
+      if (area < 1e-6) continue; // меньше ~0,7 га
+      // 1 дерево на ~45 м² площади рамки — визуальная плотность, не факт.
+      const want = Math.min(170, Math.max(6, Math.round(area / 2.1e-7)));
+      let made = 0;
+      let tries = 0;
+      while (made < want && tries < want * 10) {
+        tries++;
+        const pt: [number, number] = [
+          minX + rand() * (maxX - minX),
+          minY + rand() * (maxY - minY),
+        ];
+        if (!polygonContains(pt, rings)) continue;
+        points.push({
+          type: "Feature",
+          properties: { size: 0.8 + rand() * 0.55 },
+          geometry: { type: "Point", coordinates: pt },
+        });
+        made++;
+        if (points.length >= 1500) return { type: "FeatureCollection", features: points };
+      }
+    }
+  }
+  return { type: "FeatureCollection", features: points };
+}
+
 function buildLabelCandidates(features: GFeature<BasemapProps>[]): LabelCandidate[] {
   const byName: Record<string, LabelCandidate> = {};
   const put = (key: string, candidate: LabelCandidate) => {
@@ -793,6 +893,8 @@ export default function Map() {
               type: "geojson",
               data: { type: "FeatureCollection", features: [] },
             },
+            trees: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
+            glow: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
             buildings: { type: "geojson", data: buildings, promoteId: "id" },
             redzones: { type: "geojson", data: redzones },
             routes: { type: "geojson", data: routesData },
@@ -809,7 +911,7 @@ export default function Map() {
               type: "fill",
               source: "redzones",
               filter: ["==", ["geometry-type"], "Polygon"],
-              paint: { "fill-color": palette.redzone, "fill-opacity": 0.14 },
+              paint: { "fill-color": palette.redzone, "fill-opacity": 0.09 },
             },
             {
               id: "redzones-road",
@@ -818,8 +920,8 @@ export default function Map() {
               filter: ["==", ["get", "kind"], "road"],
               paint: {
                 "line-color": palette.redzone,
-                "line-width": 2.5,
-                "line-opacity": 0.7,
+                "line-width": 1.6,
+                "line-opacity": 0.35,
               },
             },
             {
@@ -830,8 +932,8 @@ export default function Map() {
               filter: ["==", ["get", "kind"], "railway"],
               paint: {
                 "line-color": palette.redzone,
-                "line-width": 1.5,
-                "line-opacity": 0.45,
+                "line-width": 1.2,
+                "line-opacity": 0.3,
                 "line-dasharray": [3, 3],
               },
             },
@@ -853,6 +955,41 @@ export default function Map() {
                 "line-color": palette.iso,
                 "line-width": 1.5,
                 "line-opacity": 0.8,
+              },
+            },
+            {
+              // Мягкое свечение под выбранным домом (как на макетах).
+              id: "glow-outer",
+              type: "circle",
+              source: "glow",
+              paint: {
+                "circle-color": palette.selected,
+                "circle-radius": ["interpolate", ["linear"], ["zoom"], 14, 26, 17, 70],
+                "circle-opacity": 0.14,
+                "circle-blur": 1,
+              },
+            },
+            {
+              id: "glow-inner",
+              type: "circle",
+              source: "glow",
+              paint: {
+                "circle-color": palette.selected,
+                "circle-radius": ["interpolate", ["linear"], ["zoom"], 14, 12, 17, 34],
+                "circle-opacity": 0.3,
+                "circle-blur": 0.8,
+              },
+            },
+            {
+              // Контактная тень: плоская копия пятна дома со сдвигом.
+              id: "buildings-shadow",
+              type: "fill",
+              source: "buildings",
+              paint: {
+                "fill-color": palette.shadow,
+                "fill-opacity": 0.18,
+                "fill-translate": [4, 5],
+                "fill-translate-anchor": "viewport",
               },
             },
             {
@@ -911,10 +1048,11 @@ export default function Map() {
             },
           ],
         },
-        center: [37.547, 55.762],
-        zoom: 14.3,
-        pitch: 60,
-        bearing: -18,
+        // Демонстрационный ракурс «диорама»: плотный квартал, парк и река.
+        center: [37.554, 55.756],
+        zoom: 15.35,
+        pitch: 55,
+        bearing: -25,
         maxPitch: 72,
         attributionControl: false,
         });
@@ -1034,6 +1172,9 @@ export default function Map() {
         if (!src) return;
         src.setData(basemapData as never);
         labelCandidates = buildLabelCandidates(basemapData.features);
+        (map.getSource("trees") as maplibregl.GeoJSONSource | null)?.setData(
+          buildTreePoints(basemapData.features) as never,
+        );
         rebuildLabels();
       };
       void basemapPromise.then((data) => {
@@ -1214,11 +1355,28 @@ export default function Map() {
         window.history.replaceState(null, "", url);
       };
 
+      const setGlow = (center: [number, number] | null) => {
+        const src = map?.getSource("glow") as maplibregl.GeoJSONSource | null;
+        src?.setData({
+          type: "FeatureCollection",
+          features: center
+            ? [
+                {
+                  type: "Feature",
+                  properties: {},
+                  geometry: { type: "Point", coordinates: center },
+                },
+              ]
+            : [],
+        } as never);
+      };
+
       const deselect = () => {
         selectedId = null;
         routesRef.current = null;
         applySelection();
         updateSelected(null);
+        setGlow(null);
         rebuildOverlays(null, visibleRef.current);
         setUrlBuilding(null);
         map?.easeTo({ padding: { top: 0, bottom: 0, left: 0, right: 0 }, duration: 300 });
@@ -1306,6 +1464,7 @@ export default function Map() {
         void loadRoutes(id);
 
         const center = geometryCenter(feature.geometry);
+        setGlow(center);
         if (center) flyToBuilding(center);
       };
       selectRef.current = selectById;
