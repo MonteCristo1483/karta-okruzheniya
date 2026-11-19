@@ -43,6 +43,10 @@ docker compose up -d postgis
 .\scripts\backup.ps1 -Target D:\karta-backup
 ```
 
+Проверено 19.11.2026: `karta-backup-2026-11-19_1512` (2,45 ГБ) содержит
+`okrug.dump` 589 МБ; `pg_restore --list` видит 66 объектов. Скрипт больше
+не пропускает дамп из-за stderr docker (см. decisions.md).
+
 ## Восстановление
 
 1. Скопировать `data/raw` и `data/processed` обратно в репозиторий.

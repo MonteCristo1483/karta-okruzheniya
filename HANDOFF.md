@@ -218,7 +218,10 @@ python -c "import zipfile,pathlib; root=pathlib.Path('web/public/data'); z=zipfi
 8. **Статический `/r/<id>`** не входит в CI-сборку — сейчас 404.
    Массовую генерацию не включать, пока карточка не проверена.
 9. **Средний Android** не протестирован; был только флагман.
-10. **PostGIS dump** в бэкап не попал: Docker был выключен.
+10. ~~**PostGIS dump** в бэкап не попал~~ — ИСПРАВЛЕНО 19.11: скрипт
+    ложно падал на `docker compose up` (stderr + `$ErrorActionPreference=Stop`
+    в PS 5.1) и молча пропускал дамп. Бэкап 15:12 содержит `okrug.dump`
+    589 МБ, проверен `pg_restore --list` (66 объектов).
 
 ## 8. Следующая задача (рекомендация)
 
