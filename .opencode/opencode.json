@@ -1,0 +1,31 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "shell", "resource": "*git push*", "effect": "ask" },
+    { "action": "shell", "resource": "*git commit*", "effect": "ask" },
+    { "action": "shell", "resource": "*npm run deploy*", "effect": "ask" },
+    { "action": "shell", "resource": "*npm publish*", "effect": "deny" },
+    { "action": "shell", "resource": "gh *", "effect": "ask" },
+    { "action": "shell", "resource": "*git reset --hard*", "effect": "ask" },
+    { "action": "shell", "resource": "*git clean*", "effect": "ask" },
+    { "action": "shell", "resource": "*git checkout --*", "effect": "ask" },
+    { "action": "shell", "resource": "*rm -rf*", "effect": "deny" },
+    { "action": "shell", "resource": "*Remove-Item*-Recurse*", "effect": "deny" },
+    { "action": "shell", "resource": "*rmdir /s*", "effect": "deny" },
+    { "action": "shell", "resource": "*del /s*", "effect": "deny" },
+    { "action": "shell", "resource": "format *", "effect": "deny" },
+    { "action": "shell", "resource": "*diskpart*", "effect": "deny" },
+    { "action": "shell", "resource": "*reg add*", "effect": "deny" },
+    { "action": "shell", "resource": "*schtasks*", "effect": "deny" },
+    { "action": "shell", "resource": "*powershell*-enc*", "effect": "deny" },
+    { "action": "shell", "resource": "*Invoke-Expression*", "effect": "deny" },
+    { "action": "shell", "resource": "*| iex*", "effect": "deny" },
+    { "action": "shell", "resource": "*ssh *", "effect": "ask" },
+    { "action": "shell", "resource": "*scp *", "effect": "ask" },
+    { "action": "shell", "resource": "*npm install*", "effect": "ask" },
+    { "action": "shell", "resource": "*npx *", "effect": "ask" },
+    { "action": "shell", "resource": "*pip install*", "effect": "ask" },
+    { "action": "shell", "resource": "*docker system prune*", "effect": "deny" },
+    { "action": "external_directory", "resource": "*", "effect": "ask" }
+  ]
+}
