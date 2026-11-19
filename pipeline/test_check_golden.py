@@ -1,0 +1,93 @@
+"""Тесты проверки golden set: без сети и без базы."""
+
+from __future__ import annotations
+
+import json
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from check_golden import check  # noqa: E402
+
+
+def feature(building_id: int, bonuses: dict, penalties: dict) -> dict:
+    return {
+        "type": "Feature",
+        "properties": {
+            "id": building_id,
+            "breakdown": {"base": 5.0, "index": 5.0,
+                          "bonuses": bonuses, "penalties": penalties},
+        },
+        "geometry": {"type": "MultiPolygon", "coordinates": []},
+    }
+
+
+def bonus(value: float, distance: float) -> dict:
+    return {"bonus": value, "distance_m": distance, "minutes": 5.0, "multiplier": 1.0}
+
+
+def penalty(value: float, distance: float) -> dict:
+    return {"penalty": value, "distance_m": distance, "class": "road", "weight": 1.0}
+
+
+def fact(building_id: int, factor: str, kind: str, expect: str,
+         distance: float = 0.0, check_distance: bool = False,
+         tolerance: float = 0.0) -> dict:
+    return {
+        "building_id": building_id, "factor": factor, "type": kind,
+        "expect": expect, "distance_m": distance, "tolerance_m": tolerance,
+        "check_distance": check_distance, "source": "test", "address": None,
+    }
+
+
+class TestGoldenCheck(unittest.TestCase):
+    def run_check(self, facts, features):
+        buildings = {f["properties"]["id"]: f["properties"] for f in features}
+        return check(facts, buildings)
+
+    def test_positive_and_zero_pass(self):
+        features = [
+            feature(1, {"transport": bonus(1.5, 148)}, {}),
+            feature(2, {"transport": bonus(0.0, 1800)}, {}),
+        ]
+        report = self.run_check([
+            fact(1, "transport", "bonus", "positive"),
+            fact(2, "transport", "bonus", "zero"),
+        ], features)
+        self.assertEqual(report["critical"], 0)
+        self.assertEqual(report["ok"], 2)
+
+    def test_wrong_sign_is_critical(self):
+        features = [feature(1, {"transport": bonus(0.0, 1800)}, {})]
+        report = self.run_check(
+            [fact(1, "transport", "bonus", "positive")], features)
+        self.assertEqual(report["critical"], 1)
+
+    def test_missing_building_is_critical(self):
+        report = self.run_check(
+            [fact(99, "transport", "bonus", "positive")], [])
+        self.assertEqual(report["critical"], 1)
+
+    def test_penalty_boundary(self):
+        features = [
+            feature(1, {}, {"road": penalty(-0.1, 198.0)}),
+            feature(2, {}, {"road": penalty(0.0, 205.0)}),
+        ]
+        report = self.run_check([
+            fact(1, "road", "penalty", "positive", 198.0, True, 5.0),
+            fact(2, "road", "penalty", "zero", 205.0, True, 5.0),
+        ], features)
+        self.assertEqual(report["critical"], 0)
+
+    def test_distance_drift_is_warning(self):
+        features = [feature(1, {}, {"road": penalty(-0.5, 150.0)})]
+        report = self.run_check(
+            [fact(1, "road", "penalty", "positive", 200.0, True, 5.0)], features)
+        self.assertEqual(report["critical"], 0)
+        self.assertEqual(report["warnings"], 1)
+
+
+if __name__ == "__main__":
+    unittest.main()
