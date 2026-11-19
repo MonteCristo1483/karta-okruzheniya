@@ -99,7 +99,7 @@ export default function LayersPanel({
   onThemeToggle: () => void;
 }) {
   return (
-    <div className="absolute left-3 top-3 z-10 flex flex-col items-start gap-1.5 md:top-3 md:rounded-2xl md:bg-white/90 md:p-2.5 md:shadow-lg md:backdrop-blur dark:md:bg-slate-900/90">
+    <div className="absolute left-3 top-[4.5rem] z-10 flex flex-col items-start gap-1.5 md:top-3 md:rounded-2xl md:bg-white/90 md:p-2.5 md:shadow-lg md:backdrop-blur dark:md:bg-slate-900/90">
       <div className="flex items-center gap-3 md:mb-1 md:w-full md:justify-between">
         <div className="hidden items-center gap-1.5 md:flex">
           <svg width="15" height="15" viewBox="0 0 512 512" aria-hidden>
