@@ -189,6 +189,7 @@ python -c "import zipfile,pathlib; root=pathlib.Path('web/public/data'); z=zipfi
 | `pipeline/scoring.py` | формула, бонусы/штрафы |
 | `config/scoring.json` | все числа формулы |
 | `pipeline/export_map_data.py` | geojson + routes для фронта |
+| `pipeline/isochrones_valhalla.py` | предрасчёт изохрон 5/10/15 по домам |
 | `web/scripts/generate-building-pages.mjs` | прототип `/r/<id>` |
 | `.github/workflows/ci.yml` | тесты + сборка |
 | `.github/workflows/deploy.yml` | автодеплой после merge (ручной — откат) |

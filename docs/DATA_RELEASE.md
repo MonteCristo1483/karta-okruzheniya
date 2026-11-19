@@ -19,6 +19,7 @@ presnya_buildings.geojson
 presnya_poi.geojson
 presnya_redzones.geojson
 routes/
+isochrones/
 ```
 
 `data.zip` в `.gitignore` — в `main` не коммитим.
