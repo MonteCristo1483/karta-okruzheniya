@@ -133,11 +133,12 @@ const POI_LABELS: Record<string, string> = {
   kindergarten: "Сад",
   park: "Парк",
   subway_entrance: "Метро",
+  rail_platform: "Электричка",
   shop: "Магазин",
 };
 
 function poiColor(type: string, p: Palette): string {
-  return type === "subway_entrance" ? p.poiMetro : p.poiGreen;
+  return type === "subway_entrance" || type === "rail_platform" ? p.poiMetro : p.poiGreen;
 }
 
 // POI type -> ключ слоя-чекбокса / ключа бонуса в breakdown
@@ -146,6 +147,7 @@ const POI_TO_LAYER: Record<string, keyof Visibility> = {
   kindergarten: "kindergartens",
   park: "parks",
   subway_entrance: "metro",
+  rail_platform: "metro",
   shop: "shops",
 };
 
@@ -154,6 +156,7 @@ const POI_TO_BONUS: Record<string, string> = {
   kindergarten: "kindergartens",
   park: "parks",
   subway_entrance: "transport",
+  rail_platform: "transport",
   shop: "shops",
 };
 
@@ -196,6 +199,7 @@ const POI_TO_ICON: Record<string, IconKey> = {
   kindergarten: "kindergarten",
   park: "park",
   subway_entrance: "subway_entrance",
+  rail_platform: "rail_platform",
   shop: "shop",
 };
 

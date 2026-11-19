@@ -50,19 +50,16 @@ git rm -rf .
 
 ## 3. Запустить деплой
 
-GitHub → Actions → **Deploy (manual)** → Run workflow:
-
-- `data_ref`: `data`
-
-Workflow скачает `data.zip` из ветки, соберёт сайт на Linux и опубликует
-`gh-pages`. Локальный `C:\kimi-build`, кириллица и `ENAMETOOLONG` больше не
-участвуют.
+Обычно деплой запускается сам после merge в `main` (autopilot → Deploy).
+Ручной запуск нужен для отката данных: GitHub → Actions → **Deploy** →
+Run workflow, `data_ref: data`.
 
 ## 4. Защита
 
-- Deploy запускается **только вручную** (`workflow_dispatch`), не на push.
-- Environment `production` требует ревьюера; деплой ждёт подтверждения.
-- Ветка `gh-pages` защищена от force push и удаления.
+- Deploy запускается по push в `main` и вручную; перед сборкой данные
+  проверяет `pipeline/validate_export.py`.
+- Бот (`autopilot.yml`) мержит PR только после зелёных тестов.
+- Ветка `gh-pages` защищена от force push и удаления; агенту push туда запрещён.
 - `GITHUB_TOKEN` живёт только внутри Actions; на ноутбук не попадает.
 
 ## 5. Что дальше

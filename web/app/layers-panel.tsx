@@ -26,7 +26,7 @@ const ITEMS: { key: LayerKey; label: string; icon: IconKey }[] = [
   { key: "schools", label: "Школы", icon: "school" },
   { key: "kindergartens", label: "Сады", icon: "kindergarten" },
   { key: "parks", label: "Парки", icon: "park" },
-  { key: "metro", label: "Метро", icon: "subway_entrance" },
+  { key: "metro", label: "Метро и электрички", icon: "subway_entrance" },
   { key: "shops", label: "Магазины", icon: "shop" },
   { key: "redzones", label: "Красные зоны", icon: "redzones" },
   { key: "routes", label: "Маршруты", icon: "routes" },
