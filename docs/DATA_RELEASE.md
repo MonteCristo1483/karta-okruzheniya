@@ -18,9 +18,22 @@ Compress-Archive -Path web/public/data/* -DestinationPath data.zip -Force
 presnya_buildings.geojson
 presnya_poi.geojson
 presnya_redzones.geojson
+basemap.geojson        # подложка: улицы, вода, парки (pipeline/build_basemap.py)
 routes/
 isochrones/
 ```
+
+`basemap.geojson` собирается из локального OSM-дампа:
+
+```powershell
+pipeline\.venv\Scripts\python.exe pipeline\build_basemap.py `
+  --pbf <ASCII-путь>\moscow.osm.pbf `
+  --out web\public\data\basemap.geojson
+```
+
+Файл ~1,3 МБ (gzip на Pages ≈ 130 КБ). Река — осевая линия OSM
+(отношение 389341), геометрия отношения кэшируется в
+`data/raw/moskva-river-389341.json`.
 
 `data.zip` в `.gitignore` — в `main` не коммитим.
 
