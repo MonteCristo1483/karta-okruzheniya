@@ -1,4 +1,4 @@
-name: Deploy (manual)
+﻿name: Deploy (manual)
 
 on:
   workflow_dispatch:
@@ -21,9 +21,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "24"
           cache: npm
@@ -50,9 +50,10 @@ jobs:
         run: touch web/dist/.nojekyll
 
       - name: Publish to gh-pages
-        uses: peaceiris/actions-gh-pages@v4
+        uses: peaceiris/actions-gh-pages@329bcc8f12caed2cefe5a5b80781499a6f3b361b # v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./web/dist
           publish_branch: gh-pages
           enable_jekyll: false
+
