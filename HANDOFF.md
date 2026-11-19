@@ -106,7 +106,8 @@ GitHub Actions Deploy (manual) → gh-pages
 Правила:
 
 1. Прямой push в `main` невозможен. Ветка → PR → CI → merge.
-2. Агент не пушит/не коммитит/не деплоит без человека.
+2. Агент коммитит и пушит только свою рабочую ветку; merge в `main` и
+   деплой — человек.
 3. Один файл — один владелец. Web не трогает `pipeline/`, pipeline не
    трогает `web/`.
 4. Pipeline — одна полоса: PostGIS/Valhalla не любят параллельных импортов.
@@ -244,7 +245,7 @@ python -c "import zipfile,pathlib; root=pathlib.Path('web/public/data'); z=zipfi
 - Не добавлять PM2.5/заводы без измерений.
 - Не масштабировать на 30 районов до PMTiles.
 - Не менять `config/scoring.json` без тестов и записи в decisions.
-- Не давать агентам `git push`/`npm run deploy`.
+- Не давать агентам push в `main`/`gh-pages`, force-push и `npm run deploy`.
 - Не вставлять секреты в чат/репозиторий.
 - Не делать новый HUD-неон в продукте (только маркетинг).
 
