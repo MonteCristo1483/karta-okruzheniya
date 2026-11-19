@@ -49,20 +49,23 @@ class TestApiKey(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             with mock.patch.dict(os.environ, {}, clear=True):
                 self.assertIsNone(load_api_key(Path(tmp) / ".env"))
-                with self.assertRaises(MosRuError) as ctx:
-                    require_key(None)
-                self.assertIn("MOSRU_API_KEY", str(ctx.exception))
+                # На машине разработчика .env может существовать — изолируемся.
+                with mock.patch("mosru_api.load_api_key", return_value=None):
+                    with self.assertRaises(MosRuError) as ctx:
+                        require_key(None)
+                    self.assertIn("MOSRU_API_KEY", str(ctx.exception))
 
 
 class TestRequests(unittest.TestCase):
     def test_datasets_url_contains_key_and_paging(self):
-        fake = FakeFetch([{"Id": 1}])
-        datasets(key="k", top=5, skip=10, fetch=fake)
+        fake = FakeFetch({"Items": [{"Id": 1}]})
+        result = datasets(key="k", top=5, skip=10, fetch=fake)
         url = fake.urls[0]
         self.assertIn("/datasets?", url)
         self.assertIn("api_key=k", url)
         self.assertIn("%24top=5", url)
         self.assertIn("%24skip=10", url)
+        self.assertEqual(result, [{"Id": 1}])
 
     def test_dataset_info_unwraps_list(self):
         fake = FakeFetch([{"Caption": "Входы метро"}])
