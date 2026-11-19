@@ -1,4 +1,4 @@
-# Агентная сетка и онлайн-фабрика
+﻿# Агентная сетка и онлайн-фабрика
 
 Документ для соло-проекта: как работать с несколькими агентами, не получить
 конфликты в файлах и не превратить ноутбук в единственную точку отказа.
@@ -8,8 +8,8 @@
 | Роль | Где работает | Что можно | Что нельзя |
 |---|---|---|---|
 | **Диспетчер** (главная сессия) | корень репозитория | приоритеты, review diff, тесты, merge, deploy | писать большие куски кода |
-| **Pipeline** | `C:\karta-pipeline` (worktree) | `pipeline/`, `config/`, `data/`, `docs/` | `web/`, commit, push, deploy |
-| **Web** | `C:\karta-web` (worktree) | `web/` | `pipeline/`, `config/`, `data/`, commit, push, deploy |
+| **Pipeline** | `C:\Users\starg\karta-pipeline` (worktree) | `pipeline/`, `config/`, `data/`, `docs/` | `web/`, commit, push, deploy |
+| **Web** | `C:\Users\starg\karta-web` (worktree) | `web/` | `pipeline/`, `config/`, `data/`, commit, push, deploy |
 | **Researcher** | subagent из диспетчера | читать, искать, webfetch | править файлы, запускать shell |
 | **Reviewer** | subagent из диспетчера | читать diff, `git diff/status/log` | править файлы, запускать тесты |
 
@@ -21,14 +21,14 @@
 Из корня репозитория (один раз):
 
 ```powershell
-git worktree add C:\karta-web -b lane/web
-git worktree add C:\karta-pipeline -b lane/pipeline
+git worktree add C:\Users\starg\karta-web -b lane/web
+git worktree add C:\Users\starg\karta-pipeline -b lane/pipeline
 ```
 
 Дальше в OpenCode:
 
-1. Открой новую сессию в `C:\karta-web`, выбери агента **web**.
-2. Открой новую сессию в `C:\karta-pipeline`, выбери агента **pipeline**.
+1. Открой новую сессию в `C:\Users\starg\karta-web`, выбери агента **web**.
+2. Открой новую сессию в `C:\Users\starg\karta-pipeline`, выбери агента **pipeline**.
 3. Главную сессию в корне оставь диспетчеру: он кидает задачи, проверяет
    diff, запускает тесты и мержит.
 
@@ -106,3 +106,4 @@ git worktree add C:\karta-pipeline -b lane/pipeline
   домах.
 - Не добавлять платные API «на будущее».
 - Не менять `scoring.json` без тестов и записи в `docs/decisions.md`.
+
