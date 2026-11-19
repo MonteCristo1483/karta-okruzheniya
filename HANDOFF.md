@@ -1,6 +1,6 @@
 # HANDOFF — старт новой сессии
 
-Дата: 2026-11-19. Проект: «Карта окружения дома».
+Дата: 2026-11-19 (вечер). Проект: «Карта окружения дома».
 Этот файл — точка входа. Читать вместе с `CLAUDE.md`, `SPEC.md`,
 `docs/ROADMAP.md`, `docs/decisions.md`, `docs/SECURITY.md`,
 `docs/AGENT_GRID.md`.
@@ -14,57 +14,91 @@
 CLAUDE.md, SPEC.md, docs/ROADMAP.md, docs/decisions.md, docs/SECURITY.md,
 docs/AGENT_GRID.md.
 
-Работаем по одной маленькой задаче за раз. Не пушь в main напрямую: main
-защищён, нужен branch → PR → CI → merge. Не коммить и не деплой без
-человека. Скоринг меняется только через config/scoring.json. Отвечай
-по-русски, объясняй простыми словами: владелец не программист.
+Работаем по одной маленькой задаче. main защищён: branch → PR → CI → merge.
+Деплой автоматический: autopilot сам мержит PR после зелёных тестов и
+запускает Deploy (валидатор данных + golden set). Не коммить в main и не
+деплой вручную без человека. Скоринг меняется только через
+config/scoring.json. Ключ data.mos.ru лежит в локальном .env — в чат и
+репозиторий его не вставлять, под аккаунтом владельца не логиниться.
+Отвечай по-русски, объясняй простыми словами: владелец не программист.
 
 Текущая задача: <вставь задачу>.
 ```
 
 ## 1. Что это
 
-B2C PWA для людей, которые выбирают или снимают квартиру в Москве.
-Человек находит дом, видит «индекс окружения» 0–10 и, главное, конкретные
-факты: магистраль, ж/д, стройка, промзона, время до метро/школы/парка.
-Цель продукта: **за 2 минуты понять, что с домом не так**, а не получить
-«красивую оценку».
-
-Сейчас один район — Пресненский. Масштабирование на 30+ районов отложено
-до PMTiles и онлайн-пайплайна.
+B2C PWA для людей, которые выбирают или снимают квартиру в Москве. Человек
+находит дом, видит «индекс окружения» 0–10 и конкретные факты: магистраль,
+ж/д, стройка, промзона, время пешком до метро/школы/парка. Цель — за
+2 минуты понять, что с домом не так.
 
 - Публичный сайт: https://montecristo1483.github.io/karta-okruzheniya/
 - Репозиторий: https://github.com/MonteCristo1483/karta-okruzheniya
 - Локально: `C:\Users\starg\OneDrive\Документы\GitHub\karta-okruzheniya`
+- Worktrees: `C:\Users\starg\karta-web` (агент web), `C:\Users\starg\karta-pipeline` (pipeline)
+- Сейчас один район — Пресненский. Масштаб — после PMTiles.
 
-## 2. Состояние на 2026-11-19
+## 2. Состояние на 19.11 (вечер)
 
-Работает:
+Работает на проде:
 
 - 3D-карта Пресни (MapLibre, fill-extrusion), выбор дома, подсветка.
-- Карточка-вердикт: 3 главных минуса с расстояниями, 3 плюса, перцентиль
-  по району, «Что проверить лично», строка «Из чего: 5.0 + … = …».
-- Поиск по адресу (2 511 зданий с адресом), URL `?building=<id>`.
-- Минимальная подложка: крупные улицы из `redzones` нейтральным слоем.
-- Тёмная тема, маршруты Valhalla, год постройки (1 715 / 3 306 зданий).
-- CI: Python-тесты, `tsc`, `next build`.
-- Онлайн-деплой: автоматически после merge в `main`, данные из ветки
-  `data`; вручную — только откат.
+- Карточка-вердикт: 3 главных минуса с расстояниями, до 3 плюсов,
+  перцентиль по району, «Что проверить лично», «Из чего».
+- Разбивка балла видна сразу: отдельные группы «Плюсы» и «Минусы»
+  (плашки с числом и полоской), раскрывашка «Почему такой балл» — под ними.
+- Изохроны 5/10/15 минут пешком: предрассчитаны Valhalla, файл на дом,
+  переключатель в карточке, полигон под зданиями.
+- Транспорт: метро + МЦД/электрички (28 платформ выгружены и рисуются).
+- Поиск по адресу (2 511 зданий с `addr:*`), URL `?building=<id>`.
+- «Поделиться» → `/r/<id>/` — статическая страница с OG-превью (3 306
+  страниц, 22 МБ), кнопка «Открыть на карте».
+- Тёмная тема, маршруты Valhalla, год постройки с источником «ГИС ЖКХ».
+- Мобильная проверка: iPhone 11 (Safari) — всё работает, лёгкий режим не нужен.
+- Android-устройства для теста нет.
 
-Ключевые коммиты:
+Ключевые цифры:
 
-- `08a1a40` — merge PR #7, deploy из ветки `data`.
-- `65b7fee` — backup script/runbook.
-- `63236ab` — agent grid, CI, прототип `/r/<id>`.
+| Что | Значение |
+|---|---|
+| Зданий | 3 306 |
+| POI | 243 (входы метро 30, платформы 28, парки 40, школы 34, сады 48, магазины 63) |
+| Красные зоны | 914 |
+| Маршруты | 16 530 (5 категорий × 3 306) |
+| Изохроны | 3 306 файлов, 3,9 МБ |
+| Медиана индекса | 6,8 |
+| Тесты | 60/60 |
+| Валидатор выгрузки | 0 критичных, 0 предупреждений |
+| Golden set | 18 фактов: 14 high, 4 medium |
 
-Ветки:
+## 3. Автономный контур (важно понять до первой задачи)
 
-- `main` — код, защищена.
-- `data` — только `data.zip` со снимком данных.
-- `gh-pages` — опубликованный сайт, защищена от force/delete.
-- `lane/web`, `lane/pipeline` — worktrees для агентов.
+Владелец сознательно снял ручные кнопки. Как это устроено:
 
-## 3. Архитектура
+```text
+push рабочей ветки
+   ↓
+autopilot.yml: тесты (ci.yml через workflow_call)
+   ↓
+бот открывает PR (если нет) → squash-merge
+   ↓
+Deploy: validate_export → check_golden → next build → share pages → gh-pages
+```
+
+- `main` защищён: прямой push невозможен, нужен PR.
+- Required checks в настройках GitHub **выключены**; тестовый гейт живёт в
+  `autopilot` (без зелёных тестов PR не мержится).
+- Ручной approve деплоя снят: job больше не ссылается на environment.
+- Ветки `data` и `gh-pages` autopilot не трогает; dependabot — тоже.
+- Агенту запрещены push в `main`/`gh-pages`, force, `npm run deploy`.
+- Откат: revert-PR (код) или ручной Deploy с прежним `data_ref` (данные).
+- Правила агентов: `.opencode/agents/{web,pipeline,researcher,reviewer}.md`.
+
+Если автопилот упал, смотреть Actions → Autopilot → шаг Merge and deploy.
+Частые причины: конфликт ветки с `main` (лечится `git merge origin/main`
+в ветку) и красные тесты.
+
+## 4. Архитектура
 
 ```text
 OSM / data.mos.ru / ГИС ЖКХ
@@ -73,197 +107,173 @@ PostGIS (pipeline/*.py)
         ↓
 scoring.py + config/scoring.json
         ↓
-web/public/data/*.geojson + routes/*.json
+web/public/data/*.geojson + routes/ + isochrones/
         ↓
 data.zip → ветка data
         ↓
-GitHub Actions Deploy (manual) → gh-pages
+Deploy (push в main или ручной dispatch) → gh-pages
 ```
 
 - Фронт: Next.js 16, TypeScript strict, Tailwind, MapLibre. Статический
   экспорт, `basePath: /karta-okruzheniya`, `distDir: dist`.
-- Пайплайн: Python + PostGIS + osmium; Valhalla — предрасчёт маршрутов.
-- Данные в `main` не хранятся: `web/public/data` в `.gitignore`.
-- Важное: `data.zip` в ветке `data` собран **Python zipfile** с
-  forward-slash путями. `Compress-Archive` на Windows кладёт backslash,
-  и `unzip` на Linux падает. Не использовать его для этого архива.
+- Данные в `main` не хранятся: `web/public/data` в `.gitignore`, снимок в
+  ветке `data` как `data.zip` (только Python zipfile, не Compress-Archive).
+- Маршруты и изохроны — файл на здание (`data/routes/<id>.json`,
+  `data/isochrones/<id>.json`), грузятся при выборе дома.
+- Сборка на кириллическом пути падает (Turbopack); worktree на ASCII-пути
+  собирается напрямую.
 
-## 4. Безопасность и процесс
+## 5. Данные и официальные реестры
 
-Сделано:
+Сверка с data.mos.ru (ключ в локальном `.env`, `MOSRU_API_KEY`):
 
-- `main`: только PR, обязательные checks `Python tests` и
-  `TypeScript + Next build`, 0 approvals (соло), запрет force/delete,
-  правила применяются к админу.
-- `gh-pages`: запрет force/delete; обычный deploy-пуш разрешён.
-- Environment `production` с обязательным approve снят 19.11 по решению
-  владельца: деплой идёт сам после merge. Страховка — обязательный CI и
-  `pipeline/validate_export.py` перед сборкой.
-- Actions: pinned by SHA, fork PR требуют approval, default token read-only.
-- Dependabot: graph, alerts, security updates, grouped updates — on.
-- Secret protection: scanning on, push protection on.
-- `docs/SECURITY.md`, `.opencode/opencode.json`, Dependabot config.
-- 2FA — **не включена**, владелец сделает сам.
+| Слой | Источник | Покрытие / статус |
+|---|---|---|
+| Входы метро | набор 624 | 24 из 25 (96%); 35 недостающих импортированы по Москве |
+| МЦД | 62207 | 4 из 5 (150 м); `rail_platform` — все ж/д узлы |
+| Ж/д радиальные | 62890 | используется в Pareto |
+| Парки | 1465 | 39/39 после импорта 11 недостающих |
+| Школы | data.mos.ru CSV | импортированы (`osm_type='mosru'`) |
+| Стройка | 2941 | 32 из 56 (57%); решение владельца — не выдумывать полигоны |
+| Промзоны | — | машиночитаемого реестра нет (есть шум/воздух/почва) |
+| Магистрали | — | официального реестра нет, только OSM |
 
-Правила:
+Важные решения:
 
-1. Прямой push в `main` невозможен. Ветка → PR → CI → merge.
-2. Агент коммитит и пушит только свою рабочую ветку; merge в `main` и
-   деплой — человек.
-3. Один файл — один владелец. Web не трогает `pipeline/`, pipeline не
-   трогает `web/`.
-4. Pipeline — одна полоса: PostGIS/Valhalla не любят параллельных импортов.
-5. Любое изменение данных/формулы — таблица «до/после» по 10 домам.
-6. Не вставлять токены/пароли в чат. Не вытаскивать их из credential
-   manager.
+- Стройка: вариант «оставить как есть, реестр только для проверки».
+  Буфер вокруг точки = выдуманная геометрия, в продукт не пускаем.
+- Маршруты: ближайший POI ищется в буфере 3 км (граница района больше не
+  отрезает ближайшие объекты) и выбирается лучший из 3 по времени пешком.
+- Метро у границы района больше не «теряется» (было 2,6 км вместо 150 м).
 
-Worktrees:
+Обновление снимка данных (`docs/DATA_RELEASE.md`):
 
-- `C:\Users\starg\karta-web` — агент `web`
-- `C:\Users\starg\karta-pipeline` — агент `pipeline`
+1. `python pipeline/export_map_data.py`
+2. `python pipeline/validate_export.py web/public/data`
+3. zip через Python zipfile → ветка `data` (worktree `C:\Users\starg\karta-data-branch`)
+4. push кода в рабочую ветку → autopilot → Deploy сам подхватит `data`.
 
-Они созданы от старого коммита; перед работой обновить:
-`git fetch && git reset --hard origin/main` (или пересоздать).
+## 6. Проверки качества (Эталон-2)
 
-## 5. Команды
+- `pipeline/validate_export.py` — структура, id, индекс, сходимость
+  разбивки с клампом, знаки, геометрия, POI, зоны, маршруты, изохроны.
+  Гейт в Deploy.
+- `pipeline/check_golden.py` — 18 фактов (`data/golden/facts.json`):
+  11 метро + 3 стройка (high, реестры), 4 магистраль (medium, OSM).
+  Несовпадение знака останавливает публикацию.
+- `pipeline/test_invariants.py` — монотонность, ноль на радиусе, веса
+  дорог, кламп на 512 комбинациях, детерминизм.
+- `pipeline/check_pareto.py` — 30 районов по официальным фактам:
+  метро ≤10 мин ↔ бонус +0.90, стройка ↔ штраф −0.73, ж/д ↔ штраф −0.64.
+  Нарушений доминирования 12 из 58; все объясняются бонусами без
+  реестров (школы/парки/сады/магазины) — список для ручного разбора,
+  не доказательство ошибки.
+- Метрика «21 из 30» недействительна (константа 6.0 даёт 26/30);
+  заменена на корреляции и golden set.
 
-Тесты:
+## 7. Секреты и безопасность
+
+- `MOSRU_API_KEY` — только в локальном `.env` (`.gitignore`). В чат,
+  коммиты и логи не попадает. Значение у владельца, в репозитории его нет.
+- Под аккаунтом владельца (mos.ru/data.mos.ru) агент **не логинится**:
+  ключ вставляет человек, сессии и пароли не трогаем.
+- `pipeline/scoring.py` и другие содержат локальный пароль PostGIS
+  `okrug_local_dev` — долг: вынести в `.env` (см. docs/SECURITY.md).
+- Бэкап: `C:\Users\starg\karta-backup\karta-backup-2026-11-19_1512`
+  (2,45 ГБ, `okrug.dump` 589 МБ, 66 объектов). Внешнего диска нет —
+  это защита от ошибки, не от смерти диска.
+- 2FA на GitHub не включена (владелец сделает сам).
+
+## 8. Команды
 
 ```powershell
+# тесты (60)
 pipeline\.venv\Scripts\python.exe -m unittest discover -s pipeline -p "test_*.py" -v
+
+# данные (PostGIS + Valhalla запущены)
+pipeline\.venv\Scripts\python.exe pipeline\scoring.py
+pipeline\.venv\Scripts\python.exe pipeline\export_map_data.py
+pipeline\.venv\Scripts\python.exe pipeline\validate_export.py web\public\data
+pipeline\.venv\Scripts\python.exe pipeline\check_golden.py web\public\data
+
+# маршруты / изохроны (Valhalla на :8002)
+pipeline\.venv\Scripts\python.exe pipeline\routes_valhalla.py
+pipeline\.venv\Scripts\python.exe pipeline\isochrones_valhalla.py --resume
+
+# сверки с реестрами
+python pipeline\check_layers.py --out docs\research\layer-recon.md
+python pipeline\check_parks.py --out docs\research\parks-recon.md
+python pipeline\check_construction.py --out docs\research\construction-recon.md
+python pipeline\check_pareto.py
+
+# фронт локально (ASCII worktree, Turbopack падает на кириллице)
+cd C:\Users\starg\karta-web\web
+node node_modules\typescript\bin\tsc --noEmit -p tsconfig.json
+npm run build
+
+# бэкап
+.\scripts\backup.ps1 -Target C:\Users\starg\karta-backup
 ```
 
-Typecheck/сборка локально:
-
-```powershell
-C:\kimi-tools\node.exe web\node_modules\typescript\bin\tsc --noEmit -p web\tsconfig.json
-```
-
-Локальный preview (Pages-раскладка):
-
-```powershell
-# 1) собрать на ASCII-пути (Turbopack падает на кириллице)
-#    скопировать web/ в C:\kimi-build, затем:
-cd C:\kimi-build
-C:\kimi-tools\node.exe node_modules\next\dist\bin\next build
-# 2) разложить dist в .pages-test\karta-okruzheniya
-# 3) запустить:
-C:\kimi-tools\node.exe scripts\serve-test.mjs .pages-test 3014
-# http://localhost:3014/karta-okruzheniya/?building=<id>
-```
-
-`serve-test.mjs` обязан отдавать `Content-Length`: без него Chrome за
-прокси зависает на module worker MapLibre.
-
-Данные:
-
-```powershell
-# zip только через Python zipfile, не Compress-Archive
-python -c "import zipfile,pathlib; root=pathlib.Path('web/public/data'); z=zipfile.ZipFile('data.zip','w',zipfile.ZIP_DEFLATED); [z.write(p,p.relative_to(root).as_posix()) for p in root.rglob('*') if p.is_file()]; z.close()"
-```
-
-Деплой:
-
-1. Merge PR в `main` — дальше автоматически: CI → Deploy → `gh-pages`.
-2. Откат данных: обновить `data.zip` в ветке `data` (см.
-   `docs/DATA_RELEASE.md`) и запустить Actions → **Deploy** с `data_ref=data`.
-3. Откат кода: revert-PR обычным способом — деплой уедет сам.
-
-Бэкап:
-
-```powershell
-.\scripts\backup.ps1 -Target E:\karta-backup
-```
-
-Без Docker — `-SkipDocker` (тогда нет дампа PostGIS). Локальный снимок
-уже есть: `C:\Users\starg\karta-backup\karta-backup-2026-11-19_1212`.
-
-## 6. Где что лежит
+## 9. Где что лежит
 
 | Файл | Что |
 |---|---|
-| `web/app/map.tsx` | карта, выбор, поиск, стили, URL |
-| `web/app/building-sheet.tsx` | карточка-вердикт, пороги минусов |
-| `web/app/search-box.tsx` | поиск по адресу |
+| `web/app/map.tsx` | карта, выбор, слои, маршруты, изохроны, URL |
+| `web/app/building-sheet.tsx` | карточка-вердикт, плашки, изохроны, «Поделиться» |
 | `web/app/layers-panel.tsx` | слои, тема |
-| `pipeline/scoring.py` | формула, бонусы/штрафы |
-| `config/scoring.json` | все числа формулы |
-| `pipeline/export_map_data.py` | geojson + routes для фронта |
-| `pipeline/isochrones_valhalla.py` | предрасчёт изохрон 5/10/15 по домам |
-| `web/scripts/generate-building-pages.mjs` | прототип `/r/<id>` |
-| `.github/workflows/ci.yml` | тесты + сборка |
-| `.github/workflows/deploy.yml` | автодеплой после merge (ручной — откат) |
-| `.github/workflows/autopilot.yml` | тесты → PR → merge → deploy по push ветки |
-| `docs/DATA_RELEASE.md` | как обновлять снимок данных |
-| `docs/SECURITY.md` | модель угроз |
-| `docs/AGENT_GRID.md` | роли агентов и правила |
+| `web/scripts/generate-building-pages.mjs` | `/r/<id>/` + sitemap |
+| `pipeline/scoring.py` | формула (числа — в `config/scoring.json`) |
+| `pipeline/export_map_data.py` | geojson + routes |
+| `pipeline/isochrones_valhalla.py` | предрасчёт изохрон |
+| `pipeline/validate_export.py` | валидатор выгрузки |
+| `pipeline/check_golden.py` | golden set (гейт деплоя) |
+| `pipeline/check_pareto.py` | Pareto по 30 районам |
+| `pipeline/mosru_api.py` | клиент data.mos.ru (ключ из `.env`) |
+| `config/scoring.json` | все числа формулы (v4) |
+| `.github/workflows/autopilot.yml` | тесты → PR → merge |
+| `.github/workflows/deploy.yml` | валидатор → golden → сборка → `/r/` → gh-pages |
+| `docs/decisions.md` | журнал всех решений (читать при сомнениях) |
+| `docs/research/*.md` | сверки, Pareto, план Эталона-2 |
 
-## 7. Что болит (не забыть)
+## 10. Открытые вопросы и долги
 
-1. **Эталон из Gemini — не эталон.** 21/30 по полосам, но константа 6.0
-   даёт 26/30. Формулу не крутить; доказана только групповая сортировка
-   (хорошие 6.52 / обычные 5.72 / с минусами 5.37). Нужна автоматическая
-   валидация фактов, а не ручные 10 домов.
-2. ~~**`rail_platform` (МЦД)**~~ — ИСПРАВЛЕНО 19.11: платформы выгружаются
-   в POI (28 в Пресне) и рисуются в слое «Метро и электрички» отдельной
-   иконкой с подписью «Электричка · N мин».
-3. **Год постройки**: 1 715 из 3 306, а не 1 755. В UI нет источника.
-4. **Нет полной подложки/названий улиц**; только крупные улицы.
-5. **Масштаб**: 4 МБ geojson, 3 306 route-файлов, 27 МБ dist. 30 районов
-   потребуют PMTiles + route-pack + data pipeline.
-6. **Valhalla-тайлы**: в docs 3.5 ГБ, по факту `data/processed/valhalla`
-   ~0.9 ГБ. Возможно, часть потеряна; проверить перед пересчётом.
-7. **Юридика**: OSM ODbL (атрибуция), data.mos.ru (условия набора),
-   ГИС ЖКХ (нет открытой лицензии, массовый сбор). Не строить платное
-   на годе постройки до разрешения.
-8. ~~**Статический `/r/<id>`** не входит в CI-сборку~~ — ИСПРАВЛЕНО 19.11:
-   `generate-building-pages.mjs` запускается в Deploy после сборки
-   (3 306 страниц, 22 МБ), «Поделиться» ведёт на `/r/<id>/` с OG-превью.
-9. ~~**Средний Android** не протестирован~~ — проверено 19.11 на iPhone 11
-   (Safari): карта, 3D, карточка, изохроны и «Поделиться» работают без
-   замечаний; лёгкий режим не понадобился. Android-устройства для теста
-   по-прежнему нет.
-10. ~~**PostGIS dump** в бэкап не попал~~ — ИСПРАВЛЕНО 19.11: скрипт
-    ложно падал на `docker compose up` (stderr + `$ErrorActionPreference=Stop`
-    в PS 5.1) и молча пропускал дамп. Бэкап 15:12 содержит `okrug.dump`
-    589 МБ, проверен `pg_restore --list` (66 объектов).
+1. **Стройка**: 24 из 56 официальных объектов без нашей зоны. Решение —
+   не выдумывать; варианты: ручная привязка по снимкам или оставить.
+2. **Промзоны и магистрали**: реестров нет; факты по ним — medium.
+3. **Dependabot**: 6 открытых PR (#1–#6), autopilot их игнорирует.
+   Решить: мержить пачкой или отключить.
+4. **PMTiles не начат**: 4 МБ geojson и 6 600 файлов на район; 30 районов
+   не влезут. Нужны тайлы + упаковка маршрутов/изохрон.
+5. **Android** не проверен (iPhone 11 — ок).
+6. **Valhalla-тайлы**: в старых docs 3,5 ГБ, по факту ~0,9 ГБ — проверить
+   полноту перед пересчётом за пределами Пресни.
+7. **Пароль PostGIS** в коде — вынести в `.env`.
+8. **Лицензии**: data.mos.ru — условия для коммерции не подтверждены;
+   ГИС ЖКХ — нет открытой лицензии; OSM — ODbL с атрибуцией.
+9. **Бэкап только на C:**: нужен внешний диск.
+10. **`/r/` страницы** добавляют ~22 МБ в каждый деплой; следить за
+    размером репозитория.
+11. **Проверки в защите main выключены** — осознанно; тестовый гейт в боте.
+    Если автопилот сломается, PR можно смержить руками без тестов.
 
-## 8. Следующая задача (рекомендация)
+## 11. Куда дальше (рекомендация)
 
-**Автоматическая валидация данных + confidence.** Не ручные 10 домов.
+- **PMTiles** — технический рубеж для масштаба (1–2 недели, средний риск).
+- **Продукт** — визуал по макетам (следующие итерации), `/r/` уже сделан,
+  мобильная проверка закрыта.
+- **Данные** — официальные школы/парки в Pareto (парки уже есть как
+  реестр 1465), ручная привязка 24 строек, если владелец захочет.
+- **Инфраструктура** — внешний бэкап, 2FA, пароль PostGIS в `.env`,
+  разбор Dependabot.
 
-Шаги:
+## 12. Чего не делать
 
-1. `pipeline/validate_export.py`:
-   - читает `web/public/data/presnya_buildings.geojson` и `config/scoring.json`;
-   - проверяет: id уникальны, index 0–10, breakdown сходится с индексом
-     (с учётом clamp), нет отрицательных расстояний/минут, нет дублей POI,
-     адрес не «16» без улицы, год не 0/1700/2050;
-   - считает покрытие: адрес, год, высота, POI по типам;
-   - возвращает exit code 1 при критичных ошибках.
-2. Добавить проверку в data-пайплайн (позже — в `data.yml`).
-3. Confidence по источникам: `high` (2+ источника согласны), `medium`
-   (один авторитетный), `low` (только OSM). В карточке low-факты
-   помечать «проверить», а не показывать как истину.
-4. Golden set 10–20 стабильных домов — автотест, не ручной review.
-
-Критерий: `validate_export.py` на текущих данных даёт отчёт и не падает
-на ожидаемых clamp-случаях; ошибки перечислены с id и адресом.
-
-## 9. Чего не делать
-
-- Не пушить в `main` напрямую.
-- Не генерировать 3 306 OG-страниц до готовности карточки/данных.
-- Не добавлять PM2.5/заводы без измерений.
-- Не масштабировать на 30 районов до PMTiles.
+- Не пушить в `main` напрямую; не деплоить вручную без человека.
+- Не логиниться под аккаунтом владельца и не просить ключи в чат.
 - Не менять `config/scoring.json` без тестов и записи в decisions.
-- Не давать агентам push в `main`/`gh-pages`, force-push и `npm run deploy`.
-- Не вставлять секреты в чат/репозиторий.
-- Не делать новый HUD-неон в продукте (только маркетинг).
-
-## 10. Открытые вопросы владельцу
-
-- Есть ли разрешение на ГИС ЖКХ/data.mos.ru для коммерческого продукта?
-- Кто целевой пользователь: арендатор или покупатель? Сейчас B2C-жилец.
-- Когда включаем 2FA и переносим бэкап на внешний диск?
-- Нужен ли один прототип `/r/<id>` в CI-сборке или ждём готовности карточки?
+- Не импортировать выдуманную геометрию (буферы вокруг точек).
+- Не тащить источники без лицензии в продукт.
+- Не генерировать контент «оценок» вместо фактов.
+- Не делать неоновый HUD в продукте (только маркетинг).
+- Не масштабировать на 30 районов до PMTiles.
