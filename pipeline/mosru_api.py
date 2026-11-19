@@ -80,7 +80,12 @@ def _url(path: str, key: str, params: dict | None = None) -> str:
 
 def datasets(key: str | None = None, top: int = PAGE, skip: int = 0,
              fetch=http_json) -> list[dict]:
-    return fetch(_url("/datasets", require_key(key), {"$top": top, "$skip": skip}))
+    payload = fetch(_url("/datasets", require_key(key), {"$top": top, "$skip": skip}))
+    # Портал отвечает объектом {"Items": [...], "Count": N}, но при
+    # $inlinecount может отдать и просто массив — поддерживаем оба вида.
+    if isinstance(payload, dict):
+        return payload.get("Items") or payload.get("items") or []
+    return payload
 
 
 def dataset_info(dataset_id: int, key: str | None = None, fetch=http_json) -> dict:
