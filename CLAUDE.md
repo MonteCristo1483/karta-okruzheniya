@@ -1,7 +1,9 @@
 # CLAUDE.md — правила работы агента в этом репозитории
 
 ## Разрешения (permissions)
-РАЗРЕШЕНО без подтверждения: npm install, npm run build/dev/deploy/start, npx, python, pip install, docker compose, git add/commit/push, создание/правка/удаление файлов внутри репозитория. СПРАШИВАТЬ: rm -rf системных папок, curl | bash, отправка данных на внешние сервисы, действия за пределами папки проекта.
+РАЗРЕШЕНО без подтверждения: npm install/ci, npm run build/dev/start, npx, python, pip install, docker compose, git add/commit, push своей рабочей ветки, создание/правка/удаление файлов внутри репозитория.
+ЗАПРЕЩЕНО: push в `main` и `gh-pages`, force-push, `npm run deploy`, удаление данных/volume без человека.
+СПРАШИВАТЬ: merge PR в `main`, деплой, rm -rf системных папок, curl | bash, отправка данных на внешние сервисы, действия за пределами папки проекта.
 
 ## Проект
 «Карта окружения дома» — см. SPEC.md (обязателен к прочтению перед задачей).
@@ -42,5 +44,5 @@
 - Пайплайн: зависимости — `pipeline/.venv/Scripts/python.exe -m pip install -r pipeline/requirements.txt`;
   импорты — `pipeline/.venv/Scripts/python.exe pipeline/import_buildings.py` (и import_poi, import_linear,
   extract_presnensky, scoring — по PLAN.md); БД поднимается `docker compose up -d`
-- Фронтенд: (пока нет)
+- Фронтенд: `cd web && npm ci`; проверки — `npm run build`, `node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json`
 - Тесты: `pipeline/.venv/Scripts/python.exe -m unittest discover -s pipeline -p "test_*.py" -v`
