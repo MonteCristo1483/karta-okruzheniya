@@ -64,6 +64,9 @@ GitHub, а то, под каким пользователем и с какими
      `ssh/scp`, `gh` и запрещает `rm -rf`, `Remove-Item -Recurse`,
      `format`, `diskpart`, `reg add`, `schtasks`, `powershell -enc`.
    - Это **человеческий чекпоинт**, а не sandbox. Не одобряй вслепую.
+   - Проверка: в новой сессии попроси агента выполнить `git push --dry-run`.
+     Если запроса на подтверждение нет — конфиг не подхватился, не полагайся
+     на него.
 5. **Зависимости и CI.**
    - `package-lock.json` и `requirements.txt` — только через review.
    - Dependabot для npm/pip/actions.

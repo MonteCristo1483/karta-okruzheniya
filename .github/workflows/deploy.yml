@@ -1,0 +1,58 @@
+name: Deploy (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      data_tag:
+        description: "GitHub Release tag with data.zip"
+        required: true
+        default: "data-2026-11-19"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Download data snapshot
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p /tmp/data
+          gh release download "${{ inputs.data_tag }}" --pattern "data.zip" --dir /tmp/data
+          mkdir -p web/public/data
+          unzip -q /tmp/data/data.zip -d web/public/data
+
+      - name: Install
+        working-directory: web
+        run: npm ci
+
+      - name: Build static export
+        working-directory: web
+        run: npm run build
+
+      - name: Disable Jekyll
+        run: touch web/dist/.nojekyll
+
+      - name: Publish to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./web/dist
+          publish_branch: gh-pages
+          enable_jekyll: false

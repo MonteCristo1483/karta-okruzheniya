@@ -10,6 +10,7 @@ data/processed/
 .venv/
 web/public/data/*.geojson
 web/public/data/routes/
+data.zip
 web/public/maplibre-gl-worker.mjs
 web/tsconfig.tsbuildinfo
 web/dist/
