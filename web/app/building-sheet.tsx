@@ -216,17 +216,17 @@ export default function BuildingSheet({
     }));
 
   // Компактная разбивка по макету: 3 бонуса + 3 штрафа с полосками.
+  const visibleBonuses = bonusEntries.filter(([, entry]) => entry.bonus > 0.005);
+  const visiblePenalties = penaltyEntries.filter(([, entry]) => entry.penalty < -0.005);
   const chipItems = [
-    ...bonusEntries
-      .filter(([, entry]) => entry.bonus > 0.005)
+    ...visibleBonuses
       .slice(0, 3)
       .map(([key, entry]) => ({
         key: `b-${key}`,
         label: BONUS_LABELS[key] ?? key,
         value: entry.bonus,
       })),
-    ...penaltyEntries
-      .filter(([, entry]) => entry.penalty < -0.005)
+    ...visiblePenalties
       .slice(0, 3)
       .map(([key, entry]) => ({
         key: `p-${key}`,
@@ -234,6 +234,9 @@ export default function BuildingSheet({
         value: entry.penalty,
       })),
   ];
+  const hiddenCount =
+    Math.max(0, visibleBonuses.length - 3) +
+    Math.max(0, visiblePenalties.length - 3);
   const chipMax = Math.max(1, ...chipItems.map((item) => Math.abs(item.value)));
 
   const severeFlags = redFlags.filter(([, entry]) => entry.penalty < SEVERE_PENALTY);
@@ -518,6 +521,11 @@ export default function BuildingSheet({
                       </div>
                     );
                   })}
+                </div>
+              )}
+              {hiddenCount > 0 && (
+                <div className="mt-1 text-[10px] text-slate-400 dark:text-slate-500">
+                  Ещё {hiddenCount} — в «Почему такой балл»
                 </div>
               )}
 
