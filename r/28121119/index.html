@@ -34,10 +34,10 @@ body{margin:0;min-height:100vh;font-family:-apple-system,BlinkMacSystemFont,"Seg
 h1{font-size:24px;line-height:1.2;margin:0 0 4px}
 .year{color:var(--muted);font-size:14px;margin-bottom:18px}
 .score{display:flex;align-items:center;gap:16px;margin:0 0 18px}
-.ring{width:92px;height:92px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;position:relative;background:conic-gradient(#c9bf9e calc(67 * 1%),#e5e7eb 0)}
+.ring{width:92px;height:92px;border-radius:50%;flex:0 0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;position:relative;background:conic-gradient(#c9bf9e calc(67 * 1%),#e5e7eb 0)}
 .ring::before{content:"";position:absolute;inset:9px;border-radius:50%;background:#fff}
 .ring b{position:relative;font-size:26px;line-height:1}
-.ring small{position:relative;font-size:10px;color:var(--muted)}
+.ring small{position:relative;font-size:10px;line-height:1;color:var(--muted)}
 .caption{font-size:12px;color:var(--muted)}
 .verdict{font-size:15px;font-weight:700;line-height:1.35;margin-top:2px}
 .pct{font-size:12px;color:var(--muted);line-height:1.35;margin-top:4px}
