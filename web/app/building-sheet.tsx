@@ -287,7 +287,7 @@ export default function BuildingSheet({
 
   const share = async () => {
     if (!building) return;
-    const url = `${PUBLIC_BASE}/?building=${building.id}`;
+    const url = `${PUBLIC_BASE}/r/${building.id}/`;
     const facts = redFlags
       .slice(0, 2)
       .map(

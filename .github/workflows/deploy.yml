@@ -61,6 +61,12 @@ jobs:
         working-directory: web
         run: npm run build
 
+      # Страницы домов для «Поделиться»: /r/<id>/ с OG-превью.
+      # Генерируются после сборки, потому что пишутся прямо в dist.
+      - name: Generate share pages
+        working-directory: web
+        run: node scripts/generate-building-pages.mjs
+
       - name: Disable Jekyll
         run: touch web/dist/.nojekyll
 

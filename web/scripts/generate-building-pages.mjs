@@ -29,6 +29,14 @@ const DATA_PATH = join(WEB_ROOT, "public", "data", "presnya_buildings.geojson");
 const DIST_ROOT = join(WEB_ROOT, "dist");
 const BASE = "https://montecristo1483.github.io/karta-okruzheniya";
 const OG_IMAGE = `${BASE}/og.jpg`;
+const CONFIG_PATH = fileURLToPath(new URL("../../config/scoring.json", import.meta.url));
+const DATA_DATE = new Date().toISOString().slice(0, 10);
+let FORMULA_VERSION = "?";
+try {
+  FORMULA_VERSION = JSON.parse(readFileSync(CONFIG_PATH, "utf8")).meta?.version ?? "?";
+} catch {
+  // конфиг вне web/ может отсутствовать в изолированной сборке
+}
 
 const BONUS_LABELS = {
   transport: "Транспорт",
@@ -313,7 +321,7 @@ h1{font-size:24px;line-height:1.2;margin:0 0 4px}
     ${checks ? `<section class="checks"><h2>Что проверить лично</h2><ul>${checks}</ul></section>` : ""}
     <a class="cta" href="${BASE}/?building=${props.id}">Открыть на карте</a>
     <p class="disclaimer">Справочная информация по открытым данным, не является замером или оценкой стоимости.</p>
-    <p class="sources">Источники: OpenStreetMap (ODbL), data.mos.ru, ГИС ЖКХ. Данные на 13.11.2026, формула v4.</p>
+    <p class="sources">Источники: OpenStreetMap (ODbL), data.mos.ru, ГИС ЖКХ. Данные на ${DATA_DATE}, формула v${FORMULA_VERSION}.</p>
   </main>
 </div>
 </body>
