@@ -5,6 +5,7 @@ web/public/data/:
   presnya_buildings.geojson — здания: геометрия, высота, index + разбивка, адрес;
   presnya_poi.geojson       — POI (type, subtype, name), магазины — только
                               subtype из config/scoring.json (как в скоринге);
+                              транспорт: subway_entrance + rail_platform (МЦД/электрички).
   presnya_redzones.geojson  — «красные зоны»: линии магистралей и ж/д
                               (linear) + полигоны строек и промзон (zones).
 
@@ -41,7 +42,7 @@ LEFT JOIN building_year_match y ON y.osm_id = b.osm_id
 POI_QUERY = """
 SELECT type, subtype, name, ST_AsGeoJSON(geometry)
 FROM poi_presnya
-WHERE type IN ('school', 'kindergarten', 'park', 'subway_entrance')
+WHERE type IN ('school', 'kindergarten', 'park', 'subway_entrance', 'rail_platform')
    OR (type = 'shop' AND subtype = ANY(%s))
 """
 
