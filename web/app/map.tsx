@@ -21,6 +21,12 @@ const BUILDINGS_URL = "data/presnya_buildings.geojson";
 const POI_URL = "data/presnya_poi.geojson";
 const REDZONES_URL = "data/presnya_redzones.geojson";
 
+// Подложка: компактный GeoJSON, собранный из OSM (pipeline/build_basemap.py).
+// Только улицы, вода, парки и землепользование — без зданий, POI и адресов,
+// поэтому файл лёгкий, работает офлайн (service worker) и не зависит от
+// внешних тайл-серверов. Подписи улиц — DOM-текст (крисп на Retina/iPhone).
+const BASEMAP_URL = "data/basemap.geojson";
+
 // Воркер maplibre отдаём статикой из public/ — bundlers не резолвят
 // его динамический URL (Turbopack и webpack одинаково).
 maplibregl.setWorkerUrl("maplibre-gl-worker.mjs");
@@ -38,7 +44,6 @@ const MAP_THEMES = {
     halo: "#4f9d64",
     outlineCore: "#3d8b53",
     redzone: "#c4786a",
-    street: "#bfb5a1",
     route: "#5fa86b",
     poiGreen: "#059669",
     poiMetro: "#e11d48",
@@ -46,6 +51,20 @@ const MAP_THEMES = {
     pill: "bg-white/90 text-slate-700",
     redPill: "bg-white/95 text-red-700",
     redIcon: "#b91c1c",
+    // Подложка (пастельная диорама дня)
+    land: "#f2ecdf",
+    landUse: "#eae2d2",
+    park: "#cfe1c2",
+    wood: "#c4dab6",
+    water: "#a9cfe6",
+    waterLine: "#93bfd8",
+    roadMinor: "#ffffff",
+    roadCasing: "#cabda6",
+    roadMajor: "#ffffff",
+    label: "#4f473c",
+    labelHalo: "#f7f2e8",
+    labelWater: "#5b86a3",
+    labelWaterHalo: "#e8f2f8",
   },
   dark: {
     vlow: "#8a574f",
@@ -58,7 +77,6 @@ const MAP_THEMES = {
     halo: "#7fb98a",
     outlineCore: "#8fce9a",
     redzone: "#8f5b55",
-    street: "#2b3540",
     route: "#5cc8be",
     poiGreen: "#7fb98a",
     poiMetro: "#ef8fa4",
@@ -66,6 +84,20 @@ const MAP_THEMES = {
     pill: "bg-slate-800/90 text-slate-200",
     redPill: "bg-slate-800/95 text-red-300",
     redIcon: "#f87171",
+    // Подложка (тёмный город)
+    land: "#171e28",
+    landUse: "#1b232f",
+    park: "#1f3329",
+    wood: "#1d3026",
+    water: "#193e5b",
+    waterLine: "#22506f",
+    roadMinor: "#283340",
+    roadCasing: "#39434f",
+    roadMajor: "#46525f",
+    label: "#b7c4d2",
+    labelHalo: "#141b24",
+    labelWater: "#79a7c7",
+    labelWaterHalo: "#10202e",
   },
 } as const;
 
@@ -105,6 +137,144 @@ const buildingColorExpr = (p: Palette, s: ColorStops | null) =>
       : ["step", ["get", "index"], p.low, 5, p.mid, 7, p.high],
   ] as never;
 
+// ── Подложка (локальный GeoJSON из OSM) ──────────────────────────────────
+// Одна фича = один объект; layer: landuse | green | water | river |
+// waterway | road. Свойства намеренно минимальны (class, name).
+type BasemapProps = { layer: string; class: string; name?: string };
+
+const BM_LAYER = (layer: string) => ["==", ["get", "layer"], layer] as never;
+const BM_CLASS = (cls: string) => ["==", ["get", "class"], cls] as never;
+const BM_ROAD = (cls: string) => ["all", BM_LAYER("road"), BM_CLASS(cls)] as never;
+
+// Нижние слои подложки: земля, зелень, вода, дороги. Порядок важен —
+// здания и оверлеи проекта добавляются выше.
+function basemapLayers(p: Palette): maplibregl.LayerSpecification[] {
+  return [
+    {
+      id: "bm-land",
+      type: "background",
+      paint: { "background-color": p.land },
+    },
+    {
+      id: "bm-landuse",
+      type: "fill",
+      source: "basemap",
+      filter: BM_LAYER("landuse"),
+      paint: { "fill-color": p.landUse, "fill-opacity": 0.75 },
+    },
+    {
+      id: "bm-green",
+      type: "fill",
+      source: "basemap",
+      filter: BM_LAYER("green"),
+      paint: {
+        "fill-color": ["match", ["get", "class"], "wood", p.wood, p.park],
+        "fill-opacity": 0.9,
+      },
+    },
+    {
+      id: "bm-water",
+      type: "fill",
+      source: "basemap",
+      filter: BM_LAYER("water"),
+      paint: {
+        "fill-color": p.water,
+        "fill-outline-color": p.waterLine,
+        "fill-antialias": true,
+      },
+    },
+    {
+      // Москва-река в OSM — осевая линия, рисуем широкой лентой.
+      id: "bm-river",
+      type: "line",
+      source: "basemap",
+      filter: BM_LAYER("river"),
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: {
+        "line-color": p.water,
+        "line-width": ["interpolate", ["linear"], ["zoom"], 12, 6, 14, 24, 15, 48, 16, 96, 17, 190],
+        "line-blur": 1.5,
+      },
+    },
+    {
+      id: "bm-waterway",
+      type: "line",
+      source: "basemap",
+      filter: BM_LAYER("waterway"),
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: {
+        "line-color": p.waterLine,
+        "line-width": ["interpolate", ["linear"], ["zoom"], 12, 0.8, 16, 3],
+      },
+    },
+    {
+      id: "bm-road-minor-casing",
+      type: "line",
+      source: "basemap",
+      minzoom: 12,
+      filter: BM_ROAD("minor"),
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: {
+        "line-color": p.roadCasing,
+        "line-width": ["interpolate", ["linear"], ["zoom"], 12, 1.6, 14, 3, 16, 5, 18, 7.5],
+      },
+    },
+    {
+      id: "bm-road-minor",
+      type: "line",
+      source: "basemap",
+      minzoom: 11,
+      filter: BM_ROAD("minor"),
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: {
+        "line-color": p.roadMinor,
+        "line-width": ["interpolate", ["linear"], ["zoom"], 12, 0.9, 14, 1.9, 16, 3.4, 18, 6],
+      },
+    },
+    {
+      id: "bm-road-casing",
+      type: "line",
+      source: "basemap",
+      minzoom: 10,
+      filter: BM_ROAD("major"),
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: {
+        "line-color": p.roadCasing,
+        "line-width": ["interpolate", ["linear"], ["zoom"], 11, 2.8, 14, 5.5, 16, 9.5, 18, 16],
+      },
+    },
+    {
+      id: "bm-road-major",
+      type: "line",
+      source: "basemap",
+      minzoom: 10,
+      filter: BM_ROAD("major"),
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: {
+        "line-color": p.roadMajor,
+        "line-width": ["interpolate", ["linear"], ["zoom"], 11, 1.6, 14, 3.4, 16, 6.2, 18, 11],
+      },
+    },
+  ];
+}
+
+// Цвета подложки, которые меняются при переключении темы.
+// Данные те же — перекрашиваем только paint.
+function basemapPaint(p: Palette): Record<string, Record<string, unknown>> {
+  return {
+    "bm-land": { "background-color": p.land },
+    "bm-landuse": { "fill-color": p.landUse },
+    "bm-green": { "fill-color": ["match", ["get", "class"], "wood", p.wood, p.park] },
+    "bm-water": { "fill-color": p.water, "fill-outline-color": p.waterLine },
+    "bm-river": { "line-color": p.water },
+    "bm-waterway": { "line-color": p.waterLine },
+    "bm-road-minor-casing": { "line-color": p.roadCasing },
+    "bm-road-minor": { "line-color": p.roadMinor },
+    "bm-road-casing": { "line-color": p.roadCasing },
+    "bm-road-major": { "line-color": p.roadMajor },
+  };
+}
+
 type PoiProps = { type: string; subtype: string | null; name: string | null };
 type RedzoneProps = { kind: string; class: string | null };
 // Пешие маршруты (Valhalla) — файл на здание, грузится при выборе.
@@ -122,6 +292,74 @@ type IsochroneData = Record<string, IsoGeometry>;
 const ISOCHRONE_URL = (id: number) => `data/isochrones/${id}.json`;
 type GFeature<P> = { type: "Feature"; geometry: Geometry; properties: P };
 type GCollection<P> = { type: "FeatureCollection"; features: GFeature<P>[] };
+
+// Подписи подложки — DOM-маркеры, а не symbol-слой: не нужны глиф-серверы
+// и PBF-шрифты (экономия первой загрузки), текст крисп на Retina.
+type LabelCandidate = {
+  name: string;
+  kind: "street" | "water" | "park";
+  importance: number;
+  a: Position;
+  b: Position;
+};
+
+function longestSegment(geom: Geometry): { a: Position; b: Position } | null {
+  let lines: Position[][] = [];
+  if (geom.type === "LineString") lines = [geom.coordinates];
+  else if (geom.type === "MultiLineString") lines = geom.coordinates;
+  else return null;
+  let best: { a: Position; b: Position; score: number } | null = null;
+  for (const line of lines) {
+    for (let i = 1; i < line.length; i++) {
+      const a = line[i - 1];
+      const b = line[i];
+      const dLat = b[1] - a[1];
+      const dLon = (b[0] - a[0]) * Math.cos((a[1] * Math.PI) / 180);
+      const score = dLat * dLat + dLon * dLon;
+      if (!best || score > best.score) best = { a, b, score };
+    }
+  }
+  return best;
+}
+
+// Один кандидат на имя: самые длинные и важные улицы, река/пруды, парки.
+function buildLabelCandidates(features: GFeature<BasemapProps>[]): LabelCandidate[] {
+  const byName: Record<string, LabelCandidate> = {};
+  const put = (key: string, candidate: LabelCandidate) => {
+    const prev = byName[key];
+    if (!prev || candidate.importance > prev.importance) byName[key] = candidate;
+  };
+  for (const f of features) {
+    const { layer, class: cls, name } = f.properties;
+    if (!name) continue;
+    if (layer === "road") {
+      if (cls !== "major" && cls !== "minor") continue;
+      const seg = longestSegment(f.geometry);
+      if (!seg) continue;
+      const dLat = seg.b[1] - seg.a[1];
+      const dLon = (seg.b[0] - seg.a[0]) * Math.cos((seg.a[1] * Math.PI) / 180);
+      const length = Math.hypot(dLat, dLon);
+      if (length < 0.00025) continue; // короче ~30 м подпись не нужна
+      put(`street:${name}`, {
+        name,
+        kind: "street",
+        importance: (cls === "major" ? 3 : 1) + Math.min(2, length * 100),
+        a: seg.a,
+        b: seg.b,
+      });
+    } else if (layer === "river") {
+      const seg = longestSegment(f.geometry);
+      if (seg) put(`water:${name}`, { name, kind: "water", importance: 2.5, a: seg.a, b: seg.b });
+    } else if (layer === "water") {
+      const c = geometryCenter(f.geometry);
+      if (c) put(`water:${name}`, { name, kind: "water", importance: 1.8, a: c, b: c });
+    } else if (layer === "green" && cls === "park") {
+      const c = geometryCenter(f.geometry);
+      if (c) put(`park:${name}`, { name, kind: "park", importance: 0.6, a: c, b: c });
+    }
+  }
+  return Object.values(byName);
+}
 
 type BuildingProps = {
   id: number;
@@ -218,6 +456,7 @@ function makePoiPinEl(
   const NS = "http://www.w3.org/2000/svg";
   const el = document.createElement("div");
   el.className = "flex items-center gap-1";
+  el.style.zIndex = "2";
   const svg = document.createElementNS(NS, "svg");
   svg.setAttribute("width", "24");
   svg.setAttribute("height", "24");
@@ -257,6 +496,7 @@ function makePoiPinEl(
 
 function makeRedPinEl(text: string, pill: string, iconColor: string): HTMLDivElement {
   const el = pillBase(`${pill} red-pin`);
+  el.style.zIndex = "2";
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("width", "12");
   svg.setAttribute("height", "12");
@@ -425,14 +665,21 @@ export default function Map() {
       let buildings: GCollection<BuildingProps>;
       let poi: GCollection<PoiProps>;
       let redzones: GCollection<RedzoneProps>;
+      let basemapPromise: Promise<GCollection<BasemapProps>>;
       try {
-        [buildings, poi, redzones] = (await Promise.all(
-          [BUILDINGS_URL, POI_URL, REDZONES_URL].map(fetchJson),
-        )) as [
-          GCollection<BuildingProps>,
-          GCollection<PoiProps>,
-          GCollection<RedzoneProps>,
-        ];
+        // Подложка не критична и грузится параллельно: карта с домами
+        // открывается, не дожидаясь её. Если файла нет — просто без улиц.
+        [buildings, poi, redzones] = (await Promise.all([
+          fetchJson(BUILDINGS_URL),
+          fetchJson(POI_URL),
+          fetchJson(REDZONES_URL),
+        ])) as [GCollection<BuildingProps>, GCollection<PoiProps>, GCollection<RedzoneProps>];
+        basemapPromise = fetchJson(BASEMAP_URL)
+          .then((data) => data as GCollection<BasemapProps>)
+          .catch((e) => {
+            console.warn("Подложка не загрузилась:", e);
+            return { type: "FeatureCollection", features: [] } as GCollection<BasemapProps>;
+          });
       } catch (e) {
         console.error("Не удалось загрузить данные карты:", e);
         setFatalError(
@@ -475,6 +722,8 @@ export default function Map() {
         const c = geometryCenter(f.geometry);
         if (c) buildingCenters[f.properties.id] = c;
       }
+
+      let labelCandidates: LabelCandidate[] = [];
 
       // Поиск по адресу: только здания, у которых адрес есть в OSM
       // (сейчас 2 511 из 3 306). Остальные находятся кликом по карте.
@@ -540,6 +789,10 @@ export default function Map() {
         style: {
           version: 8,
           sources: {
+            basemap: {
+              type: "geojson",
+              data: { type: "FeatureCollection", features: [] },
+            },
             buildings: { type: "geojson", data: buildings, promoteId: "id" },
             redzones: { type: "geojson", data: redzones },
             routes: { type: "geojson", data: routesData },
@@ -549,28 +802,8 @@ export default function Map() {
             },
           },
           layers: [
-            {
-              // Минимальная подложка: крупные улицы из того же redzones-слоя.
-              // Полноценная улично-дорожная сеть и подписи — после PMTiles.
-              id: "streets",
-              type: "line",
-              source: "redzones",
-              filter: ["==", ["get", "kind"], "road"],
-              layout: { "line-cap": "round", "line-join": "round" },
-              paint: {
-                "line-color": palette.street,
-                "line-width": [
-                  "match",
-                  ["get", "class"],
-                  "primary",
-                  6,
-                  "secondary",
-                  4.5,
-                  2.5,
-                ],
-                "line-opacity": 0.75,
-              },
-            },
+            // Полноценная подложка: земля, парки, вода, улицы (локальный OSM).
+            ...basemapLayers(palette),
             {
               id: "redzones-fill",
               type: "fill",
@@ -696,6 +929,118 @@ export default function Map() {
       }
 
       map.addControl(new maplibregl.NavigationControl(), "top-right");
+
+      // Подписи улиц/воды: DOM-маркеры (без глиф-PBF). Пересобираем после
+      // движения карты: за время анимации маркеры едут вместе с точкой.
+      let labelMarkers: maplibregl.Marker[] = [];
+      const rebuildLabels = () => {
+        if (!map) return;
+        labelMarkers.forEach((m) => m.remove());
+        labelMarkers = [];
+        const p = MAP_THEMES[themeRef.current];
+        const zoom = map.getZoom();
+        if (zoom < 12.6) return;
+        const size = zoom >= 16 ? 13 : zoom >= 14.2 ? 12 : 11;
+        const width = map.getContainer().clientWidth;
+        const height = map.getContainer().clientHeight;
+        const boxes: { x1: number; y1: number; x2: number; y2: number }[] = [];
+        const maxLabels = width < 600 ? 14 : 20;
+        const sorted = [...labelCandidates].sort((a, b) => b.importance - a.importance);
+        for (const c of sorted) {
+          if (labelMarkers.length >= maxLabels) break;
+          if (c.kind === "park" && zoom < 15) continue;
+          if (c.kind === "water" && zoom < 12.8) continue;
+          const mid: [number, number] = [(c.a[0] + c.b[0]) / 2, (c.a[1] + c.b[1]) / 2];
+          const pt = map.project(mid);
+          const bw = Math.min(240, c.name.length * size * 0.62 + 8);
+          const bh = size + 6;
+          // Подпись целиком в кадре: половинки слов на краю выглядят как баг.
+          if (
+            pt.x - bw / 2 < 2 ||
+            pt.y - bh / 2 < 2 ||
+            pt.x + bw / 2 > width - 2 ||
+            pt.y + bh / 2 > height - 2
+          ) {
+            continue;
+          }
+          let angle = 0;
+          if (c.a[0] !== c.b[0] || c.a[1] !== c.b[1]) {
+            const p1 = map.project(c.a as [number, number]);
+            const p2 = map.project(c.b as [number, number]);
+            angle = (Math.atan2(p2.y - p1.y, p2.x - p1.x) * 180) / Math.PI;
+            if (angle > 90) angle -= 180;
+            if (angle < -90) angle += 180;
+            // Почти вертикальные подписи читаются хуже, чем отсутствие.
+            if (Math.abs(angle) > 68) continue;
+          }
+          const rad = (angle * Math.PI) / 180;
+          const boxW = Math.abs(bw * Math.cos(rad)) + Math.abs(bh * Math.sin(rad));
+          const boxH = Math.abs(bw * Math.sin(rad)) + Math.abs(bh * Math.cos(rad));
+          const box = {
+            x1: pt.x - boxW / 2,
+            y1: pt.y - boxH / 2,
+            x2: pt.x + boxW / 2,
+            y2: pt.y + boxH / 2,
+          };
+          if (
+            boxes.some(
+              (b) => !(box.x2 < b.x1 || box.x1 > b.x2 || box.y2 < b.y1 || box.y1 > b.y2),
+            )
+          ) {
+            continue;
+          }
+          boxes.push(box);
+
+          const color =
+            c.kind === "water" ? p.labelWater : c.kind === "park" ? p.poiGreen : p.label;
+          const halo = c.kind === "water" ? p.labelWaterHalo : p.labelHalo;
+          const wrap = document.createElement("div");
+          wrap.style.cssText = "pointer-events:none;z-index:0;";
+          const inner = document.createElement("div");
+          inner.textContent = c.name;
+          inner.style.cssText = [
+            `transform: rotate(${angle.toFixed(1)}deg)`,
+            "white-space: nowrap",
+            "font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+            `font-size: ${size}px`,
+            `font-weight: ${c.kind === "street" && c.importance >= 3 ? 600 : 500}`,
+            `font-style: ${c.kind === "water" ? "italic" : "normal"}`,
+            `color: ${color}`,
+            "line-height: 1",
+            "letter-spacing: 0.01em",
+            `text-shadow: -1px -1px 0 ${halo}, 1px -1px 0 ${halo}, -1px 1px 0 ${halo}, 1px 1px 0 ${halo}, 0 0 2px ${halo}`,
+          ].join(";");
+          wrap.append(inner);
+          labelMarkers.push(
+            new maplibregl.Marker({ element: wrap, anchor: "center" })
+              .setLngLat(mid)
+              .addTo(map),
+          );
+        }
+      };
+      map.on("moveend", rebuildLabels);
+      map.on("resize", rebuildLabels);
+      (window as unknown as { __rebuildLabels?: () => void }).__rebuildLabels = rebuildLabels;
+
+      // Подложка приходит параллельно: как только она есть — подставляем
+      // данные и подписи, не задерживая открытие карты с домами.
+      // setData до готовности стиля MapLibre может проигнорировать, поэтому
+      // ждём load и запоминаем данные.
+      let styleReady = false;
+      let basemapData: GCollection<BasemapProps> | null = null;
+      const applyBasemap = () => {
+        if (cancelled || !map || !basemapData) return;
+        const src = map.getSource("basemap") as maplibregl.GeoJSONSource | null;
+        if (!src) return;
+        src.setData(basemapData as never);
+        labelCandidates = buildLabelCandidates(basemapData.features);
+        rebuildLabels();
+      };
+      void basemapPromise.then((data) => {
+        if (cancelled) return;
+        basemapData = data;
+        if (styleReady) applyBasemap();
+      });
 
       // Источник изохроны: максимум одна фича (полигон выбранного времени).
       setIsoSourceRef.current = (geom) => {
@@ -831,13 +1176,19 @@ export default function Map() {
         map.setPaintProperty("outline-halo", "line-color", p.halo);
         map.setPaintProperty("outline-core", "line-color", p.outlineCore);
         map.setPaintProperty("redzones-fill", "fill-color", p.redzone);
-        map.setPaintProperty("streets", "line-color", p.street);
+        for (const [id, paint] of Object.entries(basemapPaint(p))) {
+          if (!map.getLayer(id)) continue;
+          for (const [prop, value] of Object.entries(paint)) {
+            map.setPaintProperty(id, prop as never, value as never);
+          }
+        }
         map.setPaintProperty("redzones-road", "line-color", p.redzone);
         map.setPaintProperty("redzones-rail", "line-color", p.redzone);
         map.setPaintProperty("routes-line", "line-color", p.route);
         map.setPaintProperty("isochrone-fill", "fill-color", p.iso);
         map.setPaintProperty("isochrone-line", "line-color", p.iso);
         rebuildOverlays(selectedRef.current, visibleRef.current);
+        rebuildLabels();
       };
 
       let selectedId: number | null = null;
@@ -960,9 +1311,12 @@ export default function Map() {
       selectRef.current = selectById;
 
       map.on("load", () => {
+        styleReady = true;
+        applyBasemap();
         applyThemeRef.current?.(themeRef.current);
         applyVisibilityRef.current?.(visibleRef.current);
         setIsoSourceRef.current?.(isoGeomRef.current);
+        rebuildLabels();
         // Публичная ссылка «Отправить клиенту»: ?building=<osm_id>
         const param = new URLSearchParams(window.location.search).get("building");
         if (param !== null) {
