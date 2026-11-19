@@ -1,0 +1,48 @@
+name: Auto-merge
+
+# После зелёного CI на PR бот мержит его в main (squash) и запускает Deploy.
+# Файл читается с main, поэтому PR не может подменить эту логику у себя.
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  merge:
+    name: Merge green PR
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge and deploy
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$REPO/commits/$SHA/pulls" \
+            | jq -r --arg repo "$REPO" \
+              '.[] | select(.state == "open" and .base.ref == "main" and .head.repo.full_name == $repo) | .number' \
+            > /tmp/numbers
+
+          merged=0
+          while read -r number; do
+            [ -z "$number" ] && continue
+            echo "Мержим PR #$number"
+            gh pr merge "$number" --squash --delete-branch
+            merged=1
+          done < /tmp/numbers
+
+          if [ "$merged" = "1" ]; then
+            # Пуш от GITHUB_TOKEN не запускает workflow по push, поэтому
+            # деплой вызываем явно.
+            gh workflow run deploy.yml --ref main -f data_ref=data
+          fi

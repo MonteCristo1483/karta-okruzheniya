@@ -48,7 +48,8 @@ B2C PWA для людей, которые выбирают или снимают
 - Минимальная подложка: крупные улицы из `redzones` нейтральным слоем.
 - Тёмная тема, маршруты Valhalla, год постройки (1 715 / 3 306 зданий).
 - CI: Python-тесты, `tsc`, `next build`.
-- Онлайн-деплой: вручную через GitHub Actions, данные из ветки `data`.
+- Онлайн-деплой: автоматически после merge в `main`, данные из ветки
+  `data`; вручную — только откат.
 
 Ключевые коммиты:
 
@@ -95,8 +96,9 @@ GitHub Actions Deploy (manual) → gh-pages
   `TypeScript + Next build`, 0 approvals (соло), запрет force/delete,
   правила применяются к админу.
 - `gh-pages`: запрет force/delete; обычный deploy-пуш разрешён.
-- Environment `production`: required reviewer — владелец, admin bypass
-  выключен; деплой ждёт approve.
+- Environment `production` с обязательным approve снят 19.11 по решению
+  владельца: деплой идёт сам после merge. Страховка — обязательный CI и
+  `pipeline/validate_export.py` перед сборкой.
 - Actions: pinned by SHA, fork PR требуют approval, default token read-only.
 - Dependabot: graph, alerts, security updates, grouped updates — on.
 - Secret protection: scanning on, push protection on.
@@ -162,9 +164,10 @@ python -c "import zipfile,pathlib; root=pathlib.Path('web/public/data'); z=zipfi
 
 Деплой:
 
-1. Обновить `data.zip` в ветке `data` (см. `docs/DATA_RELEASE.md`).
-2. GitHub → Actions → **Deploy (manual)** → Run workflow, `data_ref=data`.
-3. Approve в environment `production`.
+1. Merge PR в `main` — дальше автоматически: CI → Deploy → `gh-pages`.
+2. Откат данных: обновить `data.zip` в ветке `data` (см.
+   `docs/DATA_RELEASE.md`) и запустить Actions → **Deploy** с `data_ref=data`.
+3. Откат кода: revert-PR обычным способом — деплой уедет сам.
 
 Бэкап:
 
@@ -188,7 +191,9 @@ python -c "import zipfile,pathlib; root=pathlib.Path('web/public/data'); z=zipfi
 | `pipeline/export_map_data.py` | geojson + routes для фронта |
 | `web/scripts/generate-building-pages.mjs` | прототип `/r/<id>` |
 | `.github/workflows/ci.yml` | тесты + сборка |
-| `.github/workflows/deploy.yml` | ручной онлайн-деплой |
+| `.github/workflows/deploy.yml` | автодеплой после merge (ручной — откат) |
+| `.github/workflows/auto-pr.yml` | бот открывает PR по push ветки |
+| `.github/workflows/auto-merge.yml` | бот мержит PR после зелёного CI |
 | `docs/DATA_RELEASE.md` | как обновлять снимок данных |
 | `docs/SECURITY.md` | модель угроз |
 | `docs/AGENT_GRID.md` | роли агентов и правила |
