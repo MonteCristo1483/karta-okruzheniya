@@ -399,6 +399,35 @@ def check_routes(data_dir: Path, cfg: dict, report: Report) -> None:
                            f"метры {entry.get('distance_m')}")
 
 
+def check_isochrones(data_dir: Path, report: Report) -> None:
+    """Изохроны: файл на дом, три контура, геометрия в границах Москвы."""
+    iso_dir = data_dir / "isochrones"
+    if not iso_dir.is_dir():
+        report.add("warning", "missing_isochrones", "нет папки isochrones")
+        return
+    files = list(iso_dir.glob("*.json"))
+    report.stats["isochrone_files"] = len(files)
+    expected = {"5", "10", "15"}
+    for path in files:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            report.add("critical", "broken_isochrone", f"{path.name}: {exc}")
+            continue
+        if set(payload) != expected:
+            report.add("warning", "bad_contours",
+                       f"{path.name}: контуры {sorted(payload)}")
+            continue
+        for minutes, geometry in payload.items():
+            if not isinstance(geometry, dict) or geometry.get("type") not in (
+                "Polygon", "MultiPolygon",
+            ):
+                report.add("critical", "bad_isochrone_geometry",
+                           f"{path.name}: {minutes} мин — {type(geometry).__name__}")
+                continue
+            check_geometry(geometry, report, f"изохрона {path.stem}, {minutes} мин")
+
+
 def validate_export(data_dir: Path, config_path: Path = CONFIG_PATH) -> Report:
     cfg = load_config(config_path)
     report = Report(data_dir=data_dir)
@@ -409,6 +438,7 @@ def validate_export(data_dir: Path, config_path: Path = CONFIG_PATH) -> Report:
     check_poi(poi, cfg, report)
     check_redzones(redzones, cfg, report)
     check_routes(data_dir, cfg, report)
+    check_isochrones(data_dir, report)
     return report
 
 
@@ -416,11 +446,12 @@ def format_report(report: Report, details: int = 5) -> str:
     stats = report.stats
     lines = [f"Выгрузка: {report.data_dir}"]
     lines.append(
-        "Зданий {buildings} · POI {poi} · зон {redzones} · маршрутов {route_files}".format(
+        "Зданий {buildings} · POI {poi} · зон {redzones} · маршрутов {route_files} · изохрон {isochrone_files}".format(
             buildings=stats.get("buildings", 0),
             poi=stats.get("poi", 0),
             redzones=stats.get("redzones", 0),
             route_files=stats.get("route_files", 0),
+            isochrone_files=stats.get("isochrone_files", 0),
         )
     )
     coverage = report.coverage

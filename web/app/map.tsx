@@ -42,6 +42,7 @@ const MAP_THEMES = {
     route: "#5fa86b",
     poiGreen: "#059669",
     poiMetro: "#e11d48",
+    iso: "#2563eb",
     pill: "bg-white/90 text-slate-700",
     redPill: "bg-white/95 text-red-700",
     redIcon: "#b91c1c",
@@ -61,6 +62,7 @@ const MAP_THEMES = {
     route: "#5cc8be",
     poiGreen: "#7fb98a",
     poiMetro: "#ef8fa4",
+    iso: "#38bdf8",
     pill: "bg-slate-800/90 text-slate-200",
     redPill: "bg-slate-800/95 text-red-300",
     redIcon: "#f87171",
@@ -114,6 +116,10 @@ type BuildingRoutes = {
 };
 type FlatRoutes = Record<string, { minutes: number; coordinates: Position[] }>;
 const ROUTES_URL = (id: number) => `data/routes/${id}.json`;
+// Изохроны 5/10/15 минут — файл на здание, грузится при выборе (как routes/).
+type IsoGeometry = { type: "Polygon" | "MultiPolygon"; coordinates: unknown };
+type IsochroneData = Record<string, IsoGeometry>;
+const ISOCHRONE_URL = (id: number) => `data/isochrones/${id}.json`;
 type GFeature<P> = { type: "Feature"; geometry: Geometry; properties: P };
 type GCollection<P> = { type: "FeatureCollection"; features: GFeature<P>[] };
 
@@ -312,6 +318,11 @@ export default function Map() {
   // undefined = не запрашивали, null = файла нет (не повторять), иначе маршруты.
   const routesRef = useRef<FlatRoutes | null>(null);
   const routesCacheRef = useRef<Record<number, FlatRoutes | null>>({});
+  // Изохрона: минуты выбраны в карточке, геометрия — по файлу дома.
+  const [contour, setContour] = useState<number | null>(null);
+  const isoCacheRef = useRef<Record<number, IsochroneData | null>>({});
+  const isoGeomRef = useRef<IsoGeometry | null>(null);
+  const setIsoSourceRef = useRef<((geom: IsoGeometry | null) => void) | null>(null);
   // Реальная тема для карты доступна сразу (карта — клиент-only).
   const themeRef = useRef<Theme>(initialTheme());
 
@@ -331,6 +342,43 @@ export default function Map() {
     visibleRef.current = visible;
     applyVisibilityRef.current?.(visible);
   }, [visible]);
+
+  // Изохрона выбранного дома: файл грузим один раз, кэшируем по id.
+  // null в contour — зона выключена; смена дома на том же времени просто
+  // перерисовывает другую геометрию.
+  useEffect(() => {
+    let cancelled = false;
+    const id = selected?.id ?? null;
+    const apply = (data: IsochroneData | null) => {
+      if (cancelled) return;
+      const geom =
+        id !== null && contour !== null ? data?.[String(contour)] ?? null : null;
+      isoGeomRef.current = geom;
+      setIsoSourceRef.current?.(geom);
+    };
+    if (id === null || contour === null) {
+      apply(null);
+      return;
+    }
+    const cached = isoCacheRef.current[id];
+    if (cached !== undefined) {
+      apply(cached);
+      return;
+    }
+    fetch(ISOCHRONE_URL(id))
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: IsochroneData | null) => {
+        isoCacheRef.current[id] = data;
+        apply(data);
+      })
+      .catch(() => {
+        isoCacheRef.current[id] = null;
+        apply(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected?.id, contour]);
 
   // После монтирования синхронизируемся с localStorage (антфлеш-скрипт
   // в layout уже выставил data-theme; здесь подхватываем UI).
@@ -495,6 +543,10 @@ export default function Map() {
             buildings: { type: "geojson", data: buildings, promoteId: "id" },
             redzones: { type: "geojson", data: redzones },
             routes: { type: "geojson", data: routesData },
+            isochrone: {
+              type: "geojson",
+              data: { type: "FeatureCollection", features: [] },
+            },
           },
           layers: [
             {
@@ -548,6 +600,26 @@ export default function Map() {
                 "line-width": 1.5,
                 "line-opacity": 0.45,
                 "line-dasharray": [3, 3],
+              },
+            },
+            {
+              // Изохрона — под зданиями, чтобы 3D-дома не перекрывались.
+              id: "isochrone-fill",
+              type: "fill",
+              source: "isochrone",
+              paint: {
+                "fill-color": palette.iso,
+                "fill-opacity": 0.14,
+              },
+            },
+            {
+              id: "isochrone-line",
+              type: "line",
+              source: "isochrone",
+              paint: {
+                "line-color": palette.iso,
+                "line-width": 1.5,
+                "line-opacity": 0.8,
               },
             },
             {
@@ -624,6 +696,16 @@ export default function Map() {
       }
 
       map.addControl(new maplibregl.NavigationControl(), "top-right");
+
+      // Источник изохроны: максимум одна фича (полигон выбранного времени).
+      setIsoSourceRef.current = (geom) => {
+        const src = map?.getSource("isochrone") as maplibregl.GeoJSONSource | null;
+        if (!src) return;
+        src.setData({
+          type: "FeatureCollection",
+          features: geom ? [{ type: "Feature", properties: {}, geometry: geom }] : [],
+        } as never);
+      };
       map.on("error", (e) => console.error("map error:", e.error ?? e));
       (window as unknown as { __map?: maplibregl.Map }).__map = map;
 
@@ -753,6 +835,8 @@ export default function Map() {
         map.setPaintProperty("redzones-road", "line-color", p.redzone);
         map.setPaintProperty("redzones-rail", "line-color", p.redzone);
         map.setPaintProperty("routes-line", "line-color", p.route);
+        map.setPaintProperty("isochrone-fill", "fill-color", p.iso);
+        map.setPaintProperty("isochrone-line", "line-color", p.iso);
         rebuildOverlays(selectedRef.current, visibleRef.current);
       };
 
@@ -878,6 +962,7 @@ export default function Map() {
       map.on("load", () => {
         applyThemeRef.current?.(themeRef.current);
         applyVisibilityRef.current?.(visibleRef.current);
+        setIsoSourceRef.current?.(isoGeomRef.current);
         // Публичная ссылка «Отправить клиенту»: ?building=<osm_id>
         const param = new URLSearchParams(window.location.search).get("building");
         if (param !== null) {
@@ -936,7 +1021,12 @@ export default function Map() {
         items={searchItems}
         onSelect={(id) => selectRef.current?.(id)}
       />
-      <BuildingSheet building={selected} onClose={() => deselectRef.current?.()} />
+      <BuildingSheet
+        building={selected}
+        onClose={() => deselectRef.current?.()}
+        contour={contour}
+        onContourChange={setContour}
+      />
       {deepLinkError && (
         <div className="absolute bottom-6 left-1/2 z-20 w-[min(92vw,420px)] -translate-x-1/2 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800 shadow-xl dark:bg-amber-950/80 dark:text-amber-200">
           <div className="flex items-start gap-2">

@@ -158,9 +158,13 @@ type Snap = "min" | "mid" | "max";
 export default function BuildingSheet({
   building,
   onClose,
+  contour,
+  onContourChange,
 }: {
   building: SelectedBuilding | null;
   onClose: () => void;
+  contour: number | null;
+  onContourChange: (minutes: number | null) => void;
 }) {
   const touchStartY = useRef<number | null>(null);
   const [snap, setSnap] = useState<Snap>("mid");
@@ -377,6 +381,29 @@ export default function BuildingSheet({
                     </span>
                   </div>
                 )}
+                <div className="mt-2 flex items-center gap-1.5">
+                  <span className="text-xs text-slate-400 dark:text-slate-500">
+                    Зона пешком:
+                  </span>
+                  {[5, 10, 15].map((minutes) => {
+                    const active = contour === minutes;
+                    return (
+                      <button
+                        key={minutes}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => onContourChange(active ? null : minutes)}
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium transition ${
+                          active
+                            ? "bg-blue-600 text-white"
+                            : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                        }`}
+                      >
+                        {minutes} мин
+                      </button>
+                    );
+                  })}
+                </div>
                 <button
                   type="button"
                   onClick={onClose}

@@ -240,5 +240,40 @@ class TestWarnings(ValidatorTestCase):
         self.assertIn("unknown_redzone", self.codes(report, "warning"))
 
 
+class TestIsochrones(ValidatorTestCase):
+    def iso_geom(self) -> dict:
+        return {
+            "type": "Polygon",
+            "coordinates": [[[37.56, 55.76], [37.561, 55.76],
+                             [37.561, 55.761], [37.56, 55.76]]],
+        }
+
+    def write_iso(self, payload: dict) -> Path:
+        data = write_export(self.root)
+        iso = data / "isochrones"
+        iso.mkdir()
+        (iso / "1.json").write_text(json.dumps(payload), encoding="utf-8")
+        return data
+
+    def test_valid_isochrones(self):
+        data = self.write_iso({"5": self.iso_geom(), "10": self.iso_geom(),
+                               "15": self.iso_geom()})
+        report = validate_export(data, CONFIG_PATH)
+        self.assertEqual(report.critical(), [])
+        self.assertEqual(report.stats["isochrone_files"], 1)
+
+    def test_missing_contour_is_warning(self):
+        data = self.write_iso({"5": self.iso_geom()})
+        report = validate_export(data, CONFIG_PATH)
+        self.assertIn("bad_contours", self.codes(report, "warning"))
+
+    def test_outside_moscow_is_critical(self):
+        bad = {"type": "Polygon",
+               "coordinates": [[[30.0, 50.0], [30.1, 50.0], [30.1, 50.1], [30.0, 50.0]]]}
+        data = self.write_iso({"5": bad, "10": self.iso_geom(), "15": self.iso_geom()})
+        report = validate_export(data, CONFIG_PATH)
+        self.assertIn("outside_moscow", self.codes(report, "critical"))
+
+
 if __name__ == "__main__":
     unittest.main()
