@@ -37,6 +37,7 @@ DB_DSN = "host=localhost port=5432 dbname=okrug user=okrug password=okrug_local_
 DISTRICT = "Пресненский"
 TRANSPORT_NEAR_M = 400.0
 TRANSPORT_FAR_M = 1200.0
+CONSTRUCTION_CONFIRM_M = 150.0
 ROAD_RADIUS = float(CONFIG["penalties"]["road"]["radius_m"])
 ROAD_BAND_M = 10.0
 
@@ -71,6 +72,29 @@ def official_entrances() -> list[tuple[float, float]]:
 def nearest_m(lat: float, lon: float, points: list[tuple[float, float]]) -> float:
     return min((haversine_m(lat, lon, plat, plon) for plat, plon in points),
                default=float("inf"))
+
+
+def official_construction() -> list[tuple[float, float]]:
+    """Точки официальных объектов «в строительстве» (набор 2941)."""
+    points: list[tuple[float, float]] = []
+    skip = 0
+    while True:
+        page = features(2941, top=1000, skip=skip).get("features") or []
+        for feature in page:
+            attributes = (feature.get("properties") or {}).get("attributes") or {}
+            if DISTRICT not in str(attributes.get("District", "")):
+                continue
+            if "в строительстве" not in str(attributes.get("ObjectStatus", "")):
+                continue
+            coordinates = (feature.get("geometry") or {}).get("coordinates") or []
+            if not coordinates:
+                continue
+            point = coordinates[0] if isinstance(coordinates[0], (list, tuple)) else coordinates
+            points.append((float(point[1]), float(point[0])))
+        if len(page) < 1000:
+            break
+        skip += 1000
+    return points
 
 
 def spread(items: list[dict], count: int) -> list[dict]:
@@ -177,16 +201,39 @@ def main() -> int:
 
     zones = [b for b in buildings
              if (penalty_entry(b, "construction") or {}).get("penalty", 0) < -0.1]
-    for building in spread(sorted(zones, key=lambda b: b["building_id"]), 3):
+    construction_points = official_construction()
+    for building in zones:
+        building["official_construction_m"] = nearest_m(
+            building["lat"], building["lon"], construction_points)
+    confirmed = sorted(
+        [b for b in zones if b["official_construction_m"] <= CONSTRUCTION_CONFIRM_M],
+        key=lambda b: b["official_construction_m"],
+    )
+    chosen = spread(confirmed, 3)
+    if len(chosen) < 3:
+        rest = sorted(
+            [b for b in zones if b not in confirmed],
+            key=lambda b: b["building_id"],
+        )
+        chosen += spread(rest, 3 - len(chosen))
+    for building in chosen:
         entry = penalty_entry(building, "construction") or {}
-        add(building, "construction", "penalty", "positive",
-            float(entry["distance_m"]), "osm/zones", "medium", True, 5.0)
+        official_m = building.get("official_construction_m")
+        confirmed_fact = official_m is not None and official_m <= CONSTRUCTION_CONFIRM_M
+        add(
+            building, "construction", "penalty", "positive",
+            float(entry["distance_m"]),
+            "data.mos.ru/2941 + osm/zones" if confirmed_fact else "osm/zones",
+            "high" if confirmed_fact else "medium",
+            True, 5.0,
+        )
 
     payload = {
         "generated_at": today,
-        "note": ("Якоря регрессии. Независимый источник только у транспорта "
-                 "(официальные входы метро). Остальные факты пока из OSM "
-                 "и помечены medium."),
+        "note": ("Якоря регрессии. Независимые источники: входы метро "
+                 "(data.mos.ru/624) и стройка (data.mos.ru/2941). "
+                 "Магистраль — пока OSM (medium). Машиночитаемого реестра "
+                 "промзон на портале нет: industrial в факты не включён."),
         "facts": facts,
     }
     OUT.parent.mkdir(parents=True, exist_ok=True)

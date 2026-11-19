@@ -1,6 +1,6 @@
 {
   "generated_at": "2026-11-19",
-  "note": "Якоря регрессии. Независимый источник только у транспорта (официальные входы метро). Остальные факты пока из OSM и помечены medium.",
+  "note": "Якоря регрессии. Независимые источники: входы метро (data.mos.ru/624) и стройка (data.mos.ru/2941). Магистраль — пока OSM (medium). Машиночитаемого реестра промзон на портале нет: industrial в факты не включён.",
   "facts": [
     {
       "building_id": 264185702,
@@ -198,42 +198,42 @@
       "retrieved_at": "2026-11-19"
     },
     {
-      "building_id": 183825,
-      "address": "Мерзляковский переулок, 15",
+      "building_id": 477513380,
+      "address": "Большая Бронная улица, 2/6",
       "factor": "construction",
       "type": "penalty",
       "expect": "positive",
-      "distance_m": 244.2,
+      "distance_m": 76.1,
       "tolerance_m": 5.0,
       "check_distance": true,
-      "source": "osm/zones",
-      "confidence": "medium",
+      "source": "data.mos.ru/2941 + osm/zones",
+      "confidence": "high",
       "retrieved_at": "2026-11-19"
     },
     {
-      "building_id": 78417384,
-      "address": "Большой Предтеченский переулок, 30 с1",
+      "building_id": 68639942,
+      "address": "Большой Козихинский переулок, 5 с3",
       "factor": "construction",
       "type": "penalty",
       "expect": "positive",
-      "distance_m": 225.6,
+      "distance_m": 74.9,
       "tolerance_m": 5.0,
       "check_distance": true,
-      "source": "osm/zones",
-      "confidence": "medium",
+      "source": "data.mos.ru/2941 + osm/zones",
+      "confidence": "high",
       "retrieved_at": "2026-11-19"
     },
     {
-      "building_id": 464126882,
-      "address": null,
+      "building_id": 62274242,
+      "address": "Малая Грузинская улица, 33",
       "factor": "construction",
       "type": "penalty",
       "expect": "positive",
-      "distance_m": 79.9,
+      "distance_m": 85.5,
       "tolerance_m": 5.0,
       "check_distance": true,
-      "source": "osm/zones",
-      "confidence": "medium",
+      "source": "data.mos.ru/2941 + osm/zones",
+      "confidence": "high",
       "retrieved_at": "2026-11-19"
     }
   ]
