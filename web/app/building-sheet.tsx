@@ -155,6 +155,57 @@ function Bars({
 
 type Snap = "min" | "mid" | "max";
 
+function ScoreChip({
+  label,
+  value,
+  max,
+}: {
+  label: string;
+  value: number;
+  max: number;
+}) {
+  const positive = value > 0;
+  const width = Math.max(6, Math.min(100, (Math.abs(value) / max) * 100));
+  return (
+    <div
+      className={`rounded-xl px-2 py-1.5 ${
+        positive
+          ? "bg-emerald-50 dark:bg-emerald-950/40"
+          : "bg-red-50 dark:bg-red-950/50"
+      }`}
+    >
+      <div className="flex items-baseline justify-between gap-1">
+        <span
+          className={`truncate text-[11px] font-medium ${
+            positive
+              ? "text-emerald-900 dark:text-emerald-200"
+              : "text-red-900/80 dark:text-red-200/80"
+          }`}
+        >
+          {label}
+        </span>
+        <span
+          className={`shrink-0 text-[11px] font-bold ${
+            positive
+              ? "text-emerald-700 dark:text-emerald-300"
+              : "text-red-700 dark:text-red-300"
+          }`}
+        >
+          {formatSigned(value)}
+        </span>
+      </div>
+      <div className="mt-1 h-1 overflow-hidden rounded-full bg-black/5 dark:bg-white/10">
+        <div
+          className={`h-full rounded-full ${
+            positive ? "bg-emerald-400" : "bg-red-400"
+          }`}
+          style={{ width: `${width}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function BuildingSheet({
   building,
   onClose,
@@ -215,26 +266,24 @@ export default function BuildingSheet({
       value: entry.bonus,
     }));
 
-  // Компактная разбивка по макету: 3 бонуса + 3 штрафа с полосками.
-  const chipItems = [
-    ...bonusEntries
-      .filter(([, entry]) => entry.bonus > 0.005)
-      .slice(0, 3)
-      .map(([key, entry]) => ({
-        key: `b-${key}`,
-        label: BONUS_LABELS[key] ?? key,
-        value: entry.bonus,
-      })),
-    ...penaltyEntries
-      .filter(([, entry]) => entry.penalty < -0.005)
-      .slice(0, 3)
-      .map(([key, entry]) => ({
-        key: `p-${key}`,
-        label: PENALTY_LABELS[key] ?? key,
-        value: entry.penalty,
-      })),
-  ];
-  const chipMax = Math.max(1, ...chipItems.map((item) => Math.abs(item.value)));
+  // Компактная разбивка: плюсы и минусы раздельно (не смешиваем цвета).
+  const visibleBonuses = bonusEntries.filter(([, entry]) => entry.bonus > 0.005);
+  const visiblePenalties = penaltyEntries.filter(([, entry]) => entry.penalty < -0.005);
+  const bonusChips = visibleBonuses.slice(0, 3).map(([key, entry]) => ({
+    key: `b-${key}`,
+    label: BONUS_LABELS[key] ?? key,
+    value: entry.bonus,
+  }));
+  const penaltyChips = visiblePenalties.slice(0, 3).map(([key, entry]) => ({
+    key: `p-${key}`,
+    label: PENALTY_LABELS[key] ?? key,
+    value: entry.penalty,
+  }));
+  const bonusMax = Math.max(1, ...bonusChips.map((item) => Math.abs(item.value)));
+  const penaltyMax = Math.max(1, ...penaltyChips.map((item) => Math.abs(item.value)));
+  const hiddenCount =
+    Math.max(0, visibleBonuses.length - 3) +
+    Math.max(0, visiblePenalties.length - 3);
 
   const severeFlags = redFlags.filter(([, entry]) => entry.penalty < SEVERE_PENALTY);
 
@@ -470,55 +519,76 @@ export default function BuildingSheet({
                 </div>
               </div>
 
-              {chipItems.length > 0 && (
-                <div className="mt-3 grid grid-cols-2 gap-1.5">
-                  {chipItems.map((item) => {
-                    const positive = item.value > 0;
-                    const width = Math.max(
-                      6,
-                      Math.min(100, (Math.abs(item.value) / chipMax) * 100),
-                    );
-                    return (
-                      <div
+              {bonusChips.length > 0 && (
+                <div className="mt-3">
+                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-700/80 dark:text-emerald-300/80">
+                    Плюсы
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {bonusChips.map((item) => (
+                      <ScoreChip
                         key={item.key}
-                        className={`rounded-xl px-2 py-1.5 ${
-                          positive
-                            ? "bg-emerald-50 dark:bg-emerald-950/40"
-                            : "bg-red-50 dark:bg-red-950/50"
-                        }`}
-                      >
-                        <div className="flex items-baseline justify-between gap-1">
-                          <span
-                            className={`truncate text-[11px] font-medium ${
-                              positive
-                                ? "text-emerald-900 dark:text-emerald-200"
-                                : "text-red-900/80 dark:text-red-200/80"
-                            }`}
-                          >
-                            {item.label}
-                          </span>
-                          <span
-                            className={`shrink-0 text-[11px] font-bold ${
-                              positive
-                                ? "text-emerald-700 dark:text-emerald-300"
-                                : "text-red-700 dark:text-red-300"
-                            }`}
-                          >
-                            {formatSigned(item.value)}
-                          </span>
-                        </div>
-                        <div className="mt-1 h-1 overflow-hidden rounded-full bg-black/5 dark:bg-white/10">
-                          <div
-                            className={`h-full rounded-full ${
-                              positive ? "bg-emerald-400" : "bg-red-400"
-                            }`}
-                            style={{ width: `${width}%` }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
+                        label={item.label}
+                        value={item.value}
+                        max={bonusMax}
+                      />
+                    ))}
+                  </div>
                 </div>
+              )}
+              {penaltyChips.length > 0 && (
+                <div className="mt-2">
+                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-red-700/80 dark:text-red-300/80">
+                    Минусы
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {penaltyChips.map((item) => (
+                      <ScoreChip
+                        key={item.key}
+                        label={item.label}
+                        value={item.value}
+                        max={penaltyMax}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+              {hiddenCount > 0 && (
+                <div className="mt-1 text-[10px] text-slate-400 dark:text-slate-500">
+                  Ещё {hiddenCount} — в «Почему такой балл»
+                </div>
+              )}
+
+              {breakdown && (
+                <details className="mt-3 rounded-2xl bg-slate-50 px-4 py-3 dark:bg-slate-800/60">
+                  <summary className="cursor-pointer text-sm font-semibold text-slate-700 dark:text-slate-200">
+                    Почему такой балл
+                  </summary>
+                  <div className="mt-3 space-y-3">
+                    <Bars
+                      title="Бонусы"
+                      rows={bonusRows}
+                      colorClass="bg-emerald-400"
+                      trackValue={(v) => formatSigned(v)}
+                    />
+                    <Bars
+                      title="Штрафы"
+                      rows={penaltyRows}
+                      colorClass="bg-red-400"
+                      trackValue={(v) => formatSigned(v)}
+                    />
+                    <div className="border-t border-slate-200 pt-2 text-xs leading-relaxed text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                      База {base.toFixed(1)} + бонусы {bonusSum.toFixed(1)} − штрафы{" "}
+                      {Math.abs(penaltySum).toFixed(1)} = {rawTotal.toFixed(1)}
+                      {clamped && building.index !== null && (
+                        <span className="font-semibold text-slate-700 dark:text-slate-200">
+                          {" "}
+                          → ограничено {building.index.toFixed(1)} (шкала 0…10)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </details>
               )}
 
               {redFlags.length > 0 ? (
@@ -585,38 +655,6 @@ export default function BuildingSheet({
                   ))}
                 </ul>
               </div>
-
-              {breakdown && (
-                <details className="mt-3 rounded-2xl bg-slate-50 px-4 py-3 dark:bg-slate-800/60">
-                  <summary className="cursor-pointer text-sm font-semibold text-slate-700 dark:text-slate-200">
-                    Почему такой балл
-                  </summary>
-                  <div className="mt-3 space-y-3">
-                    <Bars
-                      title="Бонусы"
-                      rows={bonusRows}
-                      colorClass="bg-emerald-400"
-                      trackValue={(v) => formatSigned(v)}
-                    />
-                    <Bars
-                      title="Штрафы"
-                      rows={penaltyRows}
-                      colorClass="bg-red-400"
-                      trackValue={(v) => formatSigned(v)}
-                    />
-                    <div className="border-t border-slate-200 pt-2 text-xs leading-relaxed text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                      База {base.toFixed(1)} + бонусы {bonusSum.toFixed(1)} − штрафы{" "}
-                      {Math.abs(penaltySum).toFixed(1)} = {rawTotal.toFixed(1)}
-                      {clamped && building.index !== null && (
-                        <span className="font-semibold text-slate-700 dark:text-slate-200">
-                          {" "}
-                          → ограничено {building.index.toFixed(1)} (шкала 0…10)
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </details>
-              )}
 
               <button
                 type="button"
