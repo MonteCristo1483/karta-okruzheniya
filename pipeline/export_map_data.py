@@ -30,7 +30,24 @@ SELECT b.osm_id,
        h.height,
        s.index,
        s.breakdown,
-       b.addr_street,
+       COALESCE(
+           NULLIF(b.addr_street, ''),
+           -- Улица потеряна в OSM, но номер дома есть: берём улицу у
+           -- соседнего дома с тем же номером в радиусе 30 м (Пресня,
+           -- «улица Брянский Пост, 16»). Формально это вывод, а не факт,
+           -- поэтому радиус маленький и номер должен совпадать.
+           (
+               SELECT n.addr_street
+               FROM buildings n
+               WHERE n.addr_street IS NOT NULL AND n.addr_street <> ''
+                 AND n.addr_housenumber IS NOT NULL
+                 AND b.addr_housenumber IS NOT NULL
+                 AND split_part(n.addr_housenumber, ' ', 1) = split_part(b.addr_housenumber, ' ', 1)
+                 AND ST_DWithin(n.geometry::geography, b.geometry::geography, 30)
+               ORDER BY n.geometry <-> b.geometry
+               LIMIT 1
+           )
+       ) AS addr_street,
        b.addr_housenumber,
        y.building_year
 FROM buildings_presnya b
