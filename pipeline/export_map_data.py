@@ -149,9 +149,18 @@ def main() -> int:
                 "geometry": json.loads(geom_json),
             }
 
+    breakdown_by_id = {
+        feature["properties"]["id"]: feature["properties"]["breakdown"]
+        for feature in buildings
+    }
     routes_dir = OUT_DIR / "routes"
     routes_dir.mkdir(parents=True, exist_ok=True)
     for building_id, entry in per_building.items():
+        # breakdown нужен только для выбранного дома, поэтому он лежит
+        # рядом с categories в routes/<id>.json, а не в тайлах (шаг B1).
+        breakdown = breakdown_by_id.get(building_id)
+        if breakdown is not None:
+            entry["breakdown"] = breakdown
         (routes_dir / f"{building_id}.json").write_text(
             json.dumps(entry, ensure_ascii=False, separators=(",", ":")),
             encoding="utf-8",
