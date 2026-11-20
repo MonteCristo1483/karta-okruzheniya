@@ -80,6 +80,10 @@ async function networkFirst(request, bypassHttpCache) {
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (event.request.method !== "GET" || url.origin !== self.location.origin) return;
+  // PMTiles — мимо service worker. MapLibre тянет тайлы Range-запросами,
+  // ответ 206 нельзя положить в Cache API (cache.put бросает исключение),
+  // а после деплоя клиент должен видеть свежий файл. Пусть идёт напрямую.
+  if (url.pathname.endsWith(".pmtiles")) return;
   // Данные — тоже network-first: файл по тому же URL перезаписывается
   // при деплое, stale-first отдавал старые geojson до следующего захода.
   const isData = url.pathname.startsWith(BASE + "/data/");
