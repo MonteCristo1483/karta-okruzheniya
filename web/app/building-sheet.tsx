@@ -407,7 +407,7 @@ export default function BuildingSheet({
     >
       <div
         id="building-sheet"
-        className="pointer-events-auto mx-auto flex h-full w-full max-w-md flex-col rounded-t-3xl bg-white/95 shadow-2xl backdrop-blur dark:bg-slate-900/95 md:mx-0 md:h-full md:max-w-none md:rounded-2xl"
+        className="pointer-events-auto mx-auto flex h-full w-full max-w-md flex-col rounded-t-3xl bg-white/95 shadow-2xl backdrop-blur dark:bg-slate-900/95 md:absolute md:inset-0 md:mx-0 md:h-auto md:max-w-none md:rounded-2xl"
       >
         <div
           className="mx-auto mb-1 mt-2 h-1.5 w-12 shrink-0 touch-none rounded-full bg-slate-200 dark:bg-slate-700 md:hidden"
