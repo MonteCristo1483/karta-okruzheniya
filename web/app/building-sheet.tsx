@@ -399,7 +399,7 @@ export default function BuildingSheet({
 
   return (
     <div
-      className={`pointer-events-none fixed inset-x-0 bottom-0 z-10 transition-[height,transform] duration-300 ease-out ${heightClass} md:left-auto md:inset-y-4 md:right-4 md:h-auto md:w-[420px] ${
+      className={`pointer-events-none fixed inset-x-0 bottom-0 z-10 transition-[height,transform] duration-300 ease-out ${heightClass} md:left-auto md:inset-y-4 md:right-4 md:h-auto md:w-[clamp(340px,38vw,420px)] xl:w-[420px] ${
         building
           ? "translate-y-0"
           : "translate-y-full md:translate-y-0 md:translate-x-[calc(100%+32px)]"
