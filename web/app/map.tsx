@@ -1174,10 +1174,7 @@ export default function Map() {
             `color: ${color}`,
             "line-height: 1",
             "letter-spacing: 0.01em",
-            // Контур по буквам, а не четыре тени: нет «коробки» вокруг слова.
-            `-webkit-text-stroke: 2.4px ${halo}`,
-            "paint-order: stroke fill",
-            `text-shadow: 0 0 2px ${halo}`,
+            `text-shadow: -1.2px -1.2px 0 ${halo}, 1.2px -1.2px 0 ${halo}, -1.2px 1.2px 0 ${halo}, 1.2px 1.2px 0 ${halo}, 0 0 2px ${halo}`,
           ].join(";");
           wrap.append(inner);
           labelMarkers.push(
