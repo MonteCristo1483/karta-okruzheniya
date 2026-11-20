@@ -38,7 +38,7 @@ from mosru_api import features  # noqa: E402
 from routes_valhalla import request_route  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
-DB_DSN = "host=localhost port=5432 dbname=okrug user=okrug password=okrug_local_dev"
+from db import DB_DSN
 METRO_M = 800.0
 ZONE_M = 300.0
 WALK_MIN = 10.0

@@ -29,7 +29,7 @@ import requests
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = ROOT / "config" / "scoring.json"
-DB_DSN = "host=localhost port=5432 dbname=okrug user=okrug password=okrug_local_dev"
+from db import DB_DSN
 VALHALLA = "http://localhost:8002/route"
 WORKERS = 8
 BATCH = 500

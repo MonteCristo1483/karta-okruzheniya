@@ -22,7 +22,7 @@ import psycopg
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT_DIR = ROOT / "web" / "public" / "data"
-DB_DSN = "host=localhost port=5432 dbname=okrug user=okrug password=okrug_local_dev"
+from db import DB_DSN
 
 BUILDINGS_QUERY = """
 SELECT b.osm_id,

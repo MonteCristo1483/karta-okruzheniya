@@ -44,7 +44,7 @@ PROC = ROOT / "data" / "processed"
 REGISTRY_JSON = PROC / "presnya_registry.json"
 HOUSES_JSON = PROC / "presnya_houses.json"
 PASSPORT_CACHE = PROC / "build_year_cache.ndjson"
-DB_DSN = "host=localhost port=5432 dbname=okrug user=okrug password=okrug_local_dev"
+from db import DB_DSN
 
 GIS_ZHKH = "https://dom.gosuslugi.ru"
 BATCH_URL = (

@@ -20,7 +20,7 @@ import psycopg
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from mosru_api import features  # noqa: E402
 
-DB_DSN = "host=localhost port=5432 dbname=okrug user=okrug password=okrug_local_dev"
+from db import DB_DSN
 DATASET = 1465
 DISTRICT = "Пресненский"
 MATCH_M = 100.0
