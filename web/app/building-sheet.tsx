@@ -266,7 +266,7 @@ export default function BuildingSheet({
       value: entry.bonus,
     }));
 
-  // Компактная разбивка: плюсы и минусы раздельно (не смешиваем цвета).
+  // Компактная разбивка: единая сетка плашек ± в 2 колонки.
   const visibleBonuses = bonusEntries.filter(([, entry]) => entry.bonus > 0.005);
   const visiblePenalties = penaltyEntries.filter(([, entry]) => entry.penalty < -0.005);
   const bonusChips = visibleBonuses.slice(0, 3).map(([key, entry]) => ({
@@ -281,6 +281,10 @@ export default function BuildingSheet({
   }));
   const bonusMax = Math.max(1, ...bonusChips.map((item) => Math.abs(item.value)));
   const penaltyMax = Math.max(1, ...penaltyChips.map((item) => Math.abs(item.value)));
+  const scoreChips = [
+    ...bonusChips.map((item) => ({ ...item, max: bonusMax })),
+    ...penaltyChips.map((item) => ({ ...item, max: penaltyMax })),
+  ];
   const hiddenCount =
     Math.max(0, visibleBonuses.length - 3) +
     Math.max(0, visiblePenalties.length - 3);
@@ -440,67 +444,23 @@ export default function BuildingSheet({
             <div
               className={`min-h-0 flex-1 overflow-y-auto px-5 pb-5 md:block md:overflow-y-auto md:pt-4 ${snap === "min" ? "hidden" : ""}`}
             >
-              <div className="relative">
-                <h2 className="truncate pr-8 text-lg font-bold text-slate-800 dark:text-slate-100">
-                  {building.address ?? "Адрес не указан"}
-                </h2>
-                {building.year !== null && (
-                  <div className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
-                    Год постройки — {building.year}
-                    <span
-                      className="ml-1 text-xs text-slate-400 dark:text-slate-500"
-                      title="Источник: ГИС ЖКХ (dom.gosuslugi.ru)"
-                    >
-                      · ГИС ЖКХ
-                    </span>
-                  </div>
-                )}
-                <div className="mt-2">
-                  <div className="mb-1 text-xs text-slate-400 dark:text-slate-500">
-                    Зона пешком
-                  </div>
-                  <div className="flex rounded-full bg-slate-100 p-0.5 dark:bg-slate-800">
-                    {[5, 10, 15].map((minutes) => {
-                      const active = contour === minutes;
-                      return (
-                        <button
-                          key={minutes}
-                          type="button"
-                          aria-pressed={active}
-                          onClick={() => onContourChange(active ? null : minutes)}
-                          className={`flex-1 rounded-full py-1 text-xs font-semibold transition-colors ${
-                            active
-                              ? "bg-emerald-500 text-white shadow-sm"
-                              : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-                          }`}
-                        >
-                          {minutes} мин
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={onClose}
-                  aria-label="Закрыть"
-                  className="absolute -top-1 right-0 rounded-full bg-slate-100 p-1.5 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-                >
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
-                    <path
-                      d="M1 1l12 12M13 1L1 13"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                </button>
-              </div>
-
-              <div className="mt-3 flex items-start gap-3">
-                <Ring index={building.index} />
-                <div className="min-w-0 flex-1 pt-1">
-                  <div className="text-xs text-slate-500 dark:text-slate-400">
+              <div className="relative flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <h2 className="truncate text-lg font-bold text-slate-800 dark:text-slate-100">
+                    {building.address ?? "Адрес не указан"}
+                  </h2>
+                  {building.year !== null && (
+                    <div className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
+                      Год постройки — {building.year}
+                      <span
+                        className="ml-1 text-xs text-slate-400 dark:text-slate-500"
+                        title="Источник: ГИС ЖКХ (dom.gosuslugi.ru)"
+                      >
+                        · ГИС ЖКХ
+                      </span>
+                    </div>
+                  )}
+                  <div className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
                     Индекс окружения
                   </div>
                   <div className="mt-0.5 text-sm font-semibold leading-snug text-slate-800 dark:text-slate-100">
@@ -511,50 +471,37 @@ export default function BuildingSheet({
                       {percentileLine}
                     </div>
                   )}
-                  {breakdown && (
-                    <div className="mt-1 text-[11px] leading-tight text-slate-400 dark:text-slate-500">
-                      Из чего: {base.toFixed(1)} + {bonusSum.toFixed(1)} −{" "}
-                      {Math.abs(penaltySum).toFixed(1)} = {rawTotal.toFixed(1)}
-                      {clamped && building.index !== null
-                        ? ` → ${building.index.toFixed(1)}`
-                        : ""}
-                    </div>
-                  )}
+                </div>
+                <div className="relative shrink-0 pt-2">
+                  <Ring index={building.index} />
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    aria-label="Закрыть"
+                    className="absolute -right-1 -top-1 rounded-full bg-slate-100 p-1.5 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                      <path
+                        d="M1 1l12 12M13 1L1 13"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  </button>
                 </div>
               </div>
 
-              {bonusChips.length > 0 && (
-                <div className="mt-3">
-                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-700/80 dark:text-emerald-300/80">
-                    Плюсы
-                  </div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {bonusChips.map((item) => (
-                      <ScoreChip
-                        key={item.key}
-                        label={item.label}
-                        value={item.value}
-                        max={bonusMax}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-              {penaltyChips.length > 0 && (
-                <div className="mt-2">
-                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-red-700/80 dark:text-red-300/80">
-                    Минусы
-                  </div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {penaltyChips.map((item) => (
-                      <ScoreChip
-                        key={item.key}
-                        label={item.label}
-                        value={item.value}
-                        max={penaltyMax}
-                      />
-                    ))}
-                  </div>
+              {scoreChips.length > 0 && (
+                <div className="mt-3 grid grid-cols-2 gap-1.5">
+                  {scoreChips.map((item) => (
+                    <ScoreChip
+                      key={item.key}
+                      label={item.label}
+                      value={item.value}
+                      max={item.max}
+                    />
+                  ))}
                 </div>
               )}
               {hiddenCount > 0 && (
@@ -563,12 +510,61 @@ export default function BuildingSheet({
                 </div>
               )}
 
+              <div className="mt-3">
+                <div className="mb-1 text-xs text-slate-400 dark:text-slate-500">
+                  Зона пешком
+                </div>
+                <div className="flex rounded-full bg-slate-100 p-0.5 dark:bg-slate-800">
+                  {[5, 10, 15].map((minutes) => {
+                    const active = contour === minutes;
+                    return (
+                      <button
+                        key={minutes}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => onContourChange(active ? null : minutes)}
+                        className={`flex-1 rounded-full py-1 text-xs font-semibold transition-colors ${
+                          active
+                            ? "bg-emerald-500 text-white shadow-sm"
+                            : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                        }`}
+                      >
+                        {minutes} мин
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {breakdown && (
-                <details className="mt-3 rounded-2xl bg-slate-50 px-4 py-3 dark:bg-slate-800/60">
-                  <summary className="cursor-pointer text-sm font-semibold text-slate-700 dark:text-slate-200">
-                    Почему такой балл
+                <details className="group mt-3 rounded-2xl bg-slate-50 px-4 py-3 dark:bg-slate-800/60">
+                  <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-semibold text-slate-700 dark:text-slate-200 [&::-webkit-details-marker]:hidden">
+                    <span>Почему такой балл</span>
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 14 14"
+                      fill="none"
+                      aria-hidden
+                      className="shrink-0 text-slate-400 transition-transform group-open:rotate-180"
+                    >
+                      <path
+                        d="M3.5 5.25 7 8.75l3.5-3.5"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
                   </summary>
                   <div className="mt-3 space-y-3">
+                    <div className="text-[11px] leading-tight text-slate-400 dark:text-slate-500">
+                      Из чего: {base.toFixed(1)} + {bonusSum.toFixed(1)} −{" "}
+                      {Math.abs(penaltySum).toFixed(1)} = {rawTotal.toFixed(1)}
+                      {clamped && building.index !== null
+                        ? ` → ${building.index.toFixed(1)}`
+                        : ""}
+                    </div>
                     <Bars
                       title="Бонусы"
                       rows={bonusRows}
@@ -596,21 +592,39 @@ export default function BuildingSheet({
               )}
 
               {redFlags.length > 0 ? (
-                <div className="mt-3 rounded-2xl bg-red-50 px-4 py-3 dark:bg-red-950/50">
-                  <div className="mb-1.5 flex items-center gap-2 text-sm font-bold text-red-700 dark:text-red-300">
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+                <details className="group mt-3 rounded-2xl bg-red-50 px-4 py-3 dark:bg-red-950/50">
+                  <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-bold text-red-700 dark:text-red-300 [&::-webkit-details-marker]:hidden">
+                    <span className="flex items-center gap-2">
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+                        <path
+                          d="M8 1.5 15 14H1L8 1.5Z"
+                          stroke="currentColor"
+                          strokeWidth="1.4"
+                          strokeLinejoin="round"
+                        />
+                        <path d="M8 6.5v3.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                        <circle cx="8" cy="11.6" r="0.9" fill="currentColor" />
+                      </svg>
+                      Главные минусы
+                    </span>
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 14 14"
+                      fill="none"
+                      aria-hidden
+                      className="shrink-0 text-red-500/80 transition-transform group-open:rotate-180 dark:text-red-300/80"
+                    >
                       <path
-                        d="M8 1.5 15 14H1L8 1.5Z"
+                        d="M3.5 5.25 7 8.75l3.5-3.5"
                         stroke="currentColor"
-                        strokeWidth="1.4"
+                        strokeWidth="1.6"
+                        strokeLinecap="round"
                         strokeLinejoin="round"
                       />
-                      <path d="M8 6.5v3.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-                      <circle cx="8" cy="11.6" r="0.9" fill="currentColor" />
                     </svg>
-                    Главные минусы
-                  </div>
-                  <ul className="space-y-1">
+                  </summary>
+                  <ul className="mt-2 space-y-1">
                     {redFlags.map(([kind, entry]) => (
                       <li
                         key={kind}
@@ -623,7 +637,7 @@ export default function BuildingSheet({
                       </li>
                     ))}
                   </ul>
-                </div>
+                </details>
               ) : (
                 <div className="mt-3 rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
                   Явных красных флагов рядом нет — но проверьте лично.
@@ -649,16 +663,32 @@ export default function BuildingSheet({
                 </div>
               )}
 
-              <div className="mt-3 rounded-2xl bg-slate-50 px-4 py-3 dark:bg-slate-800/60">
-                <div className="mb-1.5 text-sm font-bold text-slate-700 dark:text-slate-200">
-                  Что проверить лично
-                </div>
-                <ul className="list-disc space-y-1 pl-4 text-sm text-slate-600 dark:text-slate-300">
+              <details className="group mt-3 rounded-2xl bg-slate-50 px-4 py-3 dark:bg-slate-800/60">
+                <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-bold text-slate-700 dark:text-slate-200 [&::-webkit-details-marker]:hidden">
+                  <span>Что проверить лично</span>
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 14 14"
+                    fill="none"
+                    aria-hidden
+                    className="shrink-0 text-slate-400 transition-transform group-open:rotate-180"
+                  >
+                    <path
+                      d="M3.5 5.25 7 8.75l3.5-3.5"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </summary>
+                <ul className="mt-2 list-disc space-y-1 pl-4 text-sm text-slate-600 dark:text-slate-300">
                   {checks.slice(0, 3).map((check) => (
                     <li key={check}>{check}</li>
                   ))}
                 </ul>
-              </div>
+              </details>
 
               <button
                 type="button"
