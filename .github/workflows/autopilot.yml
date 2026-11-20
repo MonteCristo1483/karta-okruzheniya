@@ -38,15 +38,24 @@ jobs:
           fetch-depth: 0
 
       # Защита от повторного мержа: после squash-мёржа ветка может быть
-      # пересоздана пушем с тем же содержимым. Пустой дифф против main
-      # означает, что мержить нечего — иначе в истории появится пустой
-      # squash-коммит (#60/#61, #70/#71, #77/#78).
+      # пересоздана пушем с тем же содержимым. Проверяем не историю, а
+      # содержимое: squash переписывает коммиты, поэтому
+      # `git diff origin/main...HEAD` после него не пуст и годится только
+      # как грубый признак. merge-tree показывает, изменит ли слияние
+      # дерево main хоть чем-нибудь; если нет — мержить нечего, иначе в
+      # истории появится пустой squash-коммит (#60/#61, #70/#71, #77/#78).
       - name: Skip if already merged
         id: guard
         run: |
           set -euo pipefail
           git fetch origin main
-          if git diff --quiet origin/main...HEAD; then
+          if git merge-base --is-ancestor HEAD origin/main; then
+            echo "Ветка уже влита в main — выходим."
+            echo "skip=1" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          merged_tree=$(git merge-tree --write-tree origin/main HEAD || true)
+          if [ -n "$merged_tree" ] && git diff --quiet "$merged_tree" origin/main; then
             echo "Ветка не содержит изменений относительно main — выходим."
             echo "skip=1" >> "$GITHUB_OUTPUT"
           fi
