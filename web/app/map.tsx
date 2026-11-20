@@ -169,6 +169,110 @@ const buildingColorExpr = (p: Palette, s: ColorStops | null) =>
       : ["step", ["get", "index"], p.low, 5, p.mid, 7, p.high],
   ] as never;
 
+// ── Окна на фасадах: pattern-текстуры, сгенерированные в runtime ─────────
+// Гипотеза: fill-extrusion-pattern в MapLibre 6 — data-driven (style spec:
+// cross-faded-data-driven), поэтому текстуру можно выбирать по ступени
+// индекса. Файлов и спрайт-хоста нет: 64×64 canvas → map.addImage.
+// Текстура — база ступени + светлые окна с сеткой этажей.
+const FACADE_SIZE = 96;
+const FACADE_STEPS = ["vlow", "low", "mid", "high", "vhigh"] as const;
+type FacadeStep = (typeof FACADE_STEPS)[number];
+type FacadeVariant = FacadeStep | "selected" | "dim";
+
+function parseHex(hex: string): [number, number, number] {
+  const h = hex.replace("#", "");
+  return [
+    parseInt(h.slice(0, 2), 16),
+    parseInt(h.slice(2, 4), 16),
+    parseInt(h.slice(4, 6), 16),
+  ];
+}
+
+function mixHex(a: string, b: string, t: number): string {
+  const [ar, ag, ab] = parseHex(a);
+  const [br, bg, bb] = parseHex(b);
+  const mix = (x: number, y: number) =>
+    Math.round(x + (y - x) * t)
+      .toString(16)
+      .padStart(2, "0");
+  return `#${mix(ar, br)}${mix(ag, bg)}${mix(ab, bb)}`;
+}
+
+// 128×128 на экране (pixelRatio 1): 8×8 ячеек по 16 px, окно 6×9 px.
+// Повтор в экранных пикселях — рисунок одинаково читается на низких
+// и высоких домах, но на мелких зданиях видно 1–2 ряда окон.
+function makeFacadeImage(base: string, theme: Theme, variant: FacadeVariant): ImageData {
+  const size = FACADE_SIZE;
+  const cell = 12;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("canvas 2d недоступен");
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, size, size);
+
+  // Сетка: только шов этажа (вертикальные стыки на дистанции дают муар).
+  const seam = mixHex(base, "#000000", theme === "dark" ? 0.16 : 0.07);
+  ctx.fillStyle = seam;
+  for (let y = 0; y < size; y += cell) ctx.fillRect(0, y + cell - 1, size, 1);
+
+  // Детерминированный «разброс» яркости окон — без Math.random,
+  // чтобы текстура была стабильной между кадрами и темами.
+  let seed =
+    (theme === "dark" ? 7 : 3) +
+    variant.charCodeAt(0) * 131 +
+    (variant.length > 3 ? variant.charCodeAt(variant.length - 1) * 17 : 0);
+  const rnd = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+
+  const lit = theme === "dark" ? "#d7e6ff" : "#ffffff";
+  const weak = variant === "dim" ? 0.18 : theme === "dark" ? 0.26 : 0.34;
+  const strong = variant === "dim" ? 0.26 : theme === "dark" ? 0.5 : 0.58;
+
+  for (let y = 0; y < size; y += cell) {
+    for (let x = 0; x < size; x += cell) {
+      const r = rnd();
+      // Часть окон «не горит» — иначе фасад выглядит шахматкой.
+      const t = r < 0.16 ? weak * 0.45 : weak + (strong - weak) * r;
+      ctx.fillStyle = mixHex(base, lit, t);
+      ctx.fillRect(x + 4, y + 3, 5, 7);
+    }
+  }
+
+  return ctx.getImageData(0, 0, size, size);
+}
+
+const facadeImageName = (theme: Theme, variant: FacadeVariant) =>
+  `facade-${theme}-${variant}`;
+
+// Тот же step, что и у цвета: индексы → ступени. selected/inactive — через
+// feature-state; если pattern его не примет, останется хотя бы индекс,
+// а выбранный дом подсветят outline/glow.
+const facadePatternExpr = (theme: Theme, s: ColorStops | null) =>
+  [
+    "case",
+    ["to-boolean", ["feature-state", "selected"]],
+    facadeImageName(theme, "selected"),
+    ["to-boolean", ["feature-state", "inactive"]],
+    facadeImageName(theme, "dim"),
+    [
+      "step",
+      ["coalesce", ["get", "index"], s?.mid ?? 5],
+      facadeImageName(theme, "vlow"),
+      s?.t1 ?? 5,
+      facadeImageName(theme, "low"),
+      s?.t2 ?? 7,
+      facadeImageName(theme, "mid"),
+      s?.t3 ?? 9,
+      facadeImageName(theme, "high"),
+      s?.t4 ?? 11,
+      facadeImageName(theme, "vhigh"),
+    ],
+  ] as never;
+
 // ── Подложка (локальный GeoJSON из OSM) ──────────────────────────────────
 // Одна фича = один объект; layer: landuse | green | water | river |
 // waterway | road. Свойства намеренно минимальны (class, name).
@@ -1034,6 +1138,25 @@ export default function Map() {
               },
             },
             {
+              // Крыша: тонкая плита в цвет ступени поверх фасада. Нужна
+              // потому, что fill-extrusion-pattern красит и верхнюю грань —
+              // без неё крыши выглядят «в окнах». 0,6 м — как парапет.
+              id: "buildings-roof",
+              type: "fill-extrusion",
+              source: "buildings",
+              paint: {
+                "fill-extrusion-color": buildingColorExpr(palette, colorStops),
+                "fill-extrusion-base": ["coalesce", ["get", "height"], 9],
+                "fill-extrusion-height": [
+                  "+",
+                  ["coalesce", ["get", "height"], 9],
+                  0.6,
+                ],
+                "fill-extrusion-opacity": 0.95,
+                "fill-extrusion-vertical-gradient": false,
+              },
+            },
+            {
               id: "outline-halo",
               type: "line",
               source: "buildings",
@@ -1338,11 +1461,35 @@ export default function Map() {
         rebuildOverlays(selectedRef.current, v);
       };
 
+      const addFacadeImages = (t: Theme) => {
+        if (!map) return;
+        const p = MAP_THEMES[t];
+        const add = (variant: FacadeVariant, baseColor: string) => {
+          const name = facadeImageName(t, variant);
+          if (map?.getImage(name)) return;
+          map?.addImage(name, makeFacadeImage(baseColor, t, variant));
+        };
+        for (const step of FACADE_STEPS) add(step, p[step]);
+        add("selected", p.selected);
+        add("dim", p.dim);
+      };
+
       applyThemeRef.current = (t: Theme) => {
         if (!map || !map.getLayer("buildings")) return;
         const p = MAP_THEMES[t];
         map.setLight(MAP_LIGHT[t]);
         map.setPaintProperty("buildings", "fill-extrusion-color", buildingColorExpr(p, colorStops));
+        addFacadeImages(t);
+        map.setPaintProperty(
+          "buildings",
+          "fill-extrusion-pattern",
+          facadePatternExpr(t, colorStops),
+        );
+        map.setPaintProperty(
+          "buildings-roof",
+          "fill-extrusion-color",
+          buildingColorExpr(p, colorStops),
+        );
         map.setPaintProperty("buildings-shadow", "fill-opacity", BUILDING_SHADOW_OPACITY[t]);
         map.setPaintProperty("outline-halo", "line-color", p.halo);
         map.setPaintProperty("outline-core", "line-color", p.outlineCore);
