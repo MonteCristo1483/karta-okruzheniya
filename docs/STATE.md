@@ -9,6 +9,9 @@
 - Сайт: https://montecristo1483.github.io/karta-okruzheniya/
 - 3 306 домов, 243 POI, 16 530 маршрутов, 3 306 изохрон, 60 тестов.
 - Подложка OSM с улицами и подписями уже есть (PR #36).
+- Визуал: цель — `card-diorama-day.png` + `card-diorama-evening.png`;
+  у `card-dark-neon.png` берём свет/контраст (HUD — только маркетинг).
+  Единый источник — `design/README.md`; `card-light`/`card-dark-city` — опора.
 - Карточка-вердикт с разбивкой, изохроны, МЦД, парки, поиск, `/r/<id>/`.
 - Деплой автоматический: push ветки → autopilot (тесты → PR → merge) →
   Deploy (валидатор + golden set → сборка → публикация).

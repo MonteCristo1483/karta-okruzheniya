@@ -174,6 +174,10 @@ network-first + no-store для HTML и data/* (иначе HTTP-кэш Pages о�
 
 Итого ~12–17 агентских сессий. Порядок можно менять, но 7 — после 1–6.
 
+Визуальный ориентир — `design/README.md`: цель `card-diorama-day` +
+`card-diorama-evening`; у `card-dark-neon` берём свет/контраст, HUD-неон
+остаётся маркетингом; `card-light`/`card-dark-city` — опора.
+
 Этап 1 закрыт 19.11: подложка — локальный GeoJSON из OSM
 (`pipeline/build_basemap.py`, `data/basemap.geojson`), улицы major/minor,
 Москва-река, пруды, парки и землепользование. Подписи улиц — DOM-маркеры
