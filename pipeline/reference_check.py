@@ -25,7 +25,7 @@ import scoring  # noqa: E402
 ROOT = Path(__file__).resolve().parent.parent
 REF_PATH = ROOT / "data" / "reference_set.md"
 OUT_CSV = ROOT / "data" / "reference_check.csv"
-DB_DSN = "host=localhost port=5432 dbname=okrug user=okrug password=okrug_local_dev"
+from db import DB_DSN
 
 FORECAST_RE = re.compile(r"(\d+(?:\.\d+)?)\s*[-–—]\s*(\d+(?:\.\d+)?)")
 SEPARATOR_CHARS = set("-–—: ")

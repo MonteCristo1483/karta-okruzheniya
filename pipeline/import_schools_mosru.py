@@ -30,7 +30,7 @@ import psycopg
 ROOT = Path(__file__).resolve().parent.parent
 CSV_PATH = ROOT / "data" / "raw" / "schools_mosru.csv"
 CACHE_PATH = ROOT / "data" / "processed" / "geocode_cache.sqlite"
-DB_DSN = "host=localhost port=5432 dbname=okrug user=okrug password=okrug_local_dev"
+from db import DB_DSN
 
 SCHOOL_TYPE = "общеобразовательная организация"
 GEOCODE_URL = "https://nominatim.openstreetmap.org/search"

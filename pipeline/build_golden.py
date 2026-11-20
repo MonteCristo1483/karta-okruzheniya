@@ -33,7 +33,7 @@ from mosru_api import features  # noqa: E402
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "data" / "golden" / "facts.json"
 CONFIG = json.loads((ROOT / "config" / "scoring.json").read_text(encoding="utf-8"))
-DB_DSN = "host=localhost port=5432 dbname=okrug user=okrug password=okrug_local_dev"
+from db import DB_DSN
 DISTRICT = "Пресненский"
 TRANSPORT_NEAR_M = 400.0
 TRANSPORT_FAR_M = 1200.0

@@ -19,7 +19,7 @@ import psycopg
 
 PBF_PATH = "data/raw/moscow.osm.pbf"
 GEOJSON_PATH = Path(__file__).resolve().parent / "presnensky.geojson"
-DB_DSN = "host=localhost port=5432 dbname=okrug user=okrug password=okrug_local_dev"
+from db import DB_DSN
 
 RELATION_ID = 1275551
 
