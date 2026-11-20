@@ -53,6 +53,29 @@ jobs:
       - name: Check golden facts
         run: python3 pipeline/check_golden.py web/public/data
 
+      # Тайлы собираются из уже проверенных данных. Готового образа нет
+      # (ghcr.io/felt/tippecanoe недоступен), поэтому tippecanoe 2.79.0
+      # собирается из исходников — ~2 минуты на ubuntu-раннере.
+      - name: Build tippecanoe image
+        run: docker build -f pipeline/docker/tippecanoe.Dockerfile -t karta-tippecanoe:2.79.0 .
+
+      # PMTiles + компактный buildings-index.json. Оба артефакта gitignored
+      # и попадают на прод только внутри dist. --without-breakdown — вариант,
+      # принятый в B1: breakdown (64% веса) клиент берёт из routes/<id>.json,
+      # в тайлах остаются id/index/height/address/year (761 КБ вместо 2,10 МБ).
+      - name: Build tiles
+        run: python3 pipeline/build_tiles.py --without-breakdown
+
+      # Клиент запрашивает стабильное имя data/tiles/buildings.pmtiles.
+      # Хеш в имени нужен был для кэша, но дубль на 2 МБ на gh-pages не нужен.
+      - name: Name tiles for the client
+        run: |
+          cd web/public/data/tiles
+          tile=$(ls buildings-*.pmtiles | head -n 1)
+          test -n "$tile"
+          mv "$tile" buildings.pmtiles
+          ls -l buildings.pmtiles
+
       - name: Install
         working-directory: web
         run: npm ci
@@ -77,3 +100,22 @@ jobs:
           publish_dir: ./web/dist
           publish_branch: gh-pages
           enable_jekyll: false
+
+      # Range-запросы к тайлам — единственный способ убедиться, что CDN
+      # отдаёт 206, а не 200 с целым файлом (бюджет первого экрана).
+      # Предупреждение, а не падение: сайт уже опубликован, а gh-pages
+      # отдаёт файлы с задержкой до пары минут.
+      - name: Smoke test tiles (Range 206)
+        continue-on-error: true
+        run: |
+          url="https://montecristo1483.github.io/karta-okruzheniya/data/tiles/buildings.pmtiles"
+          for attempt in 1 2 3; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 -r 0-99 "$url" || true)
+            echo "attempt $attempt: HTTP $code"
+            if [ "$code" = "206" ]; then
+              exit 0
+            fi
+            sleep 20
+          done
+          echo "::error::tiles smoke test: expected 206, got '$code'"
+          exit 1
