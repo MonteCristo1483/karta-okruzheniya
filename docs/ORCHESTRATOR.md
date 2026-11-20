@@ -156,9 +156,9 @@ node shot.mjs "<URL>" "<out.png>" dark 390 844
 
 1. ~~Панель слоёв: чипы на десктопе~~ — сделано 20.11, PR #51 и #53.
 2. ~~UI-долги: зум под карточкой и контраст чипов~~ — PR #56.
-3. **PMTiles, шаг A (замер):** `pipeline/build_tiles.py` +
-   `buildings-index.json`, прод не меняется. Бриф —
-   `docs/tasks/2026-11-20-pmtiles-a-measure.md`.
+3. **PMTiles, шаг B1 (breakdown в routes):** бриф —
+   `docs/tasks/2026-11-20-pmtiles-b1-breakdown.md`. Дальше B2 (клиент)
+   и C (SW/CI).
 4. **Окна/LOD:** промежуточный режим не делаем, пока обзор 15.35 чистый.
 5. **Данные/метрики:** источник/дата/confidence в карточке.
 
