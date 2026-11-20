@@ -109,6 +109,31 @@ jobs:
       - name: Disable Jekyll
         run: touch web/dist/.nojekyll
 
+      # Смоук-тесты интерфейса до публикации: если страница не открывается,
+      # поиск/тема/слои сломаны или /r/ не отдаётся — деплой падает, и на
+      # gh-pages остаётся предыдущая рабочая версия. Браузер кэшируется по
+      # версии Playwright, чтобы не тянуть ~130 МБ каждый деплой.
+      - name: Playwright version
+        id: playwright
+        working-directory: web
+        run: |
+          version=$(node -e "console.log(require('./node_modules/@playwright/test/package.json').version)")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      - name: Install Playwright chromium
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+
+      - name: Smoke tests
+        working-directory: web
+        run: npm run e2e
+
       - name: Publish to gh-pages
         uses: peaceiris/actions-gh-pages@329bcc8f12caed2cefe5a5b80781499a6f3b361b # v4
         with:
