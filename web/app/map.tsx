@@ -60,8 +60,9 @@ const MAP_THEMES = {
     dim: "#b8c4d4",
     halo: "#3ee585",
     outlineCore: "#1fb868",
-    redzone: "#ec705a",
-    route: "#2eb87e",
+    redzone: "#e2604a",
+    route: "#12b3a6",
+    routeCore: "#eafff5",
     poiGreen: "#16a36e",
     poiMetro: "#e11d48",
     iso: "#3b82f6",
@@ -95,14 +96,15 @@ const MAP_THEMES = {
     high: "#3f5c70",
     vhigh: "#4f7d68",
     selected: "#6fe0a6",
-    selectedRoof: "#9cebc2",
+    selectedRoof: "#6fd3a2",
     // Тёмную тему не переделываем: тело выбранного дома как раньше.
     selectedBody: "#6fe0a6",
     dim: "#2a3340",
     halo: "#7fe0aa",
     outlineCore: "#8ef0b4",
-    redzone: "#b36459",
-    route: "#5cc8be",
+    redzone: "#ff8a7a",
+    route: "#5fe0d0",
+    routeCore: "#f2fffb",
     poiGreen: "#7fb98a",
     poiMetro: "#ef8fa4",
     iso: "#38bdf8",
@@ -1242,9 +1244,9 @@ export default function Map() {
               layout: { "line-cap": "round", "line-join": "round" },
               paint: {
                 "line-color": palette.redzone,
-                "line-width": 11,
-                "line-blur": 11,
-                "line-opacity": 0.18,
+                "line-width": 15,
+                "line-blur": 12,
+                "line-opacity": themeRef.current === "dark" ? 0.3 : 0.25,
               },
             },
             {
@@ -1258,12 +1260,12 @@ export default function Map() {
               id: "redzones-road",
               type: "line",
               source: "redzones",
-              filter: ["==", ["get", "kind"], "road"],
+              filter: ["!=", ["get", "kind"], "railway"],
               layout: { "line-cap": "round", "line-join": "round" },
               paint: {
                 "line-color": palette.redzone,
-                "line-width": 1.6,
-                "line-opacity": 0.35,
+                "line-width": 2,
+                "line-opacity": 0.5,
               },
             },
             {
@@ -1274,8 +1276,8 @@ export default function Map() {
               filter: ["==", ["get", "kind"], "railway"],
               paint: {
                 "line-color": palette.redzone,
-                "line-width": 1.2,
-                "line-opacity": 0.3,
+                "line-width": 2,
+                "line-opacity": 0.5,
                 "line-dasharray": [3, 3],
               },
             },
@@ -1439,9 +1441,9 @@ export default function Map() {
               layout: { "line-cap": "round", "line-join": "round" },
               paint: {
                 "line-color": palette.route,
-                "line-width": 10,
-                "line-blur": 7,
-                "line-opacity": 0.28,
+                "line-width": 14,
+                "line-blur": 8,
+                "line-opacity": themeRef.current === "dark" ? 0.3 : 0.22,
               },
             },
             {
@@ -1452,21 +1454,20 @@ export default function Map() {
               layout: { "line-cap": "round", "line-join": "round" },
               paint: {
                 "line-color": palette.route,
-                "line-width": 2.4,
-                "line-opacity": 0.92,
+                "line-width": 4,
+                "line-opacity": 0.85,
               },
             },
             {
               id: "routes-dots",
-              type: "circle",
+              type: "line",
               source: "routes",
-              filter: ["==", ["geometry-type"], "Point"],
+              filter: ["==", ["geometry-type"], "LineString"],
+              layout: { "line-cap": "round", "line-join": "round" },
               paint: {
-                "circle-color": palette.route,
-                "circle-radius": 3.5,
-                "circle-stroke-color": "#ffffff",
-                "circle-stroke-width": 1.5,
-                "circle-opacity": 0.95,
+                "line-color": palette.routeCore,
+                "line-width": 2.6,
+                "line-opacity": 0.95,
               },
             },
           ],
@@ -1849,11 +1850,13 @@ export default function Map() {
           }
         }
         map.setPaintProperty("redzones-glow", "line-color", p.redzone);
+        map.setPaintProperty("redzones-glow", "line-opacity", t === "dark" ? 0.3 : 0.25);
         map.setPaintProperty("redzones-road", "line-color", p.redzone);
         map.setPaintProperty("redzones-rail", "line-color", p.redzone);
         map.setPaintProperty("routes-glow", "line-color", p.route);
+        map.setPaintProperty("routes-glow", "line-opacity", t === "dark" ? 0.3 : 0.22);
         map.setPaintProperty("routes-line", "line-color", p.route);
-        map.setPaintProperty("routes-dots", "circle-color", p.route);
+        map.setPaintProperty("routes-dots", "line-color", p.routeCore);
         map.setPaintProperty("isochrone-fill", "fill-color", p.iso);
         map.setPaintProperty("isochrone-line", "line-color", p.iso);
         rebuildOverlays(selectedRef.current, visibleRef.current);
