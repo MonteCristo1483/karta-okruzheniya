@@ -23,6 +23,24 @@ body {
   background-color: var(--bg-mid);
 }
 
+/* Открытая карточка дома на десктопе: уводим контролы карты из-под неё.
+   clamp обязан совпадать с шириной карточки в building-sheet.tsx. */
+@media (min-width: 768px) {
+  html:has([data-sheet="open"]) .maplibregl-ctrl-top-right {
+    right: calc(clamp(340px, 38vw, 420px) + 1.5rem);
+    transition: right 200ms ease-out;
+  }
+}
+
+/* На xl поиск центрирован и перекрывает контролы, сдвинутые влево от карточки:
+   опускаем их ниже строки поиска. */
+@media (min-width: 1280px) {
+  html:has([data-sheet="open"]) .maplibregl-ctrl-top-right {
+    top: 4.5rem;
+    transition: right 200ms ease-out, top 200ms ease-out;
+  }
+}
+
 /* Фон вместо подложки-тайлов: пастельная диорама / глубокий сине-серый (тёмная) */
 .map-gradient {
   background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-mid) 55%, var(--bg-bottom) 100%);
