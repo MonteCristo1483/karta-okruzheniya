@@ -1499,6 +1499,14 @@ export default function Map() {
           "visibility",
           on ? "visible" : "none",
         );
+        // Шейдер pattern-варианта компилируется не в том же кадре, а карта
+        // уже остановилась на zoomend. Без повторного кадра слой может
+        // остаться невидимым до следующего движения — пинаем ещё раз.
+        if (on) {
+          const kick = () => map?.triggerRepaint();
+          requestAnimationFrame(kick);
+          window.setTimeout(kick, 250);
+        }
       };
 
       applyThemeRef.current = (t: Theme) => {
@@ -1512,6 +1520,10 @@ export default function Map() {
           buildingColorExpr(p, colorStops),
         );
         // У темы свой набор картинок — пере-применяем pattern принудительно.
+        // Обе темы готовим заранее: pattern включается на zoomend уже в
+        // готовом атласе, иначе первый кадр может пропустить слой.
+        addFacadeImages("light");
+        addFacadeImages("dark");
         facadesOn = null;
         syncFacades(t);
         map.setPaintProperty("buildings-shadow", "fill-opacity", BUILDING_SHADOW_OPACITY[t]);
@@ -1630,7 +1642,9 @@ export default function Map() {
             const desktop = window.matchMedia("(min-width: 768px)").matches;
             map.flyTo({
               center,
-              zoom: Math.max(map.getZoom(), 15.2),
+              // Сразу приближаем до порога окон (+0.1): на 15.2 pattern
+              // выключен, и выбор дома не показывает фасады.
+              zoom: Math.max(map.getZoom(), FACADE_MIN_ZOOM + 0.1),
               speed: 1.1,
               curve: 1.3,
               padding: desktop
