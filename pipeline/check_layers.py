@@ -30,7 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from mosru_api import features  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
-DB_DSN = "host=localhost port=5432 dbname=okrug user=okrug password=okrug_local_dev"
+from db import DB_DSN
 DISTRICT = "Пресненский"
 
 LAYERS = {

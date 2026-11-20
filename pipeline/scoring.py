@@ -27,7 +27,7 @@ from psycopg.types.json import Jsonb
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = ROOT / "config" / "scoring.json"
-DB_DSN = "host=localhost port=5432 dbname=okrug user=okrug password=okrug_local_dev"
+from db import DB_DSN
 BATCH_SIZE = 5_000
 
 CREATE_TABLE = """

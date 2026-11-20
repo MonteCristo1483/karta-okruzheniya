@@ -33,7 +33,7 @@ import requests
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT_DIR = ROOT / "web" / "public" / "data" / "isochrones"
-DB_DSN = "host=localhost port=5432 dbname=okrug user=okrug password=okrug_local_dev"
+from db import DB_DSN
 VALHALLA = "http://localhost:8002/isochrone"
 WORKERS = 8
 CONTOURS = (5, 10, 15)

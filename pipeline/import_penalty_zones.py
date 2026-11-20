@@ -17,7 +17,7 @@ import osmium
 import psycopg
 
 PBF_PATH = "data/raw/moscow.osm.pbf"
-DB_DSN = "host=localhost port=5432 dbname=okrug user=okrug password=okrug_local_dev"
+from db import DB_DSN
 BATCH_SIZE = 2_000
 REPORT_EVERY = 10_000
 
