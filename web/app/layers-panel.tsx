@@ -94,7 +94,7 @@ export default function LayersPanel({
   onThemeToggle: () => void;
 }) {
   return (
-    <div className="absolute left-3 top-[4.5rem] z-10 flex max-w-[calc(100%-1.5rem)] flex-col items-start gap-1.5 md:top-3">
+    <div className="absolute left-3 top-[4.5rem] z-10 flex max-w-[calc(100%-1.5rem)] flex-col items-start gap-1.5 xl:top-3">
       <button
         type="button"
         onClick={onThemeToggle}
@@ -110,7 +110,7 @@ export default function LayersPanel({
           return (
             <label
               key={key}
-              className={`flex cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium shadow-sm backdrop-blur transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-emerald-500/60 has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-transparent ${
+              className={`flex cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium shadow-sm backdrop-blur transition-colors md:px-3 md:py-1.5 md:text-[13px] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-emerald-500/60 has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-transparent ${
                 active
                   ? "bg-white/85 text-slate-700 dark:bg-slate-900/80 dark:text-slate-200"
                   : "bg-white/55 text-slate-500 dark:bg-slate-900/45 dark:text-slate-400"

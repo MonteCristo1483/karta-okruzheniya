@@ -54,7 +54,7 @@ export default function SearchBox({
   };
 
   return (
-    <div className="absolute left-3 right-14 top-3 z-30 md:left-1/2 md:right-auto md:w-[420px] md:-translate-x-1/2">
+    <div className="absolute left-3 right-14 top-3 z-30 md:left-4 md:right-auto md:w-[clamp(260px,45vw,420px)] md:translate-x-0 xl:left-1/2 xl:w-[420px] xl:-translate-x-1/2">
       <div className="relative">
         <div className="flex items-center gap-2 rounded-2xl bg-white/95 px-3 py-2.5 shadow-lg backdrop-blur dark:bg-slate-900/95">
           <svg
