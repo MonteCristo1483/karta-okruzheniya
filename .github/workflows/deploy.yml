@@ -56,8 +56,24 @@ jobs:
       # Тайлы собираются из уже проверенных данных. Готового образа нет
       # (ghcr.io/felt/tippecanoe недоступен), поэтому tippecanoe 2.79.0
       # собирается из исходников — ~2 минуты на ubuntu-раннере.
+      # Образ кэшируется как docker save tar: ключ привязан к Dockerfile,
+      # поэтому пересборка происходит только при его изменении.
+      - name: Cache tippecanoe image
+        id: tippecanoe-cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/tippecanoe-image.tar
+          key: tippecanoe-2.79.0-${{ hashFiles('pipeline/docker/tippecanoe.Dockerfile') }}
+
+      - name: Load tippecanoe image
+        if: steps.tippecanoe-cache.outputs.cache-hit == 'true'
+        run: docker load -i /tmp/tippecanoe-image.tar
+
       - name: Build tippecanoe image
-        run: docker build -f pipeline/docker/tippecanoe.Dockerfile -t karta-tippecanoe:2.79.0 .
+        if: steps.tippecanoe-cache.outputs.cache-hit != 'true'
+        run: |
+          docker build -f pipeline/docker/tippecanoe.Dockerfile -t karta-tippecanoe:2.79.0 .
+          docker save karta-tippecanoe:2.79.0 -o /tmp/tippecanoe-image.tar
 
       # PMTiles + компактный buildings-index.json. Оба артефакта gitignored
       # и попадают на прод только внутри dist. --without-breakdown — вариант,
