@@ -17,3 +17,6 @@ data.zip
 web/public/maplibre-gl-worker.mjs
 web/tsconfig.tsbuildinfo
 web/dist/
+web/.pages-test/
+web/test-results/
+web/playwright-report/
