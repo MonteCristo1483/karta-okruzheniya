@@ -383,7 +383,8 @@ export default function BuildingSheet({
   };
 
   // Мобильные высоты (<768px): 45% по умолчанию, свайп вверх → 85%,
-  // свайп вниз → минимальный вид. Десктоп (md:) — как раньше, по контенту.
+  // свайп вниз → минимальный вид. Десктоп (md:) — правый док фиксированной
+  // ширины во всю высоту экрана, скролл внутри панели.
   const heightClass =
     snap === "min"
       ? "h-[92px]"
@@ -398,16 +399,18 @@ export default function BuildingSheet({
 
   return (
     <div
-      className={`pointer-events-none fixed inset-x-0 bottom-0 z-10 transition-[height,transform] duration-300 ease-out ${heightClass} md:h-auto ${
-        building ? "translate-y-0" : "translate-y-full"
+      className={`pointer-events-none fixed inset-x-0 bottom-0 z-10 transition-[height,transform] duration-300 ease-out ${heightClass} md:left-auto md:inset-y-4 md:right-4 md:h-auto md:w-[420px] ${
+        building
+          ? "translate-y-0"
+          : "translate-y-full md:translate-y-0 md:translate-x-[calc(100%+32px)]"
       }`}
     >
       <div
         id="building-sheet"
-        className="pointer-events-auto mx-auto flex h-full w-full max-w-md flex-col rounded-t-3xl bg-white/95 shadow-2xl backdrop-blur dark:bg-slate-900/95 md:h-auto"
+        className="pointer-events-auto mx-auto flex h-full w-full max-w-md flex-col rounded-t-3xl bg-white/95 shadow-2xl backdrop-blur dark:bg-slate-900/95 md:mx-0 md:h-full md:max-w-none md:rounded-2xl"
       >
         <div
-          className="mx-auto mb-1 mt-2 h-1.5 w-12 shrink-0 touch-none rounded-full bg-slate-200 dark:bg-slate-700"
+          className="mx-auto mb-1 mt-2 h-1.5 w-12 shrink-0 touch-none rounded-full bg-slate-200 dark:bg-slate-700 md:hidden"
           onTouchStart={(e) => {
             touchStartY.current = e.touches[0]?.clientY ?? null;
           }}
@@ -434,7 +437,7 @@ export default function BuildingSheet({
 
             {/* Полный вид: скрыт в минимальном на мобильном */}
             <div
-              className={`min-h-0 flex-1 overflow-y-auto px-5 pb-5 md:block md:overflow-visible ${snap === "min" ? "hidden" : ""}`}
+              className={`min-h-0 flex-1 overflow-y-auto px-5 pb-5 md:block md:overflow-y-auto md:pt-4 ${snap === "min" ? "hidden" : ""}`}
             >
               <div className="relative">
                 <h2 className="truncate pr-8 text-lg font-bold text-slate-800 dark:text-slate-100">

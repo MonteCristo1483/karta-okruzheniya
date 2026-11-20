@@ -1444,19 +1444,23 @@ export default function Map() {
       };
 
       const flyToBuilding = (center: [number, number]) => {
-        // Ждём две отрисовки, чтобы шторка с новым контентом заняла высоту,
-        // затем центрируем здание в видимой области (padding снизу).
+        // Ждём две отрисовки, чтобы шторка с новым контентом заняла размер,
+        // затем центрируем здание в видимой области карты: на мобиле —
+        // padding снизу под шторку, на десктопе — padding справа под док.
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
             if (!map) return;
             const sheetEl = document.getElementById("building-sheet");
-            const bottom = (sheetEl?.offsetHeight ?? 0) + 24;
+            const rect = sheetEl?.getBoundingClientRect();
+            const desktop = window.matchMedia("(min-width: 768px)").matches;
             map.flyTo({
               center,
               zoom: Math.max(map.getZoom(), 15.2),
               speed: 1.1,
               curve: 1.3,
-              padding: { bottom },
+              padding: desktop
+                ? { right: (rect?.width ?? 0) + 24, bottom: 0 }
+                : { bottom: (rect?.height ?? 0) + 24 },
             });
           });
         });
