@@ -53,12 +53,14 @@ const MAP_THEMES = {
     high: "#a8c9a7",
     vhigh: "#74bd8f",
     selected: "#34c77b",
+    // Акцент крыши выделенного дома: спокойнее и светлее, чтобы на 390 не сливался с парком.
+    selectedRoof: "#a8e6c3",
     // В светлой теме выбранный дом без заливки тела на всех зумах (тело красится по ступени балла).
     selectedBody: "#34c77b",
     dim: "#b8c4d4",
     halo: "#3ee585",
     outlineCore: "#1fb868",
-    redzone: "#e57a6a",
+    redzone: "#ec705a",
     route: "#2eb87e",
     poiGreen: "#16a36e",
     poiMetro: "#e11d48",
@@ -93,12 +95,13 @@ const MAP_THEMES = {
     high: "#3f5c70",
     vhigh: "#4f7d68",
     selected: "#6fe0a6",
+    selectedRoof: "#9cebc2",
     // Тёмную тему не переделываем: тело выбранного дома как раньше.
     selectedBody: "#6fe0a6",
     dim: "#2a3340",
     halo: "#7fe0aa",
     outlineCore: "#8ef0b4",
-    redzone: "#8f5b55",
+    redzone: "#b36459",
     route: "#5cc8be",
     poiGreen: "#7fb98a",
     poiMetro: "#ef8fa4",
@@ -1233,17 +1236,30 @@ export default function Map() {
             // Полноценная подложка: земля, парки, вода, улицы (локальный OSM).
             ...basemapLayers(palette),
             {
+              id: "redzones-glow",
+              type: "line",
+              source: "redzones",
+              layout: { "line-cap": "round", "line-join": "round" },
+              paint: {
+                "line-color": palette.redzone,
+                "line-width": 11,
+                "line-blur": 11,
+                "line-opacity": 0.18,
+              },
+            },
+            {
               id: "redzones-fill",
               type: "fill",
               source: "redzones",
               filter: ["==", ["geometry-type"], "Polygon"],
-              paint: { "fill-color": palette.redzone, "fill-opacity": 0.09 },
+              paint: { "fill-color": palette.redzone, "fill-opacity": 0.12 },
             },
             {
               id: "redzones-road",
               type: "line",
               source: "redzones",
               filter: ["==", ["get", "kind"], "road"],
+              layout: { "line-cap": "round", "line-join": "round" },
               paint: {
                 "line-color": palette.redzone,
                 "line-width": 1.6,
@@ -1346,7 +1362,7 @@ export default function Map() {
               source: "selectedBuilding",
               paint: {
                 "fill-extrusion-color":
-                  themeRef.current === "dark" ? palette.selectedBody : palette.selected,
+                  themeRef.current === "dark" ? palette.selectedBody : palette.selectedRoof,
                 "fill-extrusion-base":
                   themeRef.current === "dark"
                     ? 0.05
@@ -1354,7 +1370,7 @@ export default function Map() {
                 "fill-extrusion-height": [
                   "+",
                   ["coalesce", ["get", "height"], 9],
-                  themeRef.current === "dark" ? 0.05 : 0.6,
+                  themeRef.current === "dark" ? 0.05 : 0.3,
                 ],
                 "fill-extrusion-opacity": 0.95,
                 "fill-extrusion-vertical-gradient": themeRef.current === "dark",
@@ -1363,7 +1379,8 @@ export default function Map() {
             {
               // Крыша: тонкая плита в цвет ступени поверх фасада. Нужна
               // потому, что fill-extrusion-pattern красит и верхнюю грань —
-              // без неё крыши выглядят «в окнах». 0,6 м — как парапет.
+              // без неё крыши выглядят «в окнах». У выбранного дома — 0,3 м
+              // и спокойный оттенок selectedRoof.
               // Показываем только вместе с окнами (zoom >= FACADE_MIN_ZOOM).
               id: "buildings-roof",
               type: "fill-extrusion",
@@ -1371,12 +1388,12 @@ export default function Map() {
               ...buildingSourceLayer,
               layout: { visibility: "none" },
               paint: {
-                "fill-extrusion-color": buildingColorExpr(palette, colorStops, palette.selected),
+                "fill-extrusion-color": buildingColorExpr(palette, colorStops, palette.selectedRoof),
                 "fill-extrusion-base": ["coalesce", ["get", "height"], 9],
                 "fill-extrusion-height": [
                   "+",
                   ["coalesce", ["get", "height"], 9],
-                  0.6,
+                  ["case", ["to-boolean", ["feature-state", "selected"]], 0.3, 0.6],
                 ],
                 "fill-extrusion-opacity": 0.95,
                 "fill-extrusion-vertical-gradient": false,
@@ -1415,14 +1432,41 @@ export default function Map() {
               },
             },
             {
+              id: "routes-glow",
+              type: "line",
+              source: "routes",
+              filter: ["==", ["geometry-type"], "LineString"],
+              layout: { "line-cap": "round", "line-join": "round" },
+              paint: {
+                "line-color": palette.route,
+                "line-width": 10,
+                "line-blur": 7,
+                "line-opacity": 0.28,
+              },
+            },
+            {
               id: "routes-line",
               type: "line",
               source: "routes",
+              filter: ["==", ["geometry-type"], "LineString"],
+              layout: { "line-cap": "round", "line-join": "round" },
               paint: {
                 "line-color": palette.route,
-                "line-width": 2,
-                "line-opacity": 0.7,
-                "line-dasharray": [4, 4],
+                "line-width": 2.4,
+                "line-opacity": 0.92,
+              },
+            },
+            {
+              id: "routes-dots",
+              type: "circle",
+              source: "routes",
+              filter: ["==", ["geometry-type"], "Point"],
+              paint: {
+                "circle-color": palette.route,
+                "circle-radius": 3.5,
+                "circle-stroke-color": "#ffffff",
+                "circle-stroke-width": 1.5,
+                "circle-opacity": 0.95,
               },
             },
           ],
@@ -1639,8 +1683,8 @@ export default function Map() {
               }
             }
             if (!bestPt) continue;
-            const d = Math.round(entry.distance_m);
-            const text = `${PENALTY_LABELS[key] ?? key} · ${d < 15 ? "рядом" : `${d} м`}`;
+            const d = Number.isFinite(entry.distance_m) ? Math.round(entry.distance_m) : null;
+            const text = `${PENALTY_LABELS[key] ?? key} · ${d !== null && d >= 0 ? `${d} м` : "рядом"}`;
             redPins.push(
               new maplibregl.Marker({
                 element: makeRedPinEl(text, theme.redPill, theme.redIcon),
@@ -1669,6 +1713,12 @@ export default function Map() {
               properties: { category: cat },
               geometry: { type: "LineString", coordinates },
             });
+            const endPt = coordinates[coordinates.length - 1] ?? target.center;
+            routeFeatures.push({
+              type: "Feature",
+              properties: { category: cat, kind: "endpoint" },
+              geometry: { type: "Point", coordinates: endPt },
+            });
           }
         }
         routesData.features = routeFeatures;
@@ -1679,12 +1729,16 @@ export default function Map() {
         if (!map) return;
         if (map.getLayer("redzones-road")) {
           const rz = v.redzones ? "visible" : "none";
+          map.setLayoutProperty("redzones-glow", "visibility", rz);
           map.setLayoutProperty("redzones-road", "visibility", rz);
           map.setLayoutProperty("redzones-rail", "visibility", rz);
           map.setLayoutProperty("redzones-fill", "visibility", rz);
         }
         if (map.getLayer("routes-line")) {
-          map.setLayoutProperty("routes-line", "visibility", v.routes ? "visible" : "none");
+          const rt = v.routes ? "visible" : "none";
+          map.setLayoutProperty("routes-glow", "visibility", rt);
+          map.setLayoutProperty("routes-line", "visibility", rt);
+          map.setLayoutProperty("routes-dots", "visibility", rt);
         }
         rebuildOverlays(selectedRef.current, v);
       };
@@ -1755,7 +1809,7 @@ export default function Map() {
         map.setPaintProperty(
           "buildings-selected-body",
           "fill-extrusion-color",
-          t === "dark" ? p.selectedBody : p.selected,
+          t === "dark" ? p.selectedBody : p.selectedRoof,
         );
         map.setPaintProperty(
           "buildings-selected-body",
@@ -1765,7 +1819,7 @@ export default function Map() {
         map.setPaintProperty(
           "buildings-selected-body",
           "fill-extrusion-height",
-          ["+", ["coalesce", ["get", "height"], 9], t === "dark" ? 0.05 : 0.6],
+          ["+", ["coalesce", ["get", "height"], 9], t === "dark" ? 0.05 : 0.3],
         );
         map.setPaintProperty(
           "buildings-selected-body",
@@ -1775,7 +1829,7 @@ export default function Map() {
         map.setPaintProperty(
           "buildings-roof",
           "fill-extrusion-color",
-          buildingColorExpr(p, colorStops, p.selected),
+          buildingColorExpr(p, colorStops, p.selectedRoof),
         );
         // У темы свой набор картинок — пере-применяем pattern принудительно.
         // Обе темы готовим заранее: pattern включается на zoomend уже в
@@ -1794,9 +1848,12 @@ export default function Map() {
             map.setPaintProperty(id, prop as never, value as never);
           }
         }
+        map.setPaintProperty("redzones-glow", "line-color", p.redzone);
         map.setPaintProperty("redzones-road", "line-color", p.redzone);
         map.setPaintProperty("redzones-rail", "line-color", p.redzone);
+        map.setPaintProperty("routes-glow", "line-color", p.route);
         map.setPaintProperty("routes-line", "line-color", p.route);
+        map.setPaintProperty("routes-dots", "circle-color", p.route);
         map.setPaintProperty("isochrone-fill", "fill-color", p.iso);
         map.setPaintProperty("isochrone-line", "line-color", p.iso);
         rebuildOverlays(selectedRef.current, visibleRef.current);
