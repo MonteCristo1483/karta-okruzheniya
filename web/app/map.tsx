@@ -1198,6 +1198,15 @@ export default function Map() {
       try {
         map = new maplibregl.Map({
         container,
+        // На 1× мониторах (десктоп) без сглаживания кромки зданий и подписей
+        // «рвутся». На телефонах DPR 2–3 уже даёт сглаживание, поэтому там
+        // antialias не включаем — экономим батарею и GPU.
+        // В MapLibre 6 опция живёт в canvasContextAttributes (top-level
+        // antialias удалён), остальные атрибуты контекста берутся по умолчанию.
+        canvasContextAttributes: {
+          antialias:
+            typeof window !== "undefined" && window.devicePixelRatio < 1.5,
+        },
         style: {
           version: 8,
           light: MAP_LIGHT[themeRef.current],
