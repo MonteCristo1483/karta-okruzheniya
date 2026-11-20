@@ -52,8 +52,8 @@ const MAP_THEMES = {
     redPill: "bg-white/95 text-red-700",
     redIcon: "#b91c1c",
     // Подложка (прохладная диорама дня)
-    land: "#e3eaf2",
-    landUse: "#dce5ef",
+    land: "#d8e3ef",
+    landUse: "#d0dcea",
     park: "#bfe0c2",
     wood: "#aed4b2",
     water: "#72c8e8",
@@ -120,8 +120,8 @@ type ThemeLight = {
 const MAP_LIGHT: Record<Theme, ThemeLight> = {
   light: {
     anchor: "viewport",
-    color: "#fff4e6",
-    intensity: 0.4,
+    color: "#ffffff",
+    intensity: 0.2,
     position: [1.2, 210, 35],
   },
   dark: {
@@ -1174,7 +1174,7 @@ export default function Map() {
             `color: ${color}`,
             "line-height: 1",
             "letter-spacing: 0.01em",
-            `text-shadow: -2px -2px 0 ${halo}, 2px -2px 0 ${halo}, -2px 2px 0 ${halo}, 2px 2px 0 ${halo}, -2px 0 0 ${halo}, 2px 0 0 ${halo}, 0 -2px 0 ${halo}, 0 2px 0 ${halo}, 0 0 3px ${halo}`,
+            `text-shadow: -1.2px -1.2px 0 ${halo}, 1.2px -1.2px 0 ${halo}, -1.2px 1.2px 0 ${halo}, 1.2px 1.2px 0 ${halo}, 0 0 3px ${halo}`,
           ].join(";");
           wrap.append(inner);
           labelMarkers.push(
