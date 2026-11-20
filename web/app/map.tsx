@@ -6,7 +6,7 @@ import { Protocol } from "pmtiles";
 import type { Feature, FeatureCollection, Geometry, Position } from "geojson";
 import "maplibre-gl/dist/maplibre-gl.css";
 import BuildingSheet, { RED_FLAG_PENALTY } from "./building-sheet";
-import type { BuildingBreakdown, SelectedBuilding } from "./building-sheet";
+import type { BuildingBreakdown, Percentiles, SelectedBuilding } from "./building-sheet";
 import LayersPanel, { DEFAULT_VISIBILITY } from "./layers-panel";
 import type { Visibility } from "./layers-panel";
 import SearchBox from "./search-box";
@@ -22,8 +22,9 @@ const BUILDINGS_URL = "data/presnya_buildings.geojson";
 // PMTiles: тот же набор зданий, нарезанный tippecanoe (pipeline/build_tiles.py).
 // Файла на проде может ещё не быть — тогда клиент молча остаётся на geojson.
 const TILES_URL = "data/tiles/buildings.pmtiles";
-// Индекс: [id, lon, lat, address, index, year] — замена полному geojson
-// для поиска, центров домов, квинтилей цвета и ?building=<id>.
+// Индекс: [id, lon, lat, address, index, year, road, railway, construction,
+// industrial] — замена полному geojson для поиска, центров домов, квинтилей
+// цвета, ?building=<id> и перцентилей штрафных слоёв.
 const INDEX_URL = "data/buildings-index.json";
 const POI_URL = "data/presnya_poi.geojson";
 const REDZONES_URL = "data/presnya_redzones.geojson";
@@ -615,12 +616,18 @@ type BuildingProps = {
   breakdown?: BuildingBreakdown;
 };
 
-// Строка data/buildings-index.json: [id, lon, lat, address, index, year].
+// Строка data/buildings-index.json:
+// [id, lon, lat, address, index, year, road, railway, construction, industrial].
+// Последние четыре — перцентили расстояний до штрафных слоёв, 0..1 или null.
 type BuildingIndexRow = [
   number,
   number,
   number,
   string | null,
+  number | null,
+  number | null,
+  number | null,
+  number | null,
   number | null,
   number | null,
 ];
@@ -632,6 +639,9 @@ type BuildingMeta = {
   address: string | null;
   index: number | null;
   year: number | null;
+  // В тайлах — готовые перцентили из buildings-index.json (распределения
+  // по всем домам там нет). В geojson-режиме их считаем по breakdown.
+  percentiles?: Percentiles;
 };
 
 // Порядок важен для стабильного типа percentiles в карточке.
@@ -1004,13 +1014,28 @@ export default function Map() {
       // Единый источник метаданных для поиска, центров, цвета и deep link:
       // geojson-режим берёт их из фич, режим тайлов — из индекса.
       const buildingMeta: BuildingMeta[] = tileMode
-        ? (indexRows ?? []).map(([id, lon, lat, address, index, year]) => ({
-            id,
-            center: [lon, lat] as [number, number],
-            address: address ?? null,
-            index: index ?? null,
-            year: year ?? null,
-          }))
+        ? (indexRows ?? []).map(
+            ([id, lon, lat, address, index, year, road, railway, construction, industrial]) => {
+              const values: [keyof Percentiles, number | null][] = [
+                ["road", road],
+                ["railway", railway],
+                ["construction", construction],
+                ["industrial", industrial],
+              ];
+              const percentiles: Percentiles = {};
+              for (const [kind, value] of values) {
+                if (value !== null) percentiles[kind] = value;
+              }
+              return {
+                id,
+                center: [lon, lat] as [number, number],
+                address: address ?? null,
+                index: index ?? null,
+                year: year ?? null,
+                percentiles,
+              };
+            },
+          )
         : (buildings?.features ?? []).map((f) => ({
             id: f.properties.id,
             center: geometryCenter(f.geometry),
@@ -1089,7 +1114,9 @@ export default function Map() {
         if (!values?.length) return 0;
         let farther = 0;
         for (const d of values) if (d > distance) farther++;
-        return farther / values.length;
+        // Та же точность (3 знака), что и в buildings-index.json, — иначе
+        // округление до целых процентов может разойтись между режимами.
+        return Math.round((farther / values.length) * 1000) / 1000;
       };
 
       const nearestPoi = (
@@ -1806,22 +1833,27 @@ export default function Map() {
           : (feature?.properties.breakdown ?? null);
         const distanceOf = (kind: string) =>
           breakdown?.penalties?.[kind]?.distance_m ?? Number.POSITIVE_INFINITY;
+        // В тайлах распределения по всем домам нет — берём готовые перцентили
+        // из индекса. Если их нет, строка скрывается (не подставляем 0).
+        const percentiles: Percentiles | undefined = tileMode
+          ? meta.percentiles && Object.keys(meta.percentiles).length > 0
+            ? meta.percentiles
+            : undefined
+          : penaltyDistances
+            ? {
+                road: percentileFor("road", distanceOf("road")),
+                railway: percentileFor("railway", distanceOf("railway")),
+                construction: percentileFor("construction", distanceOf("construction")),
+                industrial: percentileFor("industrial", distanceOf("industrial")),
+              }
+            : undefined;
         const next: SelectedBuilding = {
           id,
           index: meta.index ?? null,
           address: meta.address,
           year: meta.year ?? null,
           breakdown,
-          ...(penaltyDistances
-            ? {
-                percentiles: {
-                  road: percentileFor("road", distanceOf("road")),
-                  railway: percentileFor("railway", distanceOf("railway")),
-                  construction: percentileFor("construction", distanceOf("construction")),
-                  industrial: percentileFor("industrial", distanceOf("industrial")),
-                },
-              }
-            : {}),
+          ...(percentiles ? { percentiles } : {}),
         };
         updateSelected(next);
         setUrlBuilding(id);
