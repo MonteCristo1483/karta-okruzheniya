@@ -46,47 +46,45 @@ maplibregl.setWorkerUrl("maplibre-gl-worker.mjs");
 // Палитры карты по темам (мягкие акценты, не неон — SPEC).
 const MAP_THEMES = {
   light: {
-    // Дома: 5 квинтилей, светлее фона; оттенок ступени сохранён, поднята
-    // светлота — на тёмной земле дом должен читаться как объём.
-    vlow: "#c6d0e0",
-    low: "#cfdaea",
-    mid: "#d8e2f0",
-    high: "#d3e5e6",
-    vhigh: "#c8e6d5",
-    selected: "#7fe0a0",
-    // Тело выбранного дома ниже порога окон: не сплошная заливка, а
-    // «подсветка» — зелёный, смешанный с нейтральным (≈ alpha 0.5).
-    // Вернуть сплошной зелёный = поставить здесь "#7fe0a0".
-    selectedBody: "#ace1c8",
-    dim: "#8a94a8",
+    // Дома: 5 различимых ступеней балла (квинтили: терракота → тан → песок → шалфей → зелень).
+    vlow: "#cf8f7c",
+    low: "#d8ab8b",
+    mid: "#d8cfae",
+    high: "#a8c9a7",
+    vhigh: "#74bd8f",
+    selected: "#34c77b",
+    // В светлой теме выбранный дом без заливки тела на всех зумах (тело красится по ступени балла).
+    selectedBody: "#34c77b",
+    dim: "#b8c4d4",
     halo: "#3ee585",
-    outlineCore: "#25d477",
+    outlineCore: "#1fb868",
     redzone: "#e57a6a",
-    route: "#42d39a",
-    poiGreen: "#16b97c",
-    poiMetro: "#f43f5e",
-    iso: "#4d9bff",
+    route: "#2eb87e",
+    poiGreen: "#16a36e",
+    poiMetro: "#e11d48",
+    iso: "#3b82f6",
     pill: "bg-white/90 text-slate-700",
     redPill: "bg-white/95 text-red-700",
     redIcon: "#b91c1c",
-    // Подложка: глубокая сине-стальная диорама дня (design/card-diorama-day).
-    land: "#3a4a66",
-    landUse: "#40506d",
-    park: "#4fbf72",
-    wood: "#3f9f5e",
-    water: "#2fb3e0",
-    waterLine: "#1f8fbe",
-    roadMinor: "#26314a",
-    roadCasing: "#182133",
-    roadMajor: "#1f2940",
-    roadMark: "#f4f8ff",
+    // Подложка: светлая дневная диорама (земля светлее зданий по тону, улицы светлее земли).
+    land: "#c3d2e2",
+    landUse: "#cbd8e6",
+    park: "#7cc98f",
+    wood: "#5fb47a",
+    water: "#4fbfe6",
+    waterLine: "#2f9fc8",
+    roadMinor: "#fbfdff",
+    roadCasing: "#aebfd2",
+    roadMajor: "#ffffff",
+    roadMajorCasing: "#9fb2c8",
+    roadMark: "#d6e2ef",
     label: "#172134",
     labelHalo: "#ffffff",
-    labelWater: "#08384a",
+    labelWater: "#0c4a6e",
     labelWaterHalo: "#ffffff",
-    tree: "#66cf83",
-    treeDark: "#2f7f4c",
-    shadow: "#0b1422",
+    tree: "#5fb876",
+    treeDark: "#3e8e55",
+    shadow: "#1a2838",
   },
   dark: {
     vlow: "#4c5a70",
@@ -118,6 +116,7 @@ const MAP_THEMES = {
     roadMinor: "#2a3542",
     roadCasing: "#3b4756",
     roadMajor: "#4c5a6b",
+    roadMajorCasing: "#3b4756",
     roadMark: "#3d4a5c",
     label: "#e2e8f0",
     labelHalo: "#0b1220",
@@ -171,31 +170,33 @@ type ColorStops = { t1: number; t2: number; t3: number; t4: number; mid: number 
 const buildingColorExpr = (
   p: Palette,
   s: ColorStops | null,
-  selectedColor: string = p.selectedBody,
-) =>
-  [
+  selectedColor: string | null = p.selectedBody,
+) => {
+  const stepExpr = s
+    ? // step: v < t1 → vlow … v ≥ t4 → vhigh; null-индекс → mid.
+      [
+        "step",
+        ["coalesce", ["get", "index"], s.mid],
+        p.vlow,
+        s.t1,
+        p.low,
+        s.t2,
+        p.mid,
+        s.t3,
+        p.high,
+        s.t4,
+        p.vhigh,
+      ]
+    : ["step", ["get", "index"], p.low, 5, p.mid, 7, p.high];
+  return [
     "case",
     ["to-boolean", ["feature-state", "selected"]],
-    selectedColor,
+    selectedColor ?? stepExpr,
     ["to-boolean", ["feature-state", "inactive"]],
     p.dim,
-    s
-      ? // step: v < t1 → vlow … v ≥ t4 → vhigh; null-индекс → mid.
-        [
-          "step",
-          ["coalesce", ["get", "index"], s.mid],
-          p.vlow,
-          s.t1,
-          p.low,
-          s.t2,
-          p.mid,
-          s.t3,
-          p.high,
-          s.t4,
-          p.vhigh,
-        ]
-      : ["step", ["get", "index"], p.low, 5, p.mid, 7, p.high],
+    stepExpr,
   ] as never;
+};
 
 // ── Окна на фасадах: pattern-текстуры, сгенерированные в runtime ─────────
 // Гипотеза: fill-extrusion-pattern в MapLibre 6 — data-driven (style spec:
@@ -285,10 +286,9 @@ function makeFacadeImage(
 const facadeImageName = (theme: Theme, variant: FacadeVariant, windows: boolean) =>
   `facade-${theme}-${variant}${windows ? "" : "-flat"}`;
 
-// Тот же step, что и у цвета: индексы → ступени. Выбранный дом на зуме
-// окон остаётся домом: фасад берётся по его ступени (стены с окнами), а
+// Тот же step, что и у цвета: индексы → ступени. Выбранный дом в светлой
+// теме на всех зумах остаётся домом: фасад берётся по его ступени, а
 // «выбранность» читается по ореолу на земле, обводке и акцентной крыше.
-// Ниже порога — плоская база, у выбранного дома — приглушённый зелёный.
 const facadePatternExpr = (theme: Theme, s: ColorStops | null, windows: boolean) => {
   const stepExpr = [
     "step",
@@ -307,11 +307,7 @@ const facadePatternExpr = (theme: Theme, s: ColorStops | null, windows: boolean)
     "case",
     ["to-boolean", ["feature-state", "selected"]],
     // Тёмная тема: как раньше, зелёный фасад (не переделываем).
-    theme === "dark"
-      ? facadeImageName(theme, "selected", windows)
-      : windows
-        ? stepExpr
-        : facadeImageName(theme, "selected", false),
+    theme === "dark" ? facadeImageName(theme, "selected", windows) : stepExpr,
     ["to-boolean", ["feature-state", "inactive"]],
     facadeImageName(theme, "dim", windows),
     stepExpr,
@@ -434,7 +430,7 @@ function basemapLayers(p: Palette): maplibregl.LayerSpecification[] {
       filter: BM_ROAD("major"),
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
-        "line-color": p.roadCasing,
+        "line-color": p.roadMajorCasing,
         "line-width": ["interpolate", ["linear"], ["zoom"], 11, 2.8, 14, 5.5, 16, 9.5, 18, 16],
       },
     },
@@ -482,7 +478,7 @@ function basemapPaint(p: Palette): Record<string, Record<string, unknown>> {
     "bm-waterway": { "line-color": p.waterLine },
     "bm-road-minor-casing": { "line-color": p.roadCasing },
     "bm-road-minor": { "line-color": p.roadMinor },
-    "bm-road-casing": { "line-color": p.roadCasing },
+    "bm-road-casing": { "line-color": p.roadMajorCasing },
     "bm-road-major": { "line-color": p.roadMajor },
     "bm-road-marking": { "line-color": p.roadMark },
     "glow-outer": { "circle-color": p.selected },
@@ -1207,12 +1203,14 @@ export default function Map() {
             },
             trees: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
             glow: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
-            // Отдельная фича выбранного дома: ниже порога окон даёт
-            // полупрозрачную зелёную «подсветку» тела поверх базового слоя.
-            selectedBuilding: {
-              type: "geojson",
-              data: { type: "FeatureCollection", features: [] },
-            },
+              // Отдельная фича выбранного дома: в тёмной теме ниже порога окон
+              // даёт зелёную подсветку тела; в светлой теме рисует только
+              // акцентную плиту крыши (0,6 м), чтобы на зумах < 16.5 не было
+              // заливки тела, но оставался акцент крыши.
+              selectedBuilding: {
+                type: "geojson",
+                data: { type: "FeatureCollection", features: [] },
+              },
             buildings: tileMode
               ? {
                   type: "vector",
@@ -1329,7 +1327,11 @@ export default function Map() {
               paint: {
                 // fill-extrusion-color поддерживает feature-state,
                 // fill-extrusion-opacity — нет, поэтому затемнение через цвет.
-                "fill-extrusion-color": buildingColorExpr(palette, colorStops),
+                "fill-extrusion-color": buildingColorExpr(
+                  palette,
+                  colorStops,
+                  themeRef.current === "dark" ? palette.selectedBody : null,
+                ),
                 "fill-extrusion-height": ["coalesce", ["get", "height"], 9],
                 "fill-extrusion-base": 0,
                 "fill-extrusion-opacity": 0.95,
@@ -1337,24 +1339,25 @@ export default function Map() {
               },
             },
             {
-              // Тело выбранного дома ниже порога окон. Отдельный слой, потому
-              // что fill-extrusion-pattern не читает feature-state, а убирать
-              // pattern совсем нельзя (слой перестаёт рисоваться).
-              // 5 см над базой — без z-fighting; выше порога слой скрыт,
-              // и видны обычные фасады с окнами.
+              // Выбранный дом ниже порога окон: в тёмной теме — полное тело,
+              // в светлой теме — только акцентная плита крыши (без заливки тела).
               id: "buildings-selected-body",
               type: "fill-extrusion",
               source: "selectedBuilding",
               paint: {
-                "fill-extrusion-color": palette.selectedBody,
-                "fill-extrusion-base": 0.05,
+                "fill-extrusion-color":
+                  themeRef.current === "dark" ? palette.selectedBody : palette.selected,
+                "fill-extrusion-base":
+                  themeRef.current === "dark"
+                    ? 0.05
+                    : (["coalesce", ["get", "height"], 9] as never),
                 "fill-extrusion-height": [
                   "+",
                   ["coalesce", ["get", "height"], 9],
-                  0.05,
+                  themeRef.current === "dark" ? 0.05 : 0.6,
                 ],
                 "fill-extrusion-opacity": 0.95,
-                "fill-extrusion-vertical-gradient": true,
+                "fill-extrusion-vertical-gradient": themeRef.current === "dark",
               },
             },
             {
@@ -1744,11 +1747,30 @@ export default function Map() {
         if (!map || !map.getLayer("buildings")) return;
         const p = MAP_THEMES[t];
         map.setLight(MAP_LIGHT[t]);
-        map.setPaintProperty("buildings", "fill-extrusion-color", buildingColorExpr(p, colorStops));
+        map.setPaintProperty(
+          "buildings",
+          "fill-extrusion-color",
+          buildingColorExpr(p, colorStops, t === "dark" ? p.selectedBody : null),
+        );
         map.setPaintProperty(
           "buildings-selected-body",
           "fill-extrusion-color",
-          p.selectedBody,
+          t === "dark" ? p.selectedBody : p.selected,
+        );
+        map.setPaintProperty(
+          "buildings-selected-body",
+          "fill-extrusion-base",
+          t === "dark" ? 0.05 : (["coalesce", ["get", "height"], 9] as never),
+        );
+        map.setPaintProperty(
+          "buildings-selected-body",
+          "fill-extrusion-height",
+          ["+", ["coalesce", ["get", "height"], 9], t === "dark" ? 0.05 : 0.6],
+        );
+        map.setPaintProperty(
+          "buildings-selected-body",
+          "fill-extrusion-vertical-gradient",
+          t === "dark",
         );
         map.setPaintProperty(
           "buildings-roof",
