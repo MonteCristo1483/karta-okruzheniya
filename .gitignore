@@ -11,6 +11,8 @@ data/processed/
 web/public/data/*.geojson
 web/public/data/routes/
 web/public/data/isochrones/
+web/public/data/tiles/
+web/public/data/buildings-index.json
 data.zip
 web/public/maplibre-gl-worker.mjs
 web/tsconfig.tsbuildinfo
