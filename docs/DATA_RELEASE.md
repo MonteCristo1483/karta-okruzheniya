@@ -68,6 +68,27 @@ git rm -rf .
 Ручной запуск нужен для отката данных: GitHub → Actions → **Deploy** →
 Run workflow, `data_ref: data`.
 
+## 3. Чек-лист релиза (делать по шагам, не по памяти)
+
+1. Собрать выгрузку в отдельный каталог (не в рабочем `web/public/data`).
+2. При необходимости долить поля: `pipeline/add_breakdown_to_routes.py --data-dir <каталог>`
+   (идемпотентно, без PostGIS).
+3. Проверить: `pipeline/validate_export.py <каталог>` → **0 критичных**;
+   `pipeline/check_golden.py <каталог>` → 18/18 (если есть данные golden).
+4. Сверить, что `presnya_buildings.geojson` не изменился, если задача его
+   не касалась (sha256 до/после).
+5. Упаковать **Python zipfile** (не Compress-Archive): содержимое каталога
+   в корне архива, без верхней папки.
+6. Ветка `data`: worktree `C:\Users\starg\karta-data-branch`, `git switch data`,
+   заменить `data.zip`, commit `data snapshot YYYY-MM-DD (что изменилось)`,
+   push, worktree удалить.
+7. Записать в `docs/decisions.md`: что изменилось, размер архива, число
+   файлов, результат валидатора.
+8. Деплой: push в `main` (docs-коммит) или ручной Deploy с `data_ref`.
+9. Проверить на проде один живой файл, который должен был измениться
+   (например `data/routes/<id>.json` — наличие нового поля).
+10. Откат: ручной Deploy с прежним `data_ref` (ветка `data` хранит историю).
+
 ## 4. Защита
 
 - Deploy запускается по push в `main` и вручную; перед сборкой данные
