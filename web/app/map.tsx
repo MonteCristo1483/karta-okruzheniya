@@ -34,11 +34,11 @@ maplibregl.setWorkerUrl("maplibre-gl-worker.mjs");
 // Палитры карты по темам (мягкие акценты, не неон — SPEC).
 const MAP_THEMES = {
   light: {
-    vlow: "#b9a9b8",
-    low: "#aeb2c8",
-    mid: "#b6c1d8",
-    high: "#b5cbd2",
-    vhigh: "#a8cbb5",
+    vlow: "#9fb0c9",
+    low: "#a9b9d4",
+    mid: "#b4c4de",
+    high: "#b7cfd6",
+    vhigh: "#b2d6c3",
     selected: "#7fe0a0",
     dim: "#c5cedb",
     halo: "#54d989",
@@ -56,25 +56,25 @@ const MAP_THEMES = {
     landUse: "#dce5ef",
     park: "#bfe0c2",
     wood: "#aed4b2",
-    water: "#8fd0e8",
-    waterLine: "#6fb8d6",
+    water: "#72c8e8",
+    waterLine: "#4aa8cf",
     roadMinor: "#fbfdff",
     roadCasing: "#b9c8d8",
     roadMajor: "#ffffff",
-    label: "#415064",
-    labelHalo: "#f2f6fa",
+    label: "#2f3a4a",
+    labelHalo: "#ffffff",
     labelWater: "#2f7fa8",
-    labelWaterHalo: "#eaf6fb",
+    labelWaterHalo: "#ffffff",
     tree: "#6fae72",
     treeDark: "#4f8f5a",
     shadow: "#1a2430",
   },
   dark: {
-    vlow: "#6a5a63",
-    low: "#5c6078",
-    mid: "#36435a",
-    high: "#3f5c6b",
-    vhigh: "#4b7564",
+    vlow: "#4c5a70",
+    low: "#54637c",
+    mid: "#3a4b66",
+    high: "#3f5c70",
+    vhigh: "#4f7d68",
     selected: "#6fe0a6",
     dim: "#2a3340",
     halo: "#7fe0aa",
@@ -92,15 +92,15 @@ const MAP_THEMES = {
     landUse: "#19212c",
     park: "#1d3a2b",
     wood: "#1a3326",
-    water: "#0e3550",
-    waterLine: "#18496a",
+    water: "#0d3f63",
+    waterLine: "#1a5f8a",
     roadMinor: "#2a3542",
     roadCasing: "#3b4756",
     roadMajor: "#4c5a6b",
-    label: "#c3d2e4",
-    labelHalo: "#0f1620",
+    label: "#e2e8f0",
+    labelHalo: "#0b1220",
     labelWater: "#82c4e8",
-    labelWaterHalo: "#0b2233",
+    labelWaterHalo: "#0b1220",
     tree: "#2f6b4a",
     treeDark: "#1e4a33",
     shadow: "#000000",
@@ -108,6 +108,32 @@ const MAP_THEMES = {
 } as const;
 
 type Palette = { [K in keyof (typeof MAP_THEMES)["light"]]: string };
+
+// Свет сцены: тёплый день / холодная ночь. MapLibre light для fill-extrusion.
+type ThemeLight = {
+  anchor: "viewport";
+  color: string;
+  intensity: number;
+  position: [number, number, number];
+};
+
+const MAP_LIGHT: Record<Theme, ThemeLight> = {
+  light: {
+    anchor: "viewport",
+    color: "#fff4e6",
+    intensity: 0.4,
+    position: [1.2, 210, 35],
+  },
+  dark: {
+    anchor: "viewport",
+    color: "#bcd7ff",
+    intensity: 0.3,
+    position: [1.2, 210, 35],
+  },
+};
+
+// Контактная тень под домами: на тёмной теме заметнее.
+const BUILDING_SHADOW_OPACITY: Record<Theme, number> = { light: 0.22, dark: 0.4 };
 
 // FX-2: пороги цвета — квантили реального распределения индекса.
 // Жёсткий step 5/7 после скоринга v4 давал ~56% зданий одним бежевым
@@ -888,6 +914,7 @@ export default function Map() {
         container,
         style: {
           version: 8,
+          light: MAP_LIGHT[themeRef.current],
           sources: {
             basemap: {
               type: "geojson",
@@ -987,7 +1014,7 @@ export default function Map() {
               source: "buildings",
               paint: {
                 "fill-color": palette.shadow,
-                "fill-opacity": 0.18,
+                "fill-opacity": BUILDING_SHADOW_OPACITY[themeRef.current],
                 "fill-translate": [4, 5],
                 "fill-translate-anchor": "viewport",
               },
@@ -1003,6 +1030,7 @@ export default function Map() {
                 "fill-extrusion-height": ["coalesce", ["get", "height"], 9],
                 "fill-extrusion-base": 0,
                 "fill-extrusion-opacity": 0.95,
+                "fill-extrusion-vertical-gradient": true,
               },
             },
             {
@@ -1078,7 +1106,7 @@ export default function Map() {
         const p = MAP_THEMES[themeRef.current];
         const zoom = map.getZoom();
         if (zoom < 12.6) return;
-        const size = zoom >= 16 ? 13 : zoom >= 14.2 ? 12 : 11;
+        const size = zoom >= 16 ? 13.5 : zoom >= 14.2 ? 12.5 : 11.5;
         const width = map.getContainer().clientWidth;
         const height = map.getContainer().clientHeight;
         const boxes: { x1: number; y1: number; x2: number; y2: number }[] = [];
@@ -1141,12 +1169,12 @@ export default function Map() {
             "white-space: nowrap",
             "font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
             `font-size: ${size}px`,
-            `font-weight: ${c.kind === "street" && c.importance >= 3 ? 600 : 500}`,
+            "font-weight: 600",
             `font-style: ${c.kind === "water" ? "italic" : "normal"}`,
             `color: ${color}`,
             "line-height: 1",
             "letter-spacing: 0.01em",
-            `text-shadow: -1px -1px 0 ${halo}, 1px -1px 0 ${halo}, -1px 1px 0 ${halo}, 1px 1px 0 ${halo}, 0 0 2px ${halo}`,
+            `text-shadow: -2px -2px 0 ${halo}, 2px -2px 0 ${halo}, -2px 2px 0 ${halo}, 2px 2px 0 ${halo}, -2px 0 0 ${halo}, 2px 0 0 ${halo}, 0 -2px 0 ${halo}, 0 2px 0 ${halo}, 0 0 3px ${halo}`,
           ].join(";");
           wrap.append(inner);
           labelMarkers.push(
@@ -1313,7 +1341,9 @@ export default function Map() {
       applyThemeRef.current = (t: Theme) => {
         if (!map || !map.getLayer("buildings")) return;
         const p = MAP_THEMES[t];
+        map.setLight(MAP_LIGHT[t]);
         map.setPaintProperty("buildings", "fill-extrusion-color", buildingColorExpr(p, colorStops));
+        map.setPaintProperty("buildings-shadow", "fill-opacity", BUILDING_SHADOW_OPACITY[t]);
         map.setPaintProperty("outline-halo", "line-color", p.halo);
         map.setPaintProperty("outline-core", "line-color", p.outlineCore);
         map.setPaintProperty("redzones-fill", "fill-color", p.redzone);
