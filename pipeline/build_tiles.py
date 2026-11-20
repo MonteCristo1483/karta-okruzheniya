@@ -4,6 +4,9 @@
 Input : web/public/data/presnya_buildings.geojson (gitignored artifact)
 Output: web/public/data/tiles/buildings-<sha8>.pmtiles
         web/public/data/buildings-index.json
+                rows: [id, lon, lat, address, index, year,
+                       road, railway, construction, industrial]
+                (last four = penalty distance percentiles, 3 decimals or null)
 
 tippecanoe is pinned to 2.79.0. There is no apt package and felt ships no
 release binaries; ghcr.io/felt/tippecanoe is not pullable ("denied"), so the
@@ -16,6 +19,7 @@ Stdlib only. Nothing in web/app, workflows or export_map_data.py is touched.
 from __future__ import annotations
 
 import argparse
+import bisect
 import gzip
 import hashlib
 import json
@@ -40,12 +44,23 @@ LAYER = "buildings"
 # objects, so it travels as a JSON string.
 TILE_ATTRS = ("id", "index", "height", "address", "year")
 
-FIELDS = ("id", "index", "height", "address", "year")
+# Index row layout (buildings-index.json), one array per building:
+#   [id, lon, lat, address, index, year, road, railway, construction, industrial]
+# The last four are percentiles of the penalty distance distribution, computed
+# exactly like percentileFor() in web/app/map.tsx: share of district buildings
+# farther from the object (0..1), rounded to 3 decimals; null when the building
+# has no distance_m for that kind.
+FIELDS = (
+    "id", "lon", "lat", "address", "index", "year",
+    "road", "railway", "construction", "industrial",
+)
 
 # 64091236 is the reference building from the brief; the other four are picked
 # deterministically from the data to cover edge cases (tallest, lowest score,
 # highest score, oldest year).
 REFERENCE_ID = 64091236
+
+PENALTY_KINDS = ("road", "railway", "construction", "industrial")
 
 
 # --------------------------------------------------------------------------- #
@@ -128,19 +143,50 @@ def representative_point(geometry: dict) -> tuple[float, float]:
     )
 
 
+def penalty_distances(features: list[dict]) -> dict[str, list[float]]:
+    """distance_m for every building per kind; missing counts as +inf, as in the client."""
+    values = {kind: [] for kind in PENALTY_KINDS}
+    for feature in features:
+        penalties = (feature["properties"].get("breakdown") or {}).get("penalties") or {}
+        for kind in PENALTY_KINDS:
+            distance = (penalties.get(kind) or {}).get("distance_m")
+            values[kind].append(math.inf if distance is None else float(distance))
+    return values
+
+
 def build_index(features: list[dict]) -> list[list]:
+    # Same distribution as web/app/map.tsx percentileFor(): buildings without a
+    # distance count as +inf, i.e. "farther", and the percentile is the share of
+    # buildings strictly farther than this one.
+    sorted_distances = {
+        kind: sorted(values) for kind, values in penalty_distances(features).items()
+    }
+
+    def percentile(kind: str, distance: float | None) -> float | None:
+        if distance is None:
+            return None
+        values = sorted_distances[kind]
+        if not values:
+            return 0.0
+        farther = len(values) - bisect.bisect_right(values, float(distance))
+        return round(farther / len(values), 3)
+
     rows = []
     for feature in features:
         props = feature["properties"]
         lon, lat = representative_point(feature["geometry"])
-        rows.append([
+        penalties = (props.get("breakdown") or {}).get("penalties") or {}
+        row = [
             props["id"],
             round(lon, 6),
             round(lat, 6),
             props.get("address"),
             props.get("index"),
             props.get("year"),
-        ])
+        ]
+        for kind in PENALTY_KINDS:
+            row.append(percentile(kind, (penalties.get(kind) or {}).get("distance_m")))
+        rows.append(row)
     return rows
 
 
@@ -359,7 +405,7 @@ def verify(pmtiles: Path, features: list[dict],
         else:
             got = dict(got)
             got.setdefault("id", fid)  # --use-attribute-for-id: id lives on the feature
-            for key in FIELDS:
+            for key in TILE_ATTRS:  # tiles carry tile attributes, not index fields
                 a, b = src.get(key), got.get(key)
                 if key in ("index", "height") and a is not None and b is not None:
                     if not math.isclose(float(a), float(b), rel_tol=0, abs_tol=1e-6):
