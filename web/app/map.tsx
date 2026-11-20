@@ -172,9 +172,12 @@ const buildingColorExpr = (p: Palette, s: ColorStops | null) =>
 // ── Окна на фасадах: pattern-текстуры, сгенерированные в runtime ─────────
 // Гипотеза: fill-extrusion-pattern в MapLibre 6 — data-driven (style spec:
 // cross-faded-data-driven), поэтому текстуру можно выбирать по ступени
-// индекса. Файлов и спрайт-хоста нет: 64×64 canvas → map.addImage.
+// индекса. Файлов и спрайт-хоста нет: 96×96 canvas → map.addImage.
 // Текстура — база ступени + светлые окна с сеткой этажей.
 const FACADE_SIZE = 96;
+// Ниже этого зума окна превращаются в шум: pattern экранный, а дома мелкие.
+// Порог — только по зуму (не по камере/данным); см. syncFacades.
+const FACADE_MIN_ZOOM = 16.5;
 const FACADE_STEPS = ["vlow", "low", "mid", "high", "vhigh"] as const;
 type FacadeStep = (typeof FACADE_STEPS)[number];
 type FacadeVariant = FacadeStep | "selected" | "dim";
@@ -198,9 +201,9 @@ function mixHex(a: string, b: string, t: number): string {
   return `#${mix(ar, br)}${mix(ag, bg)}${mix(ab, bb)}`;
 }
 
-// 128×128 на экране (pixelRatio 1): 8×8 ячеек по 16 px, окно 6×9 px.
+// 96×96 на экране (pixelRatio 1): 8×8 ячеек по 12 px, окно 5×7 px.
 // Повтор в экранных пикселях — рисунок одинаково читается на низких
-// и высоких домах, но на мелких зданиях видно 1–2 ряда окон.
+// и высоких домах; включаем только с FACADE_MIN_ZOOM, иначе мелко/шумно.
 function makeFacadeImage(base: string, theme: Theme, variant: FacadeVariant): ImageData {
   const size = FACADE_SIZE;
   const cell = 12;
@@ -1141,9 +1144,11 @@ export default function Map() {
               // Крыша: тонкая плита в цвет ступени поверх фасада. Нужна
               // потому, что fill-extrusion-pattern красит и верхнюю грань —
               // без неё крыши выглядят «в окнах». 0,6 м — как парапет.
+              // Показываем только вместе с окнами (zoom >= FACADE_MIN_ZOOM).
               id: "buildings-roof",
               type: "fill-extrusion",
               source: "buildings",
+              layout: { visibility: "none" },
               paint: {
                 "fill-extrusion-color": buildingColorExpr(palette, colorStops),
                 "fill-extrusion-base": ["coalesce", ["get", "height"], 9],
@@ -1474,22 +1479,41 @@ export default function Map() {
         add("dim", p.dim);
       };
 
+      // Окна включаем только вблизи. На районном зуме (15.35) текстура мелкая
+      // и читается как шум, поэтому ниже порога — чистый fill-extrusion-color,
+      // без pattern и без крышной плиты. Переключение на load и zoomend.
+      let facadesOn: boolean | null = null;
+      const syncFacades = (t: Theme) => {
+        if (!map || !map.getLayer("buildings")) return;
+        const on = map.getZoom() >= FACADE_MIN_ZOOM;
+        if (on === facadesOn) return;
+        facadesOn = on;
+        if (on) addFacadeImages(t);
+        map.setPaintProperty(
+          "buildings",
+          "fill-extrusion-pattern",
+          (on ? facadePatternExpr(t, colorStops) : null) as never,
+        );
+        map.setLayoutProperty(
+          "buildings-roof",
+          "visibility",
+          on ? "visible" : "none",
+        );
+      };
+
       applyThemeRef.current = (t: Theme) => {
         if (!map || !map.getLayer("buildings")) return;
         const p = MAP_THEMES[t];
         map.setLight(MAP_LIGHT[t]);
         map.setPaintProperty("buildings", "fill-extrusion-color", buildingColorExpr(p, colorStops));
-        addFacadeImages(t);
-        map.setPaintProperty(
-          "buildings",
-          "fill-extrusion-pattern",
-          facadePatternExpr(t, colorStops),
-        );
         map.setPaintProperty(
           "buildings-roof",
           "fill-extrusion-color",
           buildingColorExpr(p, colorStops),
         );
+        // У темы свой набор картинок — пере-применяем pattern принудительно.
+        facadesOn = null;
+        syncFacades(t);
         map.setPaintProperty("buildings-shadow", "fill-opacity", BUILDING_SHADOW_OPACITY[t]);
         map.setPaintProperty("outline-halo", "line-color", p.halo);
         map.setPaintProperty("outline-core", "line-color", p.outlineCore);
@@ -1508,6 +1532,10 @@ export default function Map() {
         rebuildOverlays(selectedRef.current, visibleRef.current);
         rebuildLabels();
       };
+
+      // Порог окон: переключаем ровно по окончании зума (и на load через
+      // applyThemeRef). Во время инерции карта не дёргается.
+      map.on("zoomend", () => syncFacades(themeRef.current));
 
       let selectedId: number | null = null;
       const allIds = buildings.features.map((f) => f.properties.id);
