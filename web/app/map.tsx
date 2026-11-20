@@ -146,22 +146,28 @@ type ThemeLight = {
 const MAP_LIGHT: Record<Theme, ThemeLight> = {
   light: {
     anchor: "viewport",
-    // Тёплый направленный свет сбоку (азимут ~215°, полярный ~48°):
-    // соседние фасады получают разную яркость, как в диораме.
+    // Тёплый направленный свет сбоку (азимут ~245°, полярный ~46°):
+    // передние и левые фасады светлые, правые — в тени, что согласуется
+    // со сдвигом контактных теней на земле [+x, +y] (вправо-вниз).
     color: "#fff1dc",
     intensity: 0.6,
-    position: [1.5, 215, 48],
+    position: [1.5, 245, 46],
   },
   dark: {
     anchor: "viewport",
     color: "#bcd7ff",
-    intensity: 0.3,
-    position: [1.2, 210, 35],
+    intensity: 0.32,
+    position: [1.2, 245, 36],
   },
 };
 
-// Контактная тень под домами: на тёмной теме заметнее.
-const BUILDING_SHADOW_OPACITY: Record<Theme, number> = { light: 0.22, dark: 0.4 };
+// Мягкая многослойная тень под домами (3 слоя со сдвигом [3,3]..[6,6], z >= 14):
+// убирает эффект «парящих» коробок без z-fighting и двойных кромок.
+const BUILDING_SHADOW_LAYERS = [
+  { id: "buildings-shadow-1", translate: [3, 3] as [number, number], opacity: { light: 0.1, dark: 0.16 } },
+  { id: "buildings-shadow-2", translate: [4.5, 4.5] as [number, number], opacity: { light: 0.08, dark: 0.12 } },
+  { id: "buildings-shadow-3", translate: [6, 6] as [number, number], opacity: { light: 0.05, dark: 0.08 } },
+] as const;
 
 // FX-2: пороги цвета — квантили реального распределения индекса.
 // Жёсткий step 5/7 после скоринга v4 давал ~56% зданий одним бежевым
@@ -207,14 +213,23 @@ const buildingColorExpr = (
 // Гипотеза: fill-extrusion-pattern в MapLibre 6 — data-driven (style spec:
 // cross-faded-data-driven), поэтому текстуру можно выбирать по ступени
 // индекса. Файлов и спрайт-хоста нет: 96×96 canvas → map.addImage.
-// Текстура — база ступени + светлые окна с сеткой этажей.
+// Два уровня текстуры по зуму:
+// - z < 13.5 ("flat"): чистый цвет ступени без окон и без крыши-плиты;
+// - z 13.5–16.5 ("coarse"): крупная сетка окон с мягким контрастом (без муара);
+// - z >= 16.5 ("fine"): детальная текстура этажей.
 const FACADE_SIZE = 96;
-// Ниже этого зума окна превращаются в шум: pattern экранный, а дома мелкие.
-// Порог — только по зуму (не по камере/данным); см. syncFacades.
+const FACADE_COARSE_MIN_ZOOM = 13.5;
 const FACADE_MIN_ZOOM = 16.5;
 const FACADE_STEPS = ["vlow", "low", "mid", "high", "vhigh"] as const;
 type FacadeStep = (typeof FACADE_STEPS)[number];
 type FacadeVariant = FacadeStep | "dim" | "selected";
+type FacadeLod = "flat" | "coarse" | "fine";
+
+function facadeLodForZoom(zoom: number): FacadeLod {
+  if (zoom < FACADE_COARSE_MIN_ZOOM) return "flat";
+  if (zoom < FACADE_MIN_ZOOM) return "coarse";
+  return "fine";
+}
 
 function parseHex(hex: string): [number, number, number] {
   const h = hex.replace("#", "");
@@ -235,17 +250,18 @@ function mixHex(a: string, b: string, t: number): string {
   return `#${mix(ar, br)}${mix(ag, bg)}${mix(ab, bb)}`;
 }
 
-// 96×96 на экране (pixelRatio 1): 8×8 ячеек по 12 px, окно 5×7 px.
-// Повтор в экранных пикселях — рисунок одинаково читается на низких
-// и высоких домах. windows=false — плоская база для зумов ниже порога.
+// 96×96 на экране (pixelRatio 1):
+// - "fine": 8×8 ячеек по 12 px, окно 5×7 px + тонкий шов этажа;
+// - "coarse": 6×6 ячеек по 16 px, окно 7×9 px с мягким ореолом и пониженным контрастом
+//   (на обзорном зуме 13.5–16.5 читается как тёплые окна диорамы без муара и «шахматки»);
+// - "flat": плоская база для зумов < 13.5.
 function makeFacadeImage(
   base: string,
   theme: Theme,
   variant: FacadeVariant,
-  windows: boolean,
+  lod: FacadeLod,
 ): ImageData {
   const size = FACADE_SIZE;
-  const cell = 12;
   const canvas = document.createElement("canvas");
   canvas.width = size;
   canvas.height = size;
@@ -253,23 +269,50 @@ function makeFacadeImage(
   if (!ctx) throw new Error("canvas 2d недоступен");
   ctx.fillStyle = base;
   ctx.fillRect(0, 0, size, size);
-  if (!windows) return ctx.getImageData(0, 0, size, size);
-
-  // Сетка: только шов этажа (вертикальные стыки на дистанции дают муар).
-  const seam = mixHex(base, "#000000", theme === "dark" ? 0.16 : 0.07);
-  ctx.fillStyle = seam;
-  for (let y = 0; y < size; y += cell) ctx.fillRect(0, y + cell - 1, size, 1);
+  if (lod === "flat") return ctx.getImageData(0, 0, size, size);
 
   // Детерминированный «разброс» яркости окон — без Math.random,
   // чтобы текстура была стабильной между кадрами и темами.
   let seed =
     (theme === "dark" ? 7 : 3) +
+    (lod === "coarse" ? 53 : 0) +
     variant.charCodeAt(0) * 131 +
     (variant.length > 3 ? variant.charCodeAt(variant.length - 1) * 17 : 0);
   const rnd = () => {
     seed = (seed * 1664525 + 1013904223) >>> 0;
     return seed / 4294967296;
   };
+
+  if (lod === "coarse") {
+    const cell = 12;
+    const seam = mixHex(base, "#000000", theme === "dark" ? 0.1 : 0.045);
+    ctx.fillStyle = seam;
+    for (let y = 0; y < size; y += cell) ctx.fillRect(0, y + cell - 1, size, 1);
+
+    const lit = theme === "dark" ? "#dbeafe" : "#fffcf2";
+    const weak = variant === "dim" ? 0.13 : theme === "dark" ? 0.22 : 0.28;
+    const strong = variant === "dim" ? 0.21 : theme === "dark" ? 0.42 : 0.48;
+
+    for (let y = 0; y < size; y += cell) {
+      for (let x = 0; x < size; x += cell) {
+        const r = rnd();
+        // ~22% окон приглушены, чтобы убрать регулярную «шахматку» на обзоре.
+        const t = r < 0.22 ? weak * 0.4 : weak + (strong - weak) * r;
+        // Мягкий 1 px ореол вокруг окна сглаживает переход на наклонных гранях (анти-муар).
+        ctx.fillStyle = mixHex(base, lit, t * 0.5);
+        ctx.fillRect(x + 3, y + 2, 7, 8);
+        ctx.fillStyle = mixHex(base, lit, t);
+        ctx.fillRect(x + 4, y + 3, 5, 6);
+      }
+    }
+    return ctx.getImageData(0, 0, size, size);
+  }
+
+  const cell = 12;
+  // Сетка: только шов этажа (вертикальные стыки на дистанции дают муар).
+  const seam = mixHex(base, "#000000", theme === "dark" ? 0.16 : 0.07);
+  ctx.fillStyle = seam;
+  for (let y = 0; y < size; y += cell) ctx.fillRect(0, y + cell - 1, size, 1);
 
   const lit = theme === "dark" ? "#d7e6ff" : "#ffffff";
   const weak = variant === "dim" ? 0.18 : theme === "dark" ? 0.26 : 0.34;
@@ -288,33 +331,33 @@ function makeFacadeImage(
   return ctx.getImageData(0, 0, size, size);
 }
 
-const facadeImageName = (theme: Theme, variant: FacadeVariant, windows: boolean) =>
-  `facade-${theme}-${variant}${windows ? "" : "-flat"}`;
+const facadeImageName = (theme: Theme, variant: FacadeVariant, lod: FacadeLod) =>
+  `facade-${theme}-${variant}-${lod}`;
 
 // Тот же step, что и у цвета: индексы → ступени. Выбранный дом в светлой
 // теме на всех зумах остаётся домом: фасад берётся по его ступени, а
 // «выбранность» читается по ореолу на земле, обводке и акцентной крыше.
-const facadePatternExpr = (theme: Theme, s: ColorStops | null, windows: boolean) => {
+const facadePatternExpr = (theme: Theme, s: ColorStops | null, lod: FacadeLod) => {
   const stepExpr = [
     "step",
     ["coalesce", ["get", "index"], s?.mid ?? 5],
-    facadeImageName(theme, "vlow", windows),
+    facadeImageName(theme, "vlow", lod),
     s?.t1 ?? 5,
-    facadeImageName(theme, "low", windows),
+    facadeImageName(theme, "low", lod),
     s?.t2 ?? 7,
-    facadeImageName(theme, "mid", windows),
+    facadeImageName(theme, "mid", lod),
     s?.t3 ?? 9,
-    facadeImageName(theme, "high", windows),
+    facadeImageName(theme, "high", lod),
     s?.t4 ?? 11,
-    facadeImageName(theme, "vhigh", windows),
+    facadeImageName(theme, "vhigh", lod),
   ];
   return [
     "case",
     ["to-boolean", ["feature-state", "selected"]],
     // Тёмная тема: как раньше, зелёный фасад (не переделываем).
-    theme === "dark" ? facadeImageName(theme, "selected", windows) : stepExpr,
+    theme === "dark" ? facadeImageName(theme, "selected", lod) : stepExpr,
     ["to-boolean", ["feature-state", "inactive"]],
-    facadeImageName(theme, "dim", windows),
+    facadeImageName(theme, "dim", lod),
     stepExpr,
   ] as never;
 };
@@ -355,17 +398,29 @@ function basemapLayers(p: Palette): maplibregl.LayerSpecification[] {
       },
     },
     {
-      // Деревья — декоративные точки в парках (оформление, не факт).
+      // Деревья — декоративные точки в park/wood (оформление, не факт).
+      // В плоскости карты (pitch-alignment/scale: map) и три ступени размера по зуму:
+      // z < 14.6 / 14.6–16.2 / >= 16.2 — кроны уходят в перспективу и не режутся краем.
       id: "bm-trees",
       type: "circle",
       source: "trees",
       paint: {
-        "circle-color": p.tree,
-        "circle-radius": ["interpolate", ["linear"], ["zoom"], 13, 1.8, 15, 3.1, 17, 5.2],
+        "circle-pitch-alignment": "map",
+        "circle-pitch-scale": "map",
+        "circle-color": ["match", ["get", "tone"], 1, p.treeDark, p.tree] as never,
+        "circle-radius": [
+          "step",
+          ["zoom"],
+          ["*", 2.6, ["get", "size"]],
+          14.6,
+          ["*", 4.4, ["get", "size"]],
+          16.2,
+          ["*", 7.2, ["get", "size"]],
+        ] as never,
         "circle-stroke-color": p.treeDark,
-        "circle-stroke-width": 0.5,
+        "circle-stroke-width": ["step", ["zoom"], 0.5, 14.6, 0.85, 16.2, 1.2] as never,
         "circle-opacity": 0.95,
-        "circle-blur": 0.1,
+        "circle-blur": 0.14,
       },
     },
     {
@@ -477,7 +532,10 @@ function basemapPaint(p: Palette): Record<string, Record<string, unknown>> {
     "bm-land": { "background-color": p.land },
     "bm-landuse": { "fill-color": p.landUse },
     "bm-green": { "fill-color": ["match", ["get", "class"], "wood", p.wood, p.park] },
-    "bm-trees": { "circle-color": p.tree, "circle-stroke-color": p.treeDark },
+    "bm-trees": {
+      "circle-color": ["match", ["get", "tone"], 1, p.treeDark, p.tree],
+      "circle-stroke-color": p.treeDark,
+    },
     "bm-water": { "fill-color": p.water, "fill-outline-color": p.waterLine },
     "bm-river": { "line-color": p.water },
     "bm-waterway": { "line-color": p.waterLine },
@@ -488,7 +546,9 @@ function basemapPaint(p: Palette): Record<string, Record<string, unknown>> {
     "bm-road-marking": { "line-color": p.roadMark },
     "glow-outer": { "circle-color": p.selected },
     "glow-inner": { "circle-color": p.selected },
-    "buildings-shadow": { "fill-color": p.shadow },
+    "buildings-shadow-1": { "fill-color": p.shadow },
+    "buildings-shadow-2": { "fill-color": p.shadow },
+    "buildings-shadow-3": { "fill-color": p.shadow },
   };
 }
 
@@ -563,42 +623,68 @@ function polygonContains(pt: Position, rings: Position[][]): boolean {
   return true;
 }
 
-// Декоративные деревья в парках: ровная сетка с детерминированным
-// смещением, чтобы зелень не выглядела плоским пятном (как на макетах).
+function ringAreaHectares(ring: Position[]): number {
+  if (ring.length < 3) return 0;
+  const latRad = (55.756 * Math.PI) / 180;
+  const lonM = Math.cos(latRad) * 111320;
+  const latM = 111132;
+  let sum = 0;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    sum += (ring[j][0] - ring[i][0]) * lonM * ((ring[j][1] + ring[i][1]) * 0.5 * latM);
+  }
+  return Math.abs(sum) / 10000;
+}
+
+// Декоративные деревья в park и wood: детерминированные точки внутри полигонов
+// (seeded PRNG от стабильного идентификатора полигона, 60–80 точек на гектар),
+// чтобы кроны лежали в плоскости карты и уходили в перспективу без среза по краю.
 // Это оформление, не факт из данных: в карточку и индекс не попадает.
-function buildTreePoints(features: GFeature<BasemapProps>[]): GCollection<{ size: number }> {
-  const points: GFeature<{ size: number }>[] = [];
-  let seed = 20261119;
-  const rand = () => {
-    seed = (seed * 1664525 + 1013904223) >>> 0;
-    return seed / 4294967296;
-  };
-  for (const f of features) {
-    if (f.properties.layer !== "green" || f.properties.class !== "park") continue;
+function buildTreePoints(
+  features: GFeature<BasemapProps>[],
+): GCollection<{ size: number; tone: number }> {
+  const points: GFeature<{ size: number; tone: number }>[] = [];
+  for (let fi = 0; fi < features.length; fi++) {
+    const f = features[fi];
+    if (f.properties.layer !== "green") continue;
+    const cls = f.properties.class;
+    if (cls !== "park" && cls !== "wood") continue;
     let polys: Position[][][] = [];
     if (f.geometry.type === "Polygon") polys = [f.geometry.coordinates];
     else if (f.geometry.type === "MultiPolygon") polys = f.geometry.coordinates;
     else continue;
-    for (const rings of polys) {
+    for (let pi = 0; pi < polys.length; pi++) {
+      const rings = polys[pi];
       let minX = Infinity;
       let minY = Infinity;
       let maxX = -Infinity;
       let maxY = -Infinity;
-      for (const ring of rings) {
-        for (const [x, y] of ring) {
-          minX = Math.min(minX, x);
-          maxX = Math.max(maxX, x);
-          minY = Math.min(minY, y);
-          maxY = Math.max(maxY, y);
-        }
+      for (const [x, y] of rings[0]) {
+        minX = Math.min(minX, x);
+        maxX = Math.max(maxX, x);
+        minY = Math.min(minY, y);
+        maxY = Math.max(maxY, y);
       }
-      const area = (maxX - minX) * (maxY - minY);
-      if (area < 1e-6) continue; // меньше ~0,7 га
-      // 1 дерево на ~45 м² площади рамки — визуальная плотность, не факт.
-      const want = Math.min(170, Math.max(6, Math.round(area / 2.1e-7)));
+      const areaHa = ringAreaHectares(rings[0]);
+      if (areaHa < 0.04) continue;
+      // Seed от id/координат полигона — детерминированный и независимый от порядка обхода.
+      const rawId = (f as { id?: number | string }).id;
+      const numId = typeof rawId === "number" ? rawId : Number(rawId) || 0;
+      let seed =
+        ((Math.round(minX * 1e5) * 73856093) ^
+          (Math.round(minY * 1e5) * 19349663) ^
+          ((numId || fi + 1) * 83492791) ^
+          (pi * 2654435761)) >>>
+        0;
+      const rand = () => {
+        seed = (seed * 1664525 + 1013904223) >>> 0;
+        return seed / 4294967296;
+      };
+      // 60–80 точек на гектар (в wood чуть плотнее, чем в park).
+      const densityPerHa = cls === "wood" ? 78 : 70;
+      const want = Math.min(340, Math.max(5, Math.round(areaHa * densityPerHa)));
       let made = 0;
       let tries = 0;
-      while (made < want && tries < want * 10) {
+      while (made < want && tries < want * 9) {
         tries++;
         const pt: [number, number] = [
           minX + rand() * (maxX - minX),
@@ -607,11 +693,14 @@ function buildTreePoints(features: GFeature<BasemapProps>[]): GCollection<{ size
         if (!polygonContains(pt, rings)) continue;
         points.push({
           type: "Feature",
-          properties: { size: 0.8 + rand() * 0.55 },
+          properties: {
+            size: 0.78 + rand() * 0.62,
+            tone: rand() < (cls === "wood" ? 0.45 : 0.3) ? 1 : 0,
+          },
           geometry: { type: "Point", coordinates: pt },
         });
         made++;
-        if (points.length >= 1500) return { type: "FeatureCollection", features: points };
+        if (points.length >= 7500) return { type: "FeatureCollection", features: points };
       }
     }
   }
@@ -1333,19 +1422,22 @@ export default function Map() {
                 "circle-blur": 0.8,
               },
             },
-            {
-              // Контактная тень: плоская копия пятна дома со сдвигом.
-              id: "buildings-shadow",
-              type: "fill",
+            // Мягкая многослойная тень под домами: 3 плоских fill со сдвигом
+            // [3,3]..[6,6], opacity 0.05..0.10 (light), без обводки и только z >= 14.
+            ...BUILDING_SHADOW_LAYERS.map((s) => ({
+              id: s.id,
+              type: "fill" as const,
               source: "buildings",
+              minzoom: 14,
               ...buildingSourceLayer,
               paint: {
                 "fill-color": palette.shadow,
-                "fill-opacity": BUILDING_SHADOW_OPACITY[themeRef.current],
-                "fill-translate": [4, 5],
-                "fill-translate-anchor": "viewport",
+                "fill-opacity": s.opacity[themeRef.current],
+                "fill-translate": s.translate,
+                "fill-translate-anchor": "viewport" as const,
+                "fill-antialias": false,
               },
-            },
+            })),
             {
               id: "buildings",
               type: "fill-extrusion",
@@ -1756,47 +1848,50 @@ export default function Map() {
       const addFacadeImages = (t: Theme) => {
         if (!map) return;
         const p = MAP_THEMES[t];
-        const add = (variant: FacadeVariant, baseColor: string, windows: boolean) => {
-          const name = facadeImageName(t, variant, windows);
+        const lods: FacadeLod[] = ["flat", "coarse", "fine"];
+        const add = (variant: FacadeVariant, baseColor: string, lod: FacadeLod) => {
+          const name = facadeImageName(t, variant, lod);
           if (map?.getImage(name)) return;
-          map?.addImage(name, makeFacadeImage(baseColor, t, variant, windows));
+          map?.addImage(name, makeFacadeImage(baseColor, t, variant, lod));
         };
-        for (const step of FACADE_STEPS) {
-          add(step, p[step], true);
-          add(step, p[step], false);
+        for (const lod of lods) {
+          for (const step of FACADE_STEPS) {
+            add(step, p[step], lod);
+          }
+          add("dim", p.dim, lod);
+          add("selected", p.selectedBody, lod);
         }
-        add("dim", p.dim, true);
-        add("dim", p.dim, false);
-        add("selected", p.selectedBody, true);
-        add("selected", p.selectedBody, false);
       };
 
-      // Окна включаем только вблизи. На районном зуме (15.35) текстура мелкая
-      // и читается как шум, поэтому ниже порога — плоские pattern-картинки
-      // без окон. Pattern не снимаем совсем (setPaintProperty(..., null)
-      // ломал рендер слоя в MapLibre 6), а подменяем набор картинок.
-      let facadesOn: boolean | null = null;
+      // Два уровня текстуры фасадов по зуму:
+      // z < 13.5 ("flat") — чистый цвет без окон и без крыши-плиты;
+      // z 13.5–16.5 ("coarse") — грубая сетка окон на обзоре + крыша;
+      // z >= 16.5 ("fine") — детальная текстура + крыша.
+      // Pattern не снимаем через null (в MapLibre 6 это ломало рендер слоя),
+      // а подменяем набор картинок.
+      let currentFacadeLod: FacadeLod | null = null;
       const syncFacades = (t: Theme) => {
         if (!map || !map.getLayer("buildings")) return;
-        const on = map.getZoom() >= FACADE_MIN_ZOOM;
-        if (on === facadesOn) return;
-        facadesOn = on;
+        const lod = facadeLodForZoom(map.getZoom());
+        if (lod === currentFacadeLod) return;
+        currentFacadeLod = lod;
+        const hasWindows = lod !== "flat";
         addFacadeImages(t);
         map.setPaintProperty(
           "buildings",
           "fill-extrusion-pattern",
-          facadePatternExpr(t, colorStops, on),
+          facadePatternExpr(t, colorStops, lod),
         );
         map.setLayoutProperty(
           "buildings-roof",
           "visibility",
-          on ? "visible" : "none",
+          hasWindows ? "visible" : "none",
         );
         if (map.getLayer("buildings-selected-body")) {
           map.setLayoutProperty(
             "buildings-selected-body",
             "visibility",
-            on ? "none" : "visible",
+            hasWindows ? "none" : "visible",
           );
         }
         // Шейдер pattern-варианта компилируется не в том же кадре, а карта
@@ -1846,9 +1941,13 @@ export default function Map() {
         // готовом атласе, иначе первый кадр может пропустить слой.
         addFacadeImages("light");
         addFacadeImages("dark");
-        facadesOn = null;
+        currentFacadeLod = null;
         syncFacades(t);
-        map.setPaintProperty("buildings-shadow", "fill-opacity", BUILDING_SHADOW_OPACITY[t]);
+        for (const s of BUILDING_SHADOW_LAYERS) {
+          if (map.getLayer(s.id)) {
+            map.setPaintProperty(s.id, "fill-opacity", s.opacity[t]);
+          }
+        }
         map.setPaintProperty("outline-halo", "line-color", p.halo);
         map.setPaintProperty("outline-core", "line-color", p.outlineCore);
         map.setPaintProperty("redzones-fill", "fill-color", p.redzone);
@@ -1882,7 +1981,7 @@ export default function Map() {
       for (const m of buildingMeta) metaById[m.id] = m;
 
       const applySelection = () => {
-        if (!map) return;
+        if (!map || !map.getSource("buildings")) return;
         // Векторному источнику нужен sourceLayer и для feature-state.
         const stateSource = tileMode
           ? { source: "buildings", sourceLayer: "buildings" }
@@ -1897,6 +1996,15 @@ export default function Map() {
           );
         }
       };
+
+      // В режиме PMTiles тайлы нового зума (после flyTo) приходят позже,
+      // чем сам вызов selectById; повторяем applySelection на sourcedata/idle,
+      // чтобы свежезагруженные тайлы гарантированно получили feature-state.
+      map.on("sourcedata", (e) => {
+        if (e.sourceId === "buildings" && e.isSourceLoaded) {
+          applySelection();
+        }
+      });
 
       const setUrlBuilding = (id: number | null) => {
         const url = new URL(window.location.href);
@@ -2084,7 +2192,10 @@ export default function Map() {
         // Тайлы вокруг дома могут прийти после flyTo — повторим на idle.
         // Проверяем selectedId: пока ждали, могли выбрать другой дом.
         const captureIfCurrent = () => {
-          if (selectedId === id) captureSelectedBody(id);
+          if (selectedId === id) {
+            applySelection();
+            captureSelectedBody(id);
+          }
         };
         map?.once("idle", captureIfCurrent);
         window.setTimeout(captureIfCurrent, 1200);
@@ -2150,7 +2261,8 @@ export default function Map() {
 
   return (
     <div className="relative h-full w-full">
-      <div ref={containerRef} className="map-gradient h-full w-full" />
+      <div ref={containerRef} className="map-gradient map-grade h-full w-full" />
+      <div className="map-vignette pointer-events-none absolute inset-0" aria-hidden />
       <LayersPanel
         visibility={visible}
         onToggle={(key) =>

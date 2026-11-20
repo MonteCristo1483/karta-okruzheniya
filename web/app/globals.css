@@ -45,3 +45,25 @@ body {
 .map-gradient {
   background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-mid) 55%, var(--bg-bottom) 100%);
 }
+
+/* Мягкий грейд и радиальный вигнет поверх канваса карты (не поверх UI) */
+.map-grade canvas.maplibregl-canvas {
+  filter: saturate(1.06) contrast(1.03);
+}
+
+.map-vignette {
+  z-index: 1;
+  background: radial-gradient(
+    ellipse 78% 74% at 50% 48%,
+    rgba(18, 32, 48, 0) 58%,
+    rgba(18, 32, 48, 0.14) 100%
+  );
+}
+
+[data-theme="dark"] .map-vignette {
+  background: radial-gradient(
+    ellipse 78% 74% at 50% 48%,
+    rgba(4, 8, 16, 0) 54%,
+    rgba(4, 8, 16, 0.28) 100%
+  );
+}
