@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
+import { Protocol } from "pmtiles";
 import type { Feature, FeatureCollection, Geometry, Position } from "geojson";
 import "maplibre-gl/dist/maplibre-gl.css";
 import BuildingSheet, { RED_FLAG_PENALTY } from "./building-sheet";
@@ -18,8 +19,18 @@ import type { Theme } from "./theme";
 // Пути относительные — статический экспорт живёт в подпапке
 // basePath (/karta-okruzheniya на GitHub Pages).
 const BUILDINGS_URL = "data/presnya_buildings.geojson";
+// PMTiles: тот же набор зданий, нарезанный tippecanoe (pipeline/build_tiles.py).
+// Файла на проде может ещё не быть — тогда клиент молча остаётся на geojson.
+const TILES_URL = "data/tiles/buildings.pmtiles";
+// Индекс: [id, lon, lat, address, index, year] — замена полному geojson
+// для поиска, центров домов, квинтилей цвета и ?building=<id>.
+const INDEX_URL = "data/buildings-index.json";
 const POI_URL = "data/presnya_poi.geojson";
 const REDZONES_URL = "data/presnya_redzones.geojson";
+
+// Протокол pmtiles регистрируем один раз за жизнь вкладки. Не на уровне
+// модуля: static export пререндерится в Node, где нет window и MapLibre.
+let pmtilesProtocolReady = false;
 
 // Подложка: компактный GeoJSON, собранный из OSM (pipeline/build_basemap.py).
 // Только улицы, вода, парки и землепользование — без зданий, POI и адресов,
@@ -440,6 +451,8 @@ type BuildingRoutes = {
     string,
     { minutes: number; distance_m: number; geometry: { type: "LineString"; coordinates: Position[] } }
   >;
+  // Шаг B1: разбивка индекса теперь лежит рядом с маршрутами, а не в тайлах.
+  breakdown?: BuildingBreakdown;
 };
 type FlatRoutes = Record<string, { minutes: number; coordinates: Position[] }>;
 const ROUTES_URL = (id: number) => `data/routes/${id}.json`;
@@ -600,6 +613,25 @@ type BuildingProps = {
   address?: string;
   year?: number | null;
   breakdown?: BuildingBreakdown;
+};
+
+// Строка data/buildings-index.json: [id, lon, lat, address, index, year].
+type BuildingIndexRow = [
+  number,
+  number,
+  number,
+  string | null,
+  number | null,
+  number | null,
+];
+
+// Метаданные дома, общие для geojson- и тайлового режимов.
+type BuildingMeta = {
+  id: number;
+  center: [number, number] | null;
+  address: string | null;
+  index: number | null;
+  year: number | null;
 };
 
 // Порядок важен для стабильного типа percentiles в карточке.
@@ -791,6 +823,8 @@ export default function Map() {
   // undefined = не запрашивали, null = файла нет (не повторять), иначе маршруты.
   const routesRef = useRef<FlatRoutes | null>(null);
   const routesCacheRef = useRef<Record<number, FlatRoutes | null>>({});
+  // breakdown из routes/<id>.json (режим тайлов): undefined = не запрашивали.
+  const breakdownCacheRef = useRef<Record<number, BuildingBreakdown | null>>({});
   // Изохрона: минуты выбраны в карточке, геометрия — по файлу дома.
   const [contour, setContour] = useState<number | null>(null);
   const isoCacheRef = useRef<Record<number, IsochroneData | null>>({});
@@ -895,24 +929,61 @@ export default function Map() {
         throw lastErr;
       };
 
-      let buildings: GCollection<BuildingProps>;
-      let poi: GCollection<PoiProps>;
-      let redzones: GCollection<RedzoneProps>;
+      let buildings: GCollection<BuildingProps> | null = null;
+      let indexRows: BuildingIndexRow[] | null = null;
+      let poi!: GCollection<PoiProps>;
+      let redzones!: GCollection<RedzoneProps>;
+      let tileMode = false;
       let basemapPromise: Promise<GCollection<BasemapProps>>;
+
+      // ?tiles=0 — принудительно geojson, ?tiles=1 — принудительно тайлы.
+      // Иначе решает HEAD: файл тайлов есть (200) → тайлы, иначе geojson.
+      const tilesParam = new URLSearchParams(window.location.search).get("tiles");
+      if (tilesParam === "1") {
+        tileMode = true;
+      } else if (tilesParam !== "0") {
+        try {
+          const res = await fetch(TILES_URL, { method: "HEAD" });
+          tileMode = res.status === 200;
+        } catch {
+          tileMode = false;
+        }
+      }
+
       try {
         // Подложка не критична и грузится параллельно: карта с домами
         // открывается, не дожидаясь её. Если файла нет — просто без улиц.
-        [buildings, poi, redzones] = (await Promise.all([
-          fetchJson(BUILDINGS_URL),
-          fetchJson(POI_URL),
-          fetchJson(REDZONES_URL),
-        ])) as [GCollection<BuildingProps>, GCollection<PoiProps>, GCollection<RedzoneProps>];
         basemapPromise = fetchJson(BASEMAP_URL)
           .then((data) => data as GCollection<BasemapProps>)
           .catch((e) => {
             console.warn("Подложка не загрузилась:", e);
             return { type: "FeatureCollection", features: [] } as GCollection<BasemapProps>;
           });
+
+        if (tileMode) {
+          try {
+            [indexRows, poi, redzones] = (await Promise.all([
+              fetchJson(INDEX_URL),
+              fetchJson(POI_URL),
+              fetchJson(REDZONES_URL),
+            ])) as [BuildingIndexRow[], GCollection<PoiProps>, GCollection<RedzoneProps>];
+            if (!Array.isArray(indexRows) || indexRows.length === 0) {
+              throw new Error("buildings-index.json пуст");
+            }
+          } catch (e) {
+            // HEAD соврал или индекс не доехал — тихо возвращаемся на geojson.
+            console.warn("Тайлы/индекс не загрузились, откат на geojson:", e);
+            tileMode = false;
+            indexRows = null;
+          }
+        }
+        if (!tileMode) {
+          [buildings, poi, redzones] = (await Promise.all([
+            fetchJson(BUILDINGS_URL),
+            fetchJson(POI_URL),
+            fetchJson(REDZONES_URL),
+          ])) as [GCollection<BuildingProps>, GCollection<PoiProps>, GCollection<RedzoneProps>];
+        }
       } catch (e) {
         console.error("Не удалось загрузить данные карты:", e);
         setFatalError(
@@ -921,11 +992,36 @@ export default function Map() {
         return;
       }
       if (cancelled) return;
+
+      // Протокол PMTiles — только в режиме тайлов и ровно один раз.
+      if (tileMode && !pmtilesProtocolReady) {
+        maplibregl.addProtocol("pmtiles", new Protocol().tile);
+        pmtilesProtocolReady = true;
+      }
+
       const palette = MAP_THEMES[themeRef.current];
 
+      // Единый источник метаданных для поиска, центров, цвета и deep link:
+      // geojson-режим берёт их из фич, режим тайлов — из индекса.
+      const buildingMeta: BuildingMeta[] = tileMode
+        ? (indexRows ?? []).map(([id, lon, lat, address, index, year]) => ({
+            id,
+            center: [lon, lat] as [number, number],
+            address: address ?? null,
+            index: index ?? null,
+            year: year ?? null,
+          }))
+        : (buildings?.features ?? []).map((f) => ({
+            id: f.properties.id,
+            center: geometryCenter(f.geometry),
+            address: f.properties.address ?? null,
+            index: f.properties.index ?? null,
+            year: f.properties.year ?? null,
+          }));
+
       // Стопы градиента цвета — по квантилям загруженных индексов (FX-2).
-      const indexValues = buildings.features
-        .map((f) => (f.properties as { index?: number }).index)
+      const indexValues = buildingMeta
+        .map((m) => m.index)
         .filter((x): x is number => typeof x === "number" && Number.isFinite(x))
         .sort((a, b) => a - b);
       const colorStops: ColorStops | null =
@@ -951,9 +1047,8 @@ export default function Map() {
         );
       const redzoneFeatures = redzones.features;
       const buildingCenters: Record<number, [number, number]> = {};
-      for (const f of buildings.features) {
-        const c = geometryCenter(f.geometry);
-        if (c) buildingCenters[f.properties.id] = c;
+      for (const m of buildingMeta) {
+        if (m.center) buildingCenters[m.id] = m.center;
       }
 
       let labelCandidates: LabelCandidate[] = [];
@@ -961,30 +1056,36 @@ export default function Map() {
       // Поиск по адресу: только здания, у которых адрес есть в OSM
       // (сейчас 2 511 из 3 306). Остальные находятся кликом по карте.
       const searchIndex: SearchItem[] = [];
-      for (const f of buildings.features) {
-        if (!f.properties.address) continue;
+      for (const m of buildingMeta) {
+        if (!m.address) continue;
         searchIndex.push({
-          id: f.properties.id,
-          address: f.properties.address,
-          index: f.properties.index ?? null,
-          year: f.properties.year ?? null,
+          id: m.id,
+          address: m.address,
+          index: m.index,
+          year: m.year,
         });
       }
       if (!cancelled) setSearchItems(searchIndex);
 
       // Перцентили по штрафным слоям: доля домов, которые находятся дальше
-      // от объекта (тише), 0..1. Считаем один раз по загруженному geojson,
-      // чтобы карточка могла сказать «хуже 80% домов Пресни».
-      const penaltyDistances: Record<string, number[]> = {};
-      for (const kind of PENALTY_KINDS) {
-        penaltyDistances[kind] = buildings.features.map(
-          (f) =>
-            f.properties.breakdown?.penalties?.[kind]?.distance_m ??
-            Number.POSITIVE_INFINITY,
-        );
-      }
+      // от объекта (тише), 0..1. В geojson-режиме считаем по breakdown из
+      // фич. В тайлах breakdown нет (он в routes/<id>.json), поэтому там
+      // строку про перцентили не показываем, а не подставляем ложный 0.
+      const penaltyDistances: Record<string, number[]> | null = buildings
+        ? (() => {
+            const result: Record<string, number[]> = {};
+            for (const kind of PENALTY_KINDS) {
+              result[kind] = (buildings?.features ?? []).map(
+                (f) =>
+                  f.properties.breakdown?.penalties?.[kind]?.distance_m ??
+                  Number.POSITIVE_INFINITY,
+              );
+            }
+            return result;
+          })()
+        : null;
       const percentileFor = (kind: string, distance: number): number => {
-        const values = penaltyDistances[kind];
+        const values = penaltyDistances?.[kind];
         if (!values?.length) return 0;
         let farther = 0;
         for (const d of values) if (d > distance) farther++;
@@ -1016,6 +1117,9 @@ export default function Map() {
       let poiMarkers: maplibregl.Marker[] = [];
       let redPins: maplibregl.Marker[] = [];
 
+      // Векторный источник требует явного слоя tippecanoe; geojson — нет.
+      const buildingSourceLayer = tileMode ? { "source-layer": "buildings" } : {};
+
       try {
         map = new maplibregl.Map({
         container,
@@ -1029,7 +1133,17 @@ export default function Map() {
             },
             trees: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
             glow: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
-            buildings: { type: "geojson", data: buildings, promoteId: "id" },
+            buildings: tileMode
+              ? {
+                  type: "vector",
+                  // addProtocol ждёт абсолютный URL, страница живёт в подпапке.
+                  url: `pmtiles://${new URL(TILES_URL, window.location.href).href}`,
+                }
+              : {
+                  type: "geojson",
+                  data: buildings ?? { type: "FeatureCollection", features: [] },
+                  promoteId: "id",
+                },
             redzones: { type: "geojson", data: redzones },
             routes: { type: "geojson", data: routesData },
             isochrone: {
@@ -1119,6 +1233,7 @@ export default function Map() {
               id: "buildings-shadow",
               type: "fill",
               source: "buildings",
+              ...buildingSourceLayer,
               paint: {
                 "fill-color": palette.shadow,
                 "fill-opacity": BUILDING_SHADOW_OPACITY[themeRef.current],
@@ -1130,6 +1245,7 @@ export default function Map() {
               id: "buildings",
               type: "fill-extrusion",
               source: "buildings",
+              ...buildingSourceLayer,
               paint: {
                 // fill-extrusion-color поддерживает feature-state,
                 // fill-extrusion-opacity — нет, поэтому затемнение через цвет.
@@ -1148,6 +1264,7 @@ export default function Map() {
               id: "buildings-roof",
               type: "fill-extrusion",
               source: "buildings",
+              ...buildingSourceLayer,
               layout: { visibility: "none" },
               paint: {
                 "fill-extrusion-color": buildingColorExpr(palette, colorStops),
@@ -1165,6 +1282,7 @@ export default function Map() {
               id: "outline-halo",
               type: "line",
               source: "buildings",
+              ...buildingSourceLayer,
               paint: {
                 "line-color": palette.halo,
                 "line-width": 14,
@@ -1180,6 +1298,7 @@ export default function Map() {
               id: "outline-core",
               type: "line",
               source: "buildings",
+              ...buildingSourceLayer,
               paint: {
                 "line-color": palette.outlineCore,
                 "line-width": 3,
@@ -1550,13 +1669,19 @@ export default function Map() {
       map.on("zoomend", () => syncFacades(themeRef.current));
 
       let selectedId: number | null = null;
-      const allIds = buildings.features.map((f) => f.properties.id);
+      const allIds = buildingMeta.map((m) => m.id);
+      const metaById: Record<number, BuildingMeta> = {};
+      for (const m of buildingMeta) metaById[m.id] = m;
 
       const applySelection = () => {
         if (!map) return;
+        // Векторному источнику нужен sourceLayer и для feature-state.
+        const stateSource = tileMode
+          ? { source: "buildings", sourceLayer: "buildings" }
+          : { source: "buildings" };
         for (const id of allIds) {
           map.setFeatureState(
-            { source: "buildings", id },
+            { ...stateSource, id },
             {
               selected: id === selectedId,
               inactive: selectedId !== null && id !== selectedId,
@@ -1620,6 +1745,16 @@ export default function Map() {
           }
           routesCacheRef.current[id] = flat;
           routesRef.current = flat;
+          // Тайловый режим: breakdown живёт в routes/<id>.json (шаг B1).
+          if (tileMode) {
+            breakdownCacheRef.current[id] = data.breakdown ?? null;
+            const current = selectedRef.current;
+            if (current?.id === id && data.breakdown) {
+              const next: SelectedBuilding = { ...current, breakdown: data.breakdown };
+              updateSelected(next);
+              rebuildOverlays(next, visibleRef.current);
+            }
+          }
         } catch (e) {
           console.error(`Маршруты для здания ${id} не загрузились:`, e);
           routesCacheRef.current[id] = null;
@@ -1657,28 +1792,36 @@ export default function Map() {
 
       // Общая логика выбора: клик по зданию и открытие по ?building=<osm_id>.
       const selectById = (id: number) => {
-        const feature = buildings.features.find((f) => f.properties.id === id);
-        if (!feature) return;
+        const meta = metaById[id];
+        if (!meta) return;
         selectedId = id;
         setDeepLinkError(null);
         applySelection();
 
-        const props = feature.properties;
+        // На geojson-пути breakdown по-прежнему берём из фичи. В тайлах его
+        // нет: он приедет из routes/<id>.json вместе с маршрутами.
+        const feature = buildings?.features.find((f) => f.properties.id === id);
+        const breakdown = tileMode
+          ? (breakdownCacheRef.current[id] ?? null)
+          : (feature?.properties.breakdown ?? null);
         const distanceOf = (kind: string) =>
-          props.breakdown?.penalties?.[kind]?.distance_m ??
-          Number.POSITIVE_INFINITY;
+          breakdown?.penalties?.[kind]?.distance_m ?? Number.POSITIVE_INFINITY;
         const next: SelectedBuilding = {
           id,
-          index: props.index ?? null,
-          address: props.address ?? null,
-          year: props.year ?? null,
-          breakdown: props.breakdown ?? null,
-          percentiles: {
-            road: percentileFor("road", distanceOf("road")),
-            railway: percentileFor("railway", distanceOf("railway")),
-            construction: percentileFor("construction", distanceOf("construction")),
-            industrial: percentileFor("industrial", distanceOf("industrial")),
-          },
+          index: meta.index ?? null,
+          address: meta.address,
+          year: meta.year ?? null,
+          breakdown,
+          ...(penaltyDistances
+            ? {
+                percentiles: {
+                  road: percentileFor("road", distanceOf("road")),
+                  railway: percentileFor("railway", distanceOf("railway")),
+                  construction: percentileFor("construction", distanceOf("construction")),
+                  industrial: percentileFor("industrial", distanceOf("industrial")),
+                },
+              }
+            : {}),
         };
         updateSelected(next);
         setUrlBuilding(id);
@@ -1686,7 +1829,7 @@ export default function Map() {
         rebuildOverlays(next, visibleRef.current);
         void loadRoutes(id);
 
-        const center = geometryCenter(feature.geometry);
+        const center = meta.center;
         setGlow(center);
         if (center) flyToBuilding(center);
       };
@@ -1716,9 +1859,16 @@ export default function Map() {
       map.on("click", (e) => {
         if (!map || !map.getLayer("buildings")) return;
         const feats = map.queryRenderedFeatures(e.point, { layers: ["buildings"] });
-        const id = feats.length ? (feats[0].id as number) : null;
+        const rawId = feats.length ? feats[0].id : null;
+        // В тайлах id может прийти строкой — приводим к числу (brief B2).
+        const id =
+          typeof rawId === "string"
+            ? Number(rawId)
+            : typeof rawId === "number"
+              ? rawId
+              : null;
 
-        if (id === null || id === selectedId) {
+        if (id === null || !Number.isFinite(id) || id === selectedId) {
           deselect();
           return;
         }
