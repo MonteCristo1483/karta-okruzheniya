@@ -37,7 +37,22 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Защита от повторного мержа: после squash-мёржа ветка может быть
+      # пересоздана пушем с тем же содержимым. Пустой дифф против main
+      # означает, что мержить нечего — иначе в истории появится пустой
+      # squash-коммит (#60/#61, #70/#71, #77/#78).
+      - name: Skip if already merged
+        id: guard
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          if git diff --quiet origin/main...HEAD; then
+            echo "Ветка не содержит изменений относительно main — выходим."
+            echo "skip=1" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Open PR if missing
+        if: steps.guard.outputs.skip != '1'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: ${{ github.ref_name }}
@@ -53,6 +68,7 @@ jobs:
           fi
 
       - name: Merge and deploy
+        if: steps.guard.outputs.skip != '1'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: ${{ github.ref_name }}
