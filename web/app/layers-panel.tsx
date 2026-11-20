@@ -113,7 +113,7 @@ export default function LayersPanel({
               className={`flex cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium shadow-sm backdrop-blur transition-colors md:px-3 md:py-1.5 md:text-[13px] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-emerald-500/60 has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-transparent ${
                 active
                   ? "bg-white/85 text-slate-700 dark:bg-slate-900/80 dark:text-slate-200"
-                  : "bg-white/55 text-slate-500 dark:bg-slate-900/45 dark:text-slate-400"
+                  : "bg-white/55 text-slate-500 dark:bg-slate-900/70 dark:text-slate-300"
               }`}
             >
               <input
@@ -126,7 +126,7 @@ export default function LayersPanel({
                 className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border text-white transition-colors peer-checked:border-emerald-500 peer-checked:bg-emerald-500 ${
                   active
                     ? "border-emerald-500 bg-emerald-500"
-                    : "border-slate-300 bg-white/60 text-transparent dark:border-slate-600 dark:bg-slate-800/60"
+                    : "border-slate-300 bg-white/60 text-transparent dark:border-slate-500 dark:bg-slate-800/80"
                 }`}
                 aria-hidden
               >
