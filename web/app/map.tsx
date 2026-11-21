@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
 import { Protocol } from "pmtiles";
 import type { Feature, FeatureCollection, Geometry, Position } from "geojson";
+import polygonClipping from "polygon-clipping";
 import "maplibre-gl/dist/maplibre-gl.css";
 import BuildingSheet, { RED_FLAG_PENALTY } from "./building-sheet";
 import type { BuildingBreakdown, Percentiles, SelectedBuilding } from "./building-sheet";
@@ -363,6 +364,163 @@ const HERO_WINDOW_LAYER_ID = "buildings-selected-windows";
 const HERO_HALO_LAYER_ID = "buildings-selected-windows-halo";
 const HERO_WINDOWS_SOURCE_ID = "selectedWindows";
 
+// V4b5: санитарный порог площади. Если после сборки частей контур вышел
+// меньше ~150 м² у дома в 5+ этажей — это почти наверняка обрезок тайла:
+// окна на нём не строим (лучше без окон, чем окна на невидимой грани).
+const HERO_MIN_FOOTPRINT_AREA_M2 = 150;
+const HERO_MIN_FLOORS_FOR_AREA_CHECK = 5;
+
+type LonLatPair = [number, number];
+
+function cleanLonLatRing(ring: Position[]): LonLatPair[] {
+  const pts: LonLatPair[] = [];
+  for (const pt of ring) {
+    const lon = pt[0];
+    const lat = pt[1];
+    if (typeof lon !== "number" || typeof lat !== "number") continue;
+    const prev = pts[pts.length - 1];
+    if (!prev || Math.hypot(lon - prev[0], lat - prev[1]) > 1e-9) {
+      pts.push([lon, lat]);
+    }
+  }
+  if (pts.length > 1) {
+    const first = pts[0];
+    const last = pts[pts.length - 1];
+    if (Math.hypot(first[0] - last[0], first[1] - last[1]) < 1e-9) {
+      pts.pop();
+    }
+  }
+  if (pts.length >= 3) pts.push(pts[0]);
+  return pts;
+}
+
+function ringAreaM2(ring: LonLatPair[]): number {
+  if (ring.length < 4) return 0;
+  const [lon0, lat0] = ring[0];
+  const kx = 111320 * Math.cos((lat0 * Math.PI) / 180);
+  const ky = 110574;
+  let area2 = 0;
+  for (let i = 0; i < ring.length - 1; i++) {
+    const [lon1, lat1] = ring[i];
+    const [lon2, lat2] = ring[i + 1];
+    const x1 = (lon1 - lon0) * kx;
+    const y1 = (lat1 - lat0) * ky;
+    const x2 = (lon2 - lon0) * kx;
+    const y2 = (lat2 - lat0) * ky;
+    area2 += x1 * y2 - x2 * y1;
+  }
+  return Math.abs(area2) * 0.5;
+}
+
+function footprintAreaM2(geom: Geometry): number {
+  const polygonArea = (rings: Position[][]): number => {
+    let area = 0;
+    for (let i = 0; i < rings.length; i++) {
+      const a = ringAreaM2(cleanLonLatRing(rings[i]));
+      area += i === 0 ? a : -a;
+    }
+    return Math.max(0, area);
+  };
+  if (geom.type === "Polygon") return polygonArea(geom.coordinates);
+  if (geom.type === "MultiPolygon") {
+    return geom.coordinates.reduce((acc, poly) => acc + polygonArea(poly), 0);
+  }
+  return 0;
+}
+
+function geometrySignature(geom: Geometry): string {
+  const ringKey = (ring: Position[]) =>
+    ring.map(([lon, lat]) => `${lon.toFixed(6)},${lat.toFixed(6)}`).join(";");
+  if (geom.type === "Polygon") {
+    return `P:${geom.coordinates.map(ringKey).join("|")}`;
+  }
+  if (geom.type === "MultiPolygon") {
+    return `M:${geom.coordinates.map((poly) => poly.map(ringKey).join("/")).join("|")}`;
+  }
+  return "";
+}
+
+// V4b5: если смотреть на длинный дом с ребра, окна на фасаде не видны.
+// Для выбранного дома выбираем bearing так, чтобы камера смотрела на самый
+// длинный южный фасад (внешнее кольцо, без дворов).
+function facadeCameraBearing(geom: Geometry): number | null {
+  const norm = (deg: number) => ((((deg + 180) % 360) + 360) % 360) - 180;
+  let bestLen = 0;
+  let bestNormals: [number, number] | null = null;
+  const visitRing = (ring: Position[]) => {
+    for (let i = 0; i < ring.length - 1; i++) {
+      const [lon1, lat1] = ring[i];
+      const [lon2, lat2] = ring[i + 1];
+      if (
+        typeof lon1 !== "number" ||
+        typeof lat1 !== "number" ||
+        typeof lon2 !== "number" ||
+        typeof lat2 !== "number"
+      ) {
+        continue;
+      }
+      const kx = 111320 * Math.cos((lat1 * Math.PI) / 180);
+      const dx = (lon2 - lon1) * kx;
+      const dy = (lat2 - lat1) * 110574;
+      const len = Math.hypot(dx, dy);
+      if (len < 6 || len <= bestLen) continue;
+      const azimuth = (Math.atan2(dx, dy) * 180) / Math.PI;
+      bestLen = len;
+      bestNormals = [azimuth + 90, azimuth - 90];
+    }
+  };
+  if (geom.type === "Polygon") {
+    visitRing(geom.coordinates[0]);
+  } else if (geom.type === "MultiPolygon") {
+    for (const poly of geom.coordinates) visitRing(poly[0]);
+  }
+  const normals = bestNormals as [number, number] | null;
+  if (normals === null) return null;
+  const [n1, n2] = normals;
+  // Из двух сторон длинного фасада берём ту, что ближе к югу: камера
+  // остаётся в привычной южной полусфере.
+  const normal =
+    Math.abs(norm(n1 - 180)) <= Math.abs(norm(n2 - 180)) ? n1 : n2;
+  return norm(normal - 180);
+}
+
+// V4b5: дом режется границами тайлов PMTiles — склеиваем все его части
+// (union) в один footprint. Порядок колец и дыры сохраняет polygon-clipping:
+// внешние кольца CCW, внутренние (дворы) CW.
+function unionFootprintGeometries(geoms: Geometry[]): Geometry | null {
+  const polygons: LonLatPair[][][] = [];
+  for (const geom of geoms) {
+    if (geom.type === "Polygon") {
+      const rings = geom.coordinates.map(cleanLonLatRing).filter((r) => r.length >= 4);
+      if (rings.length) polygons.push(rings);
+    } else if (geom.type === "MultiPolygon") {
+      for (const poly of geom.coordinates) {
+        const rings = poly.map(cleanLonLatRing).filter((r) => r.length >= 4);
+        if (rings.length) polygons.push(rings);
+      }
+    }
+  }
+  const valid = polygons.filter((poly) => poly.length > 0);
+  if (!valid.length) return null;
+  if (valid.length === 1) {
+    return { type: "Polygon", coordinates: valid[0] as unknown as Position[][] };
+  }
+  try {
+    const merged = polygonClipping.union(
+      valid[0] as never,
+      ...(valid.slice(1) as never[]),
+    ) as unknown as LonLatPair[][][];
+    const polys = merged.filter((poly) => poly.length > 0);
+    if (!polys.length) return null;
+    return { type: "MultiPolygon", coordinates: polys as unknown as Position[][][] };
+  } catch (e) {
+    // Булева операция не должна ронять карту: показываем части как есть,
+    // санитарная проверка площади ниже не даст строить окна на обрезке.
+    console.warn("Не удалось объединить части контура дома:", e);
+    return { type: "MultiPolygon", coordinates: valid as unknown as Position[][][] };
+  }
+}
+
 type HeroFacadeEdge = {
   lon0: number;
   lat0: number;
@@ -551,6 +709,18 @@ function buildSelectedWindowFeatures(
       Math.max(0, Math.floor((buildingHeight - HERO_FLOOR_FIRST_M) / HERO_FLOOR_STEP_M)),
     );
     if (floors <= 0) continue;
+
+    const footprintArea = footprintAreaM2(f.geometry);
+    if (
+      footprintArea < HERO_MIN_FOOTPRINT_AREA_M2 &&
+      floors >= HERO_MIN_FLOORS_FOR_AREA_CHECK
+    ) {
+      console.warn(
+        `Hero-окна: контур дома ${buildingId} подозрительно мал ` +
+          `(${footprintArea.toFixed(0)} м² при ${floors} этажах) — окна не строим.`,
+      );
+      continue;
+    }
 
     const geom = f.geometry;
     if (geom.type === "Polygon") {
@@ -2810,6 +2980,13 @@ export default function Map() {
       };
 
       let currentSelectedFeatures: maplibregl.GeoJSONFeature[] = [];
+      // V4b5: последняя собранная геометрия и её площадь — чтобы не дёргать
+      // окна на каждый sourcedata и не откатываться с целого контура на обрезок.
+      let currentSelectedSignature: string | null = null;
+      let currentSelectedArea = 0;
+      // Если геометрия дома ещё не приехала к моменту flyTo, доворачиваем
+      // камеру на длинный фасад, как только sourcedata/idle её отдаст.
+      let pendingFacadeBearingId: number | null = null;
       const refreshSelectedRoofEdge = () => {
         if (!map) return;
         const edgeSrc = map.getSource("selectedRoofEdge") as maplibregl.GeoJSONSource | null;
@@ -2916,6 +3093,17 @@ export default function Map() {
         if (!map || !map.getLayer("buildings")) return;
         if (selectedId !== null && !currentSelectedFeatures.length) {
           captureSelectedBody(selectedId);
+        }
+        if (
+          pendingFacadeBearingId !== null &&
+          selectedId === pendingFacadeBearingId &&
+          currentSelectedFeatures.length
+        ) {
+          const b = facadeCameraBearing(currentSelectedFeatures[0].geometry);
+          pendingFacadeBearingId = null;
+          if (b !== null && Math.abs(b - map.getBearing()) > 1) {
+            map.easeTo({ bearing: b, duration: 700 });
+          }
         }
         refreshSelectedRoofEdge();
         const lod = facadeLodForZoom(map.getZoom());
@@ -3124,15 +3312,18 @@ export default function Map() {
         }
       };
 
-      // В режиме PMTiles тайлы нового зума (после flyTo) приходят позже,
-      // чем сам вызов selectById; повторяем applySelection на sourcedata/idle,
-      // чтобы свежезагруженные тайлы гарантированно получили feature-state.
-      map.on("sourcedata", (e) => {
-        if (e.sourceId === "buildings" && e.isSourceLoaded) {
-          applySelection();
+      // В режиме PMTiles тайлы нового зума (после flyTo) приходят позже
+      // вызова selectById. Пересобираем контур на sourcedata/idle (с дебаунсом),
+      // чтобы дождаться всех частей разрезанного дома без мигания.
+      let captureTimer: number | null = null;
+      const scheduleSelectedCapture = () => {
+        if (selectedId === null) return;
+        if (captureTimer !== null) window.clearTimeout(captureTimer);
+        captureTimer = window.setTimeout(() => {
+          captureTimer = null;
           if (selectedId !== null) captureSelectedBody(selectedId);
-        }
-      });
+        }, 160);
+      };
 
       const setUrlBuilding = (id: number | null) => {
         const url = new URL(window.location.href);
@@ -3173,6 +3364,17 @@ export default function Map() {
             },
           };
         });
+        const nextSignature = normalized.length
+          ? normalized.map((f) => geometrySignature(f.geometry)).join("&")
+          : null;
+        // Та же геометрия — не пересобираем окна (sourcedata/idle приходят часто).
+        if (nextSignature !== null && nextSignature === currentSelectedSignature) return;
+        if (nextSignature === null && currentSelectedSignature === null) return;
+        currentSelectedSignature = nextSignature;
+        currentSelectedArea = normalized.reduce(
+          (acc, f) => acc + footprintAreaM2(f.geometry),
+          0,
+        );
         currentSelectedFeatures = normalized as unknown as maplibregl.GeoJSONFeature[];
         const src = map?.getSource("selectedBuilding") as maplibregl.GeoJSONSource | null;
         src?.setData({
@@ -3183,79 +3385,93 @@ export default function Map() {
         rebuildSelectedWindows(themeRef.current);
       };
 
-      const geometryScore = (geom: Geometry): number => {
-        const ringScore = (ring: Position[]) => {
-          if (!ring || ring.length < 3) return 0;
-          let area2 = 0;
-          for (let i = 0; i < ring.length - 1; i++) {
-            area2 += ring[i][0] * ring[i + 1][1] - ring[i + 1][0] * ring[i][1];
-          }
-          // Приоритет: полнота контура (число вершин) + площадь полигона.
-          return ring.length * 1e-7 + Math.abs(area2);
-        };
-        if (geom.type === "Polygon") {
-          return ringScore(geom.coordinates[0]);
-        }
-        if (geom.type === "MultiPolygon") {
-          return geom.coordinates.reduce((acc, poly) => acc + ringScore(poly[0]), 0);
-        }
-        return 0;
-      };
-
-      // Геометрия выбранного дома для слоя подсветки: выбираем наиболее полный
-      // неразрезанный полигон здания из доступных тайлов и не перезатираем его
-      // обрезанным фрагментом при переходе на крупный зум.
-      const captureSelectedBody = (id: number) => {
+      // Геометрия выбранного дома: берём все части с одним id из всех
+      // загруженных тайлов (дом режется границами PMTiles) и объединяем их
+      // в один footprint, чтобы нормали окон считались по целому контуру.
+      const captureSelectedBody = (id: number, force = false) => {
         if (!map) return;
+        // Во время инерции/полёта не пересобираем: дождёмся moveend/idle.
+        // Явный выбор дома (force) собираем сразу.
+        if (!force && map.isMoving()) return;
         const opts = tileMode ? { sourceLayer: "buildings" } : undefined;
         const matches = (f: maplibregl.GeoJSONFeature) =>
           Number(f.id) === id || Number(f.properties?.id) === id;
-        let found: maplibregl.GeoJSONFeature[] = [];
+
+        const found: maplibregl.GeoJSONFeature[] = [];
+        const seen = new Set<string>();
+        const push = (f: maplibregl.GeoJSONFeature) => {
+          const key = geometrySignature(f.geometry);
+          if (!key || seen.has(key)) return;
+          seen.add(key);
+          found.push(f);
+        };
+
         if (!tileMode && buildings) {
           const direct = buildings.features.find((f) => Number(f.properties.id) === id);
-          if (direct) {
-            found = [direct as unknown as maplibregl.GeoJSONFeature];
-          }
+          if (direct) push(direct as unknown as maplibregl.GeoJSONFeature);
         }
-        if (!found.length) {
-          found = map
-            .querySourceFeatures("buildings", opts as never)
-            .filter(matches);
+        for (const f of map.querySourceFeatures("buildings", opts as never)) {
+          if (matches(f)) push(f);
         }
-        if (!found.length) {
-          found = map
-            .queryRenderedFeatures({ layers: ["buildings"] })
-            .filter(matches);
+        // Запасной путь, если источник ещё не отдал фичи после flyTo.
+        for (const f of map.queryRenderedFeatures({ layers: ["buildings"] })) {
+          if (matches(f)) push(f);
         }
         if (!found.length) return;
 
-        let best = found[0];
-        let bestScore = geometryScore(best.geometry);
-        for (let i = 1; i < found.length; i++) {
-          const sc = geometryScore(found[i].geometry);
-          if (sc > bestScore) {
-            best = found[i];
-            bestScore = sc;
-          }
-        }
+        const geometry = unionFootprintGeometries(found.map((f) => f.geometry));
+        if (!geometry) return;
 
+        // Не откатываемся на обрезок, если часть тайлов выгрузилась при движении.
+        const previousId = Number(
+          currentSelectedFeatures[0]?.id ?? currentSelectedFeatures[0]?.properties?.id,
+        );
         if (
-          currentSelectedFeatures.length === 1 &&
-          Number(
-            currentSelectedFeatures[0].id ?? currentSelectedFeatures[0].properties?.id,
-          ) === id
+          previousId === id &&
+          currentSelectedArea > 0 &&
+          footprintAreaM2(geometry) < currentSelectedArea * 0.98
         ) {
-          const prevScore = geometryScore(currentSelectedFeatures[0].geometry);
-          if (prevScore >= bestScore * 0.98) {
-            return;
+          return;
+        }
+
+        // Высота и индекс у частей одного дома одинаковые; высоту берём
+        // максимумом — на случай расхождений между тайлами.
+        let height: number | undefined;
+        let indexVal: number | undefined;
+        for (const f of found) {
+          const h = Number(f.properties?.height);
+          if (Number.isFinite(h)) height = height === undefined ? h : Math.max(height, h);
+          if (indexVal === undefined) {
+            const idx = Number(f.properties?.index);
+            if (Number.isFinite(idx)) indexVal = idx;
           }
         }
 
-        setSelectedBody([best]);
+        const unified = {
+          type: "Feature" as const,
+          id,
+          geometry,
+          properties: {
+            id,
+            height: height ?? 9,
+            ...(indexVal !== undefined ? { index: indexVal } : {}),
+          },
+        };
+        setSelectedBody([unified as unknown as maplibregl.GeoJSONFeature]);
       };
+
+      map.on("sourcedata", (e) => {
+        if (e.sourceId !== "buildings") return;
+        if (e.tile || e.isSourceLoaded) {
+          applySelection();
+          scheduleSelectedCapture();
+        }
+      });
+      map.on("idle", scheduleSelectedCapture);
 
       const deselect = () => {
         selectedId = null;
+        pendingFacadeBearingId = null;
         routesRef.current = null;
         applySelection();
         updateSelected(null);
@@ -3307,7 +3523,7 @@ export default function Map() {
         }
       };
 
-      const flyToBuilding = (center: [number, number]) => {
+      const flyToBuilding = (center: [number, number], bearing: number | null) => {
         // Ждём две отрисовки, чтобы шторка с новым контентом заняла размер,
         // затем центрируем здание в видимой области карты: на мобиле —
         // padding снизу под шторку, на десктопе — padding справа под док.
@@ -3322,6 +3538,7 @@ export default function Map() {
               // Сразу приближаем до зума выбора дома (16.6, режим coarse),
               // чтобы фасады с окнами были видны сразу после клика.
               zoom: Math.max(map.getZoom(), FACADE_SELECT_ZOOM),
+              ...(bearing !== null ? { bearing } : {}),
               speed: 1.1,
               curve: 1.3,
               padding: desktop
@@ -3386,8 +3603,14 @@ export default function Map() {
         ) {
           setSelectedBody([]);
         }
-        captureSelectedBody(id);
-        if (center) flyToBuilding(center);
+        pendingFacadeBearingId = id;
+        captureSelectedBody(id, true);
+        const selectedGeom = currentSelectedFeatures[0]?.geometry;
+        const facadeBearing = selectedGeom ? facadeCameraBearing(selectedGeom) : null;
+        if (facadeBearing !== null) pendingFacadeBearingId = null;
+        if (center) {
+          flyToBuilding(center, facadeBearing);
+        }
         // Тайлы вокруг дома могут прийти после flyTo — повторим на idle.
         // Проверяем selectedId: пока ждали, могли выбрать другой дом.
         const captureIfCurrent = () => {
