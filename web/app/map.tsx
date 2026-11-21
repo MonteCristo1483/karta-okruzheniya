@@ -346,6 +346,423 @@ function buildRoofEdgeFeatures(
   return out;
 }
 
+// ── V4b4: Hero-окна выбранного дома (настоящие 3D-квады fill-extrusion по фасадам) ──
+const HERO_WIN_MIN_EDGE_M = 3.0;
+const HERO_WIN_CORNER_MARGIN_M = 0.2;
+const HERO_WIN_STEP_MIN_M = 2.4;
+const HERO_WIN_STEP_MAX_M = 3.0;
+const HERO_WIN_STEP_DEFAULT_M = 2.68;
+const HERO_FLOOR_FIRST_M = 1.0;
+const HERO_FLOOR_STEP_M = 3.0;
+const HERO_MAX_FLOORS = 30;
+const HERO_MAX_TOTAL_POLYGONS = 2000;
+const HERO_MAX_WINDOW_CELLS = 1250;
+const HERO_HALO_SCALE = 1.2;
+
+const HERO_WINDOW_LAYER_ID = "buildings-selected-windows";
+const HERO_HALO_LAYER_ID = "buildings-selected-windows-halo";
+const HERO_WINDOWS_SOURCE_ID = "selectedWindows";
+
+type HeroFacadeEdge = {
+  lon0: number;
+  lat0: number;
+  kx: number;
+  ky: number;
+  x1: number;
+  y1: number;
+  tx: number;
+  ty: number;
+  nx: number;
+  ny: number;
+  len: number;
+  floors: number;
+  buildingHeight: number;
+  buildingId: number;
+};
+
+function resolveSelectedBodyColor(
+  theme: Theme,
+  indexVal: number | null | undefined,
+  s: ColorStops | null,
+): string {
+  const p = MAP_THEMES[theme];
+  if (theme === "dark") return p.selectedBody;
+  const idx =
+    typeof indexVal === "number" && Number.isFinite(indexVal) ? indexVal : (s?.mid ?? 5);
+  if (!s) {
+    if (idx < 5) return p.low;
+    if (idx < 7) return p.mid;
+    return p.high;
+  }
+  if (idx < s.t1) return p.vlow;
+  if (idx < s.t2) return p.low;
+  if (idx < s.t3) return p.mid;
+  if (idx < s.t4) return p.high;
+  return p.vhigh;
+}
+
+function buildQuadRing(
+  edge: HeroFacadeEdge,
+  s0: number,
+  s1: number,
+  dInner: number,
+  dOuter: number,
+): Position[] {
+  const { lon0, lat0, kx, ky, x1, y1, tx, ty, nx, ny } = edge;
+  const pt = (s: number, d: number): Position => [
+    lon0 + (x1 + s * tx + d * nx) / kx,
+    lat0 + (y1 + s * ty + d * ny) / ky,
+  ];
+  const p00 = pt(s0, dInner);
+  const p10 = pt(s1, dInner);
+  const p11 = pt(s1, dOuter);
+  const p01 = pt(s0, dOuter);
+  const cross = tx * ny - ty * nx;
+  return cross < 0 ? [p00, p10, p11, p01, p00] : [p00, p01, p11, p10, p00];
+}
+
+function buildSelectedWindowFeatures(
+  features: maplibregl.GeoJSONFeature[],
+  theme: Theme,
+  colorStops: ColorStops | null,
+): FeatureCollection {
+  const edges: HeroFacadeEdge[] = [];
+  const bodyOccluders: Feature[] = [];
+  const seenRings = new Set<string>();
+
+  const collectRingEdges = (
+    ring: Position[],
+    isHole: boolean,
+    floors: number,
+    buildingHeight: number,
+    buildingId: number,
+  ) => {
+    const pts: [number, number][] = [];
+    for (const pt of ring) {
+      const lon = pt[0];
+      const lat = pt[1];
+      if (typeof lon !== "number" || typeof lat !== "number") continue;
+      const prev = pts[pts.length - 1];
+      if (!prev || Math.hypot(lon - prev[0], lat - prev[1]) > 1e-7) {
+        pts.push([lon, lat]);
+      }
+    }
+    if (pts.length > 1) {
+      const first = pts[0];
+      const last = pts[pts.length - 1];
+      if (Math.hypot(first[0] - last[0], first[1] - last[1]) < 1e-7) {
+        pts.pop();
+      }
+    }
+    const n = pts.length;
+    if (n < 3) return;
+
+    const ringKey = `${isHole ? "H" : "O"}:${n}:${pts[0][0].toFixed(5)},${pts[0][1].toFixed(5)}`;
+    if (seenRings.has(ringKey)) return;
+    seenRings.add(ringKey);
+
+    const lon0 = pts[0][0];
+    const lat0 = pts[0][1];
+    const kx = 111320 * Math.cos((lat0 * Math.PI) / 180);
+    const ky = 110574;
+    const local: [number, number][] = pts.map(([lon, lat]) => [
+      (lon - lon0) * kx,
+      (lat - lat0) * ky,
+    ]);
+
+    let signedArea2 = 0;
+    for (let i = 0; i < n; i++) {
+      const [x1, y1] = local[i];
+      const [x2, y2] = local[(i + 1) % n];
+      signedArea2 += x1 * y2 - x2 * y1;
+    }
+    if (Math.abs(signedArea2) * 0.5 < 1.5) return;
+
+    // Нормаль наружу от стены здания: для внешнего контура — наружу полигона,
+    // для внутреннего двора (hole) — внутрь двора (наружу от стены дома).
+    const baseSign = signedArea2 >= 0 ? -1 : 1;
+    const sign = isHole ? -baseSign : baseSign;
+
+    for (let i = 0; i < n; i++) {
+      const [x1, y1] = local[i];
+      const [x2, y2] = local[(i + 1) % n];
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const len = Math.hypot(dx, dy);
+      if (len < HERO_WIN_MIN_EDGE_M) continue;
+      edges.push({
+        lon0,
+        lat0,
+        kx,
+        ky,
+        x1,
+        y1,
+        tx: dx / len,
+        ty: dy / len,
+        nx: (-sign * dy) / len,
+        ny: (sign * dx) / len,
+        len,
+        floors,
+        buildingHeight,
+        buildingId,
+      });
+    }
+  };
+
+  for (const f of features) {
+    const rawId = f.id ?? f.properties?.id ?? 1;
+    const buildingId =
+      typeof rawId === "number" && Number.isFinite(rawId) ? rawId : Number(rawId) || 1;
+    const buildingHeight = Math.max(0, Number(f.properties?.height ?? 9));
+    const indexVal =
+      typeof f.properties?.index === "number" ? f.properties.index : Number(f.properties?.index);
+    const bodyColor = resolveSelectedBodyColor(theme, indexVal, colorStops);
+
+    const insetGeometry = (geom: Geometry): Geometry => {
+      if (geom.type === "Polygon") {
+        const outer = outsetPolygonRing(geom.coordinates[0], -0.12) ?? geom.coordinates[0];
+        return { type: "Polygon", coordinates: [outer, ...geom.coordinates.slice(1)] };
+      }
+      if (geom.type === "MultiPolygon") {
+        return {
+          type: "MultiPolygon",
+          coordinates: geom.coordinates.map((poly) => {
+            const outer = outsetPolygonRing(poly[0], -0.12) ?? poly[0];
+            return [outer, ...poly.slice(1)];
+          }),
+        };
+      }
+      return geom;
+    };
+
+    bodyOccluders.push({
+      type: "Feature",
+      properties: {
+        kind: "body",
+        base: 0,
+        height: buildingHeight,
+        color: bodyColor,
+      },
+      geometry: insetGeometry(f.geometry),
+    });
+
+    const floors = Math.min(
+      HERO_MAX_FLOORS,
+      Math.max(0, Math.floor((buildingHeight - HERO_FLOOR_FIRST_M) / HERO_FLOOR_STEP_M)),
+    );
+    if (floors <= 0) continue;
+
+    const geom = f.geometry;
+    if (geom.type === "Polygon") {
+      for (let rIdx = 0; rIdx < geom.coordinates.length; rIdx++) {
+        collectRingEdges(geom.coordinates[rIdx], rIdx > 0, floors, buildingHeight, buildingId);
+      }
+    } else if (geom.type === "MultiPolygon") {
+      for (const poly of geom.coordinates) {
+        for (let rIdx = 0; rIdx < poly.length; rIdx++) {
+          collectRingEdges(poly[rIdx], rIdx > 0, floors, buildingHeight, buildingId);
+        }
+      }
+    }
+  }
+
+  if (!edges.length) {
+    return { type: "FeatureCollection", features: [] };
+  }
+
+  const colsForStep = (len: number, targetStep: number, minStep: number): number => {
+    const usable = Math.max(0, len - 2 * HERO_WIN_CORNER_MARGIN_M);
+    if (usable < HERO_WIN_MIN_EDGE_M - 2 * HERO_WIN_CORNER_MARGIN_M) return 0;
+    const maxCols = Math.max(1, Math.floor(usable / minStep));
+    const est = Math.max(1, Math.round(usable / targetStep));
+    return Math.min(maxCols, est);
+  };
+
+  let targetStep = HERO_WIN_STEP_DEFAULT_M;
+  let minStep = HERO_WIN_STEP_MIN_M;
+  let maxStep = HERO_WIN_STEP_MAX_M;
+
+  const countTotalCells = (step: number, mStep: number) =>
+    edges.reduce((acc, e) => acc + colsForStep(e.len, step, mStep) * e.floors, 0);
+
+  let totalCells = countTotalCells(targetStep, minStep);
+  if (totalCells > HERO_MAX_WINDOW_CELLS) {
+    const scale = totalCells / HERO_MAX_WINDOW_CELLS;
+    targetStep *= scale;
+    minStep *= scale;
+    maxStep *= scale;
+    while (countTotalCells(targetStep, minStep) > HERO_MAX_WINDOW_CELLS) {
+      targetStep *= 1.08;
+      minStep *= 1.08;
+      maxStep *= 1.08;
+    }
+  }
+
+  let seed = ((edges[0].buildingId * 2654435761) >>> 0) || 1337;
+  const rnd = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+
+  type RawWinSpec = {
+    edge: HeroFacadeEdge;
+    sCenter: number;
+    winWidth: number;
+    winHeight: number;
+    winBase: number;
+    winTop: number;
+    score: number;
+    toneT: number;
+    aptToneT: number;
+  };
+
+  const specs: RawWinSpec[] = [];
+  const widthChoices = [1.26, 1.38, 1.48, 1.56] as const;
+
+  for (const edge of edges) {
+    const cols = colsForStep(edge.len, targetStep, minStep);
+    if (cols <= 0) continue;
+    const usable = edge.len - 2 * HERO_WIN_CORNER_MARGIN_M;
+    const actualStep = Math.min(maxStep, Math.max(minStep, usable / cols));
+    const totalSpan = cols * actualStep;
+    const startOffset = (edge.len - totalSpan) * 0.5;
+
+    // Разбиваем колонки фасада на квартиры по 2–3 соседних окна (кластерный рисунок).
+    const colAptGroup: number[] = [];
+    const colWidths: number[] = [];
+    let aptId = 0;
+    let inApt = 0;
+    let aptLen = rnd() < 0.52 ? 2 : 3;
+    for (let c = 0; c < cols; c++) {
+      if (inApt >= aptLen) {
+        aptId++;
+        inApt = 0;
+        aptLen = rnd() < 0.52 ? 2 : 3;
+      }
+      inApt++;
+      colAptGroup.push(aptId);
+      const rawW = widthChoices[(c + Math.floor(rnd() * 2)) % widthChoices.length];
+      colWidths.push(Math.min(1.6, Math.max(1.2, Math.min(rawW, actualStep - 0.55))));
+    }
+    const numApts = aptId + 1;
+    const aptVertBias = Array.from({ length: numApts }, () => (rnd() - 0.5) * 0.22);
+
+    for (let r = 0; r < edge.floors; r++) {
+      const winHeight = r === 0 ? 1.68 : 1.74;
+      const winBase = HERO_FLOOR_FIRST_M + r * HERO_FLOOR_STEP_M + 0.16;
+      const winTop = Math.min(edge.buildingHeight - 0.15, winBase + winHeight);
+      if (winTop - winBase < 0.8) continue;
+
+      const aptFloorScore: number[] = [];
+      const aptFloorTone: number[] = [];
+      for (let a = 0; a < numApts; a++) {
+        aptFloorScore.push(rnd() * 0.88 + aptVertBias[a]);
+        aptFloorTone.push(rnd());
+      }
+
+      for (let c = 0; c < cols; c++) {
+        const sCenter = startOffset + (c + 0.5) * actualStep;
+        const g = colAptGroup[c];
+        // Сильная кластеризация по квартире (2–3 соседних окна горят или гаснут вместе).
+        const score = aptFloorScore[g] + (rnd() - 0.5) * 0.14;
+        specs.push({
+          edge,
+          sCenter,
+          winWidth: colWidths[c],
+          winHeight: winTop - winBase,
+          winBase,
+          winTop,
+          score,
+          toneT: rnd(),
+          aptToneT: aptFloorTone[g],
+        });
+      }
+    }
+  }
+
+  if (!specs.length) {
+    return { type: "FeatureCollection", features: [] };
+  }
+
+  // Ночью строго 45–55% горящих окон (цель 50%).
+  const targetLitRatio = 0.5;
+  const sortedScores = specs.map((s) => s.score).sort((a, b) => a - b);
+  const thresholdIdx = Math.min(
+    sortedScores.length - 1,
+    Math.max(0, Math.floor(sortedScores.length * (1 - targetLitRatio))),
+  );
+  const litThreshold = sortedScores[thresholdIdx];
+
+  const outFeatures: Feature[] = [...bodyOccluders];
+
+  for (const sp of specs) {
+    const isLit = sp.score >= litThreshold;
+    const blendT = Math.min(1, Math.max(0, sp.aptToneT * 0.65 + sp.toneT * 0.35));
+
+    let winColor: string;
+    if (theme === "light") {
+      winColor = mixHex("#f2e3c8", "#ffe9c9", blendT);
+    } else if (isLit) {
+      winColor = mixHex("#ffc978", "#ffd79a", blendT);
+    } else {
+      winColor = mixHex("#16263c", "#1b2e4a", sp.toneT);
+    }
+
+    const halfW = sp.winWidth * 0.5;
+    const s0 = Math.max(HERO_WIN_CORNER_MARGIN_M, sp.sCenter - halfW);
+    const s1 = Math.min(sp.edge.len - HERO_WIN_CORNER_MARGIN_M, sp.sCenter + halfW);
+    if (s1 - s0 < 0.4) continue;
+
+    outFeatures.push({
+      type: "Feature",
+      properties: {
+        kind: "window",
+        base: Number(sp.winBase.toFixed(2)),
+        height: Number(sp.winTop.toFixed(2)),
+        color: winColor,
+        lit: isLit,
+      },
+      geometry: {
+        type: "Polygon",
+        coordinates: [buildQuadRing(sp.edge, s0, s1, 0.025, 0.085)],
+      },
+    });
+
+    if (theme === "dark" && isLit && outFeatures.length < HERO_MAX_TOTAL_POLYGONS) {
+      const haloHalfW = sp.winWidth * HERO_HALO_SCALE * 0.5;
+      const hs0 = Math.max(HERO_WIN_CORNER_MARGIN_M * 0.75, sp.sCenter - haloHalfW);
+      const hs1 = Math.min(
+        sp.edge.len - HERO_WIN_CORNER_MARGIN_M * 0.75,
+        sp.sCenter + haloHalfW,
+      );
+      const zMid = (sp.winBase + sp.winTop) * 0.5;
+      const haloHalfH = sp.winHeight * HERO_HALO_SCALE * 0.5;
+      const haloBase = Math.max(HERO_FLOOR_FIRST_M * 0.9, zMid - haloHalfH);
+      const haloTop = Math.min(sp.edge.buildingHeight - 0.06, zMid + haloHalfH);
+
+      outFeatures.push({
+        type: "Feature",
+        properties: {
+          kind: "halo",
+          base: Number(haloBase.toFixed(2)),
+          height: Number(haloTop.toFixed(2)),
+          color: winColor,
+          lit: true,
+        },
+        geometry: {
+          type: "Polygon",
+          coordinates: [buildQuadRing(sp.edge, hs0, hs1, 0.015, 0.075)],
+        },
+      });
+    }
+  }
+
+  return {
+    type: "FeatureCollection",
+    features: outFeatures,
+  };
+}
+
 // ── Окна на фасадах: pattern-текстуры, сгенерированные в runtime ─────────
 // V4b3: спокойные фасады без оконной сетки-решётки:
 // - Обычные дома днём: чистая плоская база цвета ступени (только вертикальный градиент MapLibre).
@@ -2318,6 +2735,88 @@ export default function Map() {
         } as never);
       };
 
+      const removeSelectedWindows = () => {
+        if (!map) return;
+        if (map.getLayer(HERO_HALO_LAYER_ID)) {
+          map.removeLayer(HERO_HALO_LAYER_ID);
+        }
+        if (map.getLayer(HERO_WINDOW_LAYER_ID)) {
+          map.removeLayer(HERO_WINDOW_LAYER_ID);
+        }
+        if (map.getSource(HERO_WINDOWS_SOURCE_ID)) {
+          map.removeSource(HERO_WINDOWS_SOURCE_ID);
+        }
+        (
+          window as unknown as { __selectedWindowsData?: FeatureCollection | null }
+        ).__selectedWindowsData = null;
+      };
+
+      const rebuildSelectedWindows = (t: Theme) => {
+        if (!map) return;
+        removeSelectedWindows();
+        if (!currentSelectedFeatures.length) return;
+        const data = buildSelectedWindowFeatures(currentSelectedFeatures, t, colorStops);
+        if (!data.features.length) return;
+        (
+          window as unknown as { __selectedWindowsData?: FeatureCollection | null }
+        ).__selectedWindowsData = data;
+
+        map.addSource(HERO_WINDOWS_SOURCE_ID, {
+          type: "geojson",
+          maxzoom: 22,
+          tolerance: 0,
+          data,
+        });
+
+        const beforeId = map.getLayer("buildings-selected-roof-edge")
+          ? "buildings-selected-roof-edge"
+          : map.getLayer("routes-glow")
+            ? "routes-glow"
+            : undefined;
+        const vis =
+          facadeLodForZoom(map.getZoom()) !== "flat" ? "visible" : "none";
+
+        if (t === "dark") {
+          map.addLayer(
+            {
+              id: HERO_HALO_LAYER_ID,
+              type: "fill-extrusion",
+              source: HERO_WINDOWS_SOURCE_ID,
+              minzoom: FACADE_COARSE_MIN_ZOOM,
+              filter: ["!=", ["get", "kind"], "window"],
+              layout: { visibility: vis },
+              paint: {
+                "fill-extrusion-color": ["get", "color"] as never,
+                "fill-extrusion-base": ["get", "base"] as never,
+                "fill-extrusion-height": ["get", "height"] as never,
+                "fill-extrusion-opacity": 0.14,
+                "fill-extrusion-vertical-gradient": false,
+              },
+            },
+            beforeId,
+          );
+        }
+
+        map.addLayer(
+          {
+            id: HERO_WINDOW_LAYER_ID,
+            type: "fill-extrusion",
+            source: HERO_WINDOWS_SOURCE_ID,
+            minzoom: FACADE_COARSE_MIN_ZOOM,
+            filter: ["!=", ["get", "kind"], "halo"],
+            layout: { visibility: vis },
+            paint: {
+              "fill-extrusion-color": ["get", "color"] as never,
+              "fill-extrusion-base": ["get", "base"] as never,
+              "fill-extrusion-height": ["get", "height"] as never,
+              "fill-extrusion-opacity": 0.96,
+              "fill-extrusion-vertical-gradient": false,
+            },
+          },
+          beforeId,
+        );
+      };
+
       // Четыре уровня текстуры фасадов по зуму:
       // z < 15.4 ("flat") — чистый цвет без окон и без крыши-плиты обычных домов;
       // z 15.4–16.0 ("subtle") — единичные огни в ночи (≤ 6% контраста);
@@ -2328,11 +2827,23 @@ export default function Map() {
       let currentFacadeLod: FacadeLod | null = null;
       const syncFacades = (t: Theme) => {
         if (!map || !map.getLayer("buildings")) return;
+        if (selectedId !== null && !currentSelectedFeatures.length) {
+          captureSelectedBody(selectedId);
+        }
         refreshSelectedRoofEdge();
         const lod = facadeLodForZoom(map.getZoom());
+        const hasWindows = lod !== "flat";
+        for (const winLayerId of [HERO_WINDOW_LAYER_ID, HERO_HALO_LAYER_ID]) {
+          if (map.getLayer(winLayerId)) {
+            map.setLayoutProperty(
+              winLayerId,
+              "visibility",
+              hasWindows ? "visible" : "none",
+            );
+          }
+        }
         if (lod === currentFacadeLod) return;
         currentFacadeLod = lod;
-        const hasWindows = lod !== "flat";
         addFacadeImages(t);
         map.setPaintProperty(
           "buildings",
@@ -2345,11 +2856,6 @@ export default function Map() {
           hasWindows ? "visible" : "none",
         );
         if (map.getLayer("buildings-selected-body")) {
-          map.setPaintProperty(
-            "buildings-selected-body",
-            "fill-extrusion-pattern",
-            selectedFacadePatternExpr(t, colorStops, lod),
-          );
           map.setLayoutProperty(
             "buildings-selected-body",
             "visibility",
@@ -2426,6 +2932,7 @@ export default function Map() {
         // Активную тему готовим заранее: pattern включается на zoomend уже в
         // готовом атласе, иначе первый кадр может пропустить слой.
         addFacadeImages(t);
+        rebuildSelectedWindows(t);
         currentFacadeLod = null;
         syncFacades(t);
         for (const s of BUILDING_SHADOW_LAYERS) {
@@ -2541,27 +3048,29 @@ export default function Map() {
       };
 
       const setSelectedBody = (features: maplibregl.GeoJSONFeature[]) => {
-        currentSelectedFeatures = features;
+        const normalized = features.map((feature) => {
+          const rawId = feature.id ?? feature.properties?.id;
+          const numId = typeof rawId === "number" ? rawId : Number(rawId);
+          const meta = Number.isFinite(numId) ? metaById[numId] : undefined;
+          return {
+            type: "Feature" as const,
+            id: rawId,
+            geometry: feature.geometry,
+            properties: {
+              id: rawId,
+              height: feature.properties?.height ?? 9,
+              index: feature.properties?.index ?? meta?.index ?? colorStops?.mid ?? 5,
+            },
+          };
+        });
+        currentSelectedFeatures = normalized as unknown as maplibregl.GeoJSONFeature[];
         const src = map?.getSource("selectedBuilding") as maplibregl.GeoJSONSource | null;
         src?.setData({
           type: "FeatureCollection",
-          features: features.map((feature) => {
-            const rawId = feature.id ?? feature.properties?.id;
-            const numId = typeof rawId === "number" ? rawId : Number(rawId);
-            const meta = Number.isFinite(numId) ? metaById[numId] : undefined;
-            return {
-              type: "Feature",
-              id: rawId,
-              geometry: feature.geometry,
-              properties: {
-                id: rawId,
-                height: feature.properties?.height ?? 9,
-                index: feature.properties?.index ?? meta?.index ?? colorStops?.mid ?? 5,
-              },
-            };
-          }),
+          features: normalized,
         } as never);
         refreshSelectedRoofEdge();
+        rebuildSelectedWindows(themeRef.current);
       };
 
       const geometryScore = (geom: Geometry): number => {
@@ -2627,7 +3136,7 @@ export default function Map() {
           ) === id
         ) {
           const prevScore = geometryScore(currentSelectedFeatures[0].geometry);
-          if (prevScore > bestScore * 1.02) {
+          if (prevScore >= bestScore * 0.98) {
             return;
           }
         }
@@ -2759,6 +3268,14 @@ export default function Map() {
 
         const center = meta.center;
         setGlow(center);
+        if (
+          currentSelectedFeatures.length > 0 &&
+          Number(
+            currentSelectedFeatures[0].id ?? currentSelectedFeatures[0].properties?.id,
+          ) !== id
+        ) {
+          setSelectedBody([]);
+        }
         captureSelectedBody(id);
         if (center) flyToBuilding(center);
         // Тайлы вокруг дома могут прийти после flyTo — повторим на idle.
@@ -2770,6 +3287,10 @@ export default function Map() {
           }
         };
         map?.once("idle", captureIfCurrent);
+        map?.once("moveend", () => {
+          captureIfCurrent();
+          map?.once("idle", captureIfCurrent);
+        });
         window.setTimeout(captureIfCurrent, 1200);
       };
       selectRef.current = selectById;
