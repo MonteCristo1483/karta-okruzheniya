@@ -52,14 +52,14 @@ const MAP_THEMES = {
     mid: "#d8cfae",
     high: "#a8c9a7",
     vhigh: "#74bd8f",
-    selected: "#34c77b",
-    // Акцент крыши выделенного дома: спокойнее и светлее, чтобы на 390 не сливался с парком.
-    selectedRoof: "#a8e6c3",
+    selected: "#38b874",
+    // Крыша выбранного дома — цвет его ступени (на 5% светлее), не мятная.
+    selectedRoof: "#dfd7b8",
     // В светлой теме выбранный дом без заливки тела на всех зумах (тело красится по ступени балла).
     selectedBody: "#d8cfae",
     dim: "#b8c4d4",
-    halo: "#3ee585",
-    outlineCore: "#1fb868",
+    halo: "#38b874",
+    outlineCore: "#289e60",
     redzone: "#e2604a",
     route: "#12b3a6",
     routeCore: "#eafff5",
@@ -95,13 +95,13 @@ const MAP_THEMES = {
     mid: "#3a4b66",
     high: "#3f5c70",
     vhigh: "#4f7d68",
-    selected: "#6fe0a6",
-    selectedRoof: "#6fd3a2",
+    selected: "#5ec98f",
+    selectedRoof: "#4c5c73",
     // Тёмная тема: благородный тёмный сланцевый фасад выбранного дома (выделяется плотно горящими янтарными окнами, ореолом и крышей без зелёной заливки стены).
     selectedBody: "#45546a",
     dim: "#2a3340",
-    halo: "#7fe0aa",
-    outlineCore: "#8ef0b4",
+    halo: "#5ec98f",
+    outlineCore: "#58c288",
     redzone: "#ff8a7a",
     route: "#5fe0d0",
     routeCore: "#f2fffb",
@@ -178,27 +178,31 @@ const BUILDING_SHADOW_LAYERS = [
 // null = данных мало, фолбэк на старый step 5/7.
 type ColorStops = { t1: number; t2: number; t3: number; t4: number; mid: number };
 
+const stepColorsExpr = (p: Palette, s: ColorStops | null, lighten = 0) => {
+  const tone = (c: string) => (lighten > 0 ? mixHex(c, "#ffffff", lighten) : c);
+  return s
+    ? [
+        "step",
+        ["coalesce", ["get", "index"], s.mid],
+        tone(p.vlow),
+        s.t1,
+        tone(p.low),
+        s.t2,
+        tone(p.mid),
+        s.t3,
+        tone(p.high),
+        s.t4,
+        tone(p.vhigh),
+      ]
+    : ["step", ["coalesce", ["get", "index"], 5], tone(p.low), 5, tone(p.mid), 7, tone(p.high)];
+};
+
 const buildingColorExpr = (
   p: Palette,
   s: ColorStops | null,
-  selectedColor: string | null = p.selectedBody,
+  selectedColor: string | null = null,
 ) => {
-  const stepExpr = s
-    ? // step: v < t1 → vlow … v ≥ t4 → vhigh; null-индекс → mid.
-      [
-        "step",
-        ["coalesce", ["get", "index"], s.mid],
-        p.vlow,
-        s.t1,
-        p.low,
-        s.t2,
-        p.mid,
-        s.t3,
-        p.high,
-        s.t4,
-        p.vhigh,
-      ]
-    : ["step", ["get", "index"], p.low, 5, p.mid, 7, p.high];
+  const stepExpr = stepColorsExpr(p, s, 0);
   return [
     "case",
     ["to-boolean", ["feature-state", "selected"]],
@@ -209,17 +213,146 @@ const buildingColorExpr = (
   ] as never;
 };
 
+// Крыша обычных и выбранного дома: цвет ступени дома (у выбранного на 5% светлее), без мятной плиты.
+const buildingRoofColorExpr = (p: Palette, s: ColorStops | null) => {
+  const stepExpr = stepColorsExpr(p, s, 0);
+  const selectedRoofStepExpr = stepColorsExpr(p, s, 0.05);
+  return [
+    "case",
+    ["to-boolean", ["feature-state", "selected"]],
+    selectedRoofStepExpr,
+    ["to-boolean", ["feature-state", "inactive"]],
+    p.dim,
+    stepExpr,
+  ] as never;
+};
+
+// Сплошной полигон крыши, слегка расширенный наружу (~1.5 px на текущем зуме):
+// рисуется на 5 см ниже основной крыши дома (buildings-selected-roof), поэтому
+// вся внутренняя площадь и любые стыки тайлов перекрываются крышей цвета ступени,
+// а снаружи остаётся только чистый тонкий контур по внешнему периметру крыши.
+function outsetPolygonRing(ring: Position[], outsetMeters: number): Position[] | null {
+  const pts: [number, number][] = [];
+  for (const pt of ring) {
+    const lon = pt[0];
+    const lat = pt[1];
+    if (typeof lon !== "number" || typeof lat !== "number") continue;
+    const prev = pts[pts.length - 1];
+    if (!prev || Math.hypot(lon - prev[0], lat - prev[1]) > 1e-7) {
+      pts.push([lon, lat]);
+    }
+  }
+  if (pts.length > 1) {
+    const first = pts[0];
+    const last = pts[pts.length - 1];
+    if (Math.hypot(first[0] - last[0], first[1] - last[1]) < 1e-7) {
+      pts.pop();
+    }
+  }
+  const n = pts.length;
+  if (n < 3) return null;
+
+  const lon0 = pts[0][0];
+  const lat0 = pts[0][1];
+  const kx = 111320 * Math.cos((lat0 * Math.PI) / 180);
+  const ky = 110574;
+  const local: [number, number][] = pts.map(([lon, lat]) => [
+    (lon - lon0) * kx,
+    (lat - lat0) * ky,
+  ]);
+
+  let signedArea2 = 0;
+  for (let i = 0; i < n; i++) {
+    const [x1, y1] = local[i];
+    const [x2, y2] = local[(i + 1) % n];
+    signedArea2 += x1 * y2 - x2 * y1;
+  }
+  if (Math.abs(signedArea2) * 0.5 < 2) return null;
+
+  const d = outsetMeters;
+  // Внешняя нормаль противоположна внутренней:
+  const sign = signedArea2 >= 0 ? -1 : 1;
+
+  const edgeNormals: [number, number][] = [];
+  for (let i = 0; i < n; i++) {
+    const [x1, y1] = local[i];
+    const [x2, y2] = local[(i + 1) % n];
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const len = Math.hypot(dx, dy) || 1;
+    edgeNormals.push([(-sign * dy) / len, (sign * dx) / len]);
+  }
+
+  const outer: Position[] = [];
+  for (let i = 0; i < n; i++) {
+    const n1 = edgeNormals[(i - 1 + n) % n];
+    const n2 = edgeNormals[i];
+    const dot = n1[0] * n2[0] + n1[1] * n2[1];
+    const denom = Math.max(0.35, 1 + dot);
+    const k = Math.min(d * 1.35, d / denom);
+    const ox = local[i][0] + k * (n1[0] + n2[0]);
+    const oy = local[i][1] + k * (n1[1] + n2[1]);
+    outer.push([lon0 + ox / kx, lat0 + oy / ky]);
+  }
+  outer.push(outer[0]);
+  return outer;
+}
+
+function buildRoofEdgeFeatures(
+  features: maplibregl.GeoJSONFeature[],
+  zoom: number,
+): Feature[] {
+  // ~1.5 px в метрах на текущем зуме (на широте Москвы 55.756°).
+  const metersPerPx = (156543.03 * Math.cos((55.756 * Math.PI) / 180)) / Math.pow(2, zoom);
+  const outsetMeters = Math.max(0.26, Math.min(1.8, metersPerPx * 1.15));
+  const out: Feature[] = [];
+  const seen = new Set<string>();
+
+  const pushPolygon = (
+    outerRing: Position[],
+    id: string | number | undefined,
+    height: number,
+  ) => {
+    if (!outerRing || outerRing.length < 4) return;
+    const p0 = outerRing[0];
+    const key = `${outerRing.length}:${p0[0]?.toFixed(5)},${p0[1]?.toFixed(5)}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    const expandedRing = outsetPolygonRing(outerRing, outsetMeters);
+    if (!expandedRing) return;
+    out.push({
+      type: "Feature",
+      id,
+      properties: { id, height },
+      geometry: {
+        type: "Polygon",
+        coordinates: [expandedRing],
+      },
+    });
+  };
+
+  for (const f of features) {
+    const geom = f.geometry;
+    const id = f.id ?? f.properties?.id;
+    const height = Number(f.properties?.height ?? 9);
+    if (geom.type === "Polygon") {
+      pushPolygon(geom.coordinates[0], id, height);
+    } else if (geom.type === "MultiPolygon") {
+      for (const poly of geom.coordinates) {
+        pushPolygon(poly[0], id, height);
+      }
+    }
+  }
+  return out;
+}
+
 // ── Окна на фасадах: pattern-текстуры, сгенерированные в runtime ─────────
-// fill-extrusion-pattern в MapLibre 6 тайлится в экранном пространстве
-// каждого целочисленного зума (на z17 координаты тайла в 2× плотнее z16,
-// на z18 — в 4× плотнее z16). Чтобы на крупном плане стена не превращалась
-// в повторяющуюся «LED-панель», используем текстуру 384×384 px (≥24–32 окна
-// по горизонтали в 4 архитектурных секциях) и 4 уровня LOD по зуму:
-// - z < 15.4 ("flat"): чистый цвет ступени без окон (обзор 13.5–15.35);
-// - z 15.4–16.0 ("subtle"): почти незаметный намёк на окна (контраст ≤ 8%);
-// - z 16.0–17.0 ("coarse"): окна отчётливо читаются (включая зум выбора 16.6);
-// - z >= 17.0 ("fine"): детальная архитектура (рамы/откосы 1 px светлее стекла,
-//   межэтажный шов через ряд, окна разной ширины и балконные группы ≤ 8 px).
+// V4b3: спокойные фасады без оконной сетки-решётки:
+// - Обычные дома днём: чистая плоская база цвета ступени (только вертикальный градиент MapLibre).
+// - Обычные дома ночью: тёмно-синяя база ступени + только редкие горящие окна (5–8%)
+//   тёплым янтарём (#ffc978…#ffd79a), мелкие (2–5 px), без негорящей решётки и швов.
+// - Выбранный дом: в светлой теме — кремовые окна светлее фасада без тёмной сетки,
+//   в тёмной теме — тёплые янтарные окна без синей решётки негорящих рам.
 const FACADE_SIZE = 384;
 const FACADE_FLAT_SIZE = 16;
 const FACADE_COARSE_MIN_ZOOM = 15.4;
@@ -227,8 +360,16 @@ const FACADE_MID_MIN_ZOOM = 16.0;
 const FACADE_FINE_MIN_ZOOM = 17;
 const FACADE_SELECT_ZOOM = 16.6;
 const FACADE_STEPS = ["vlow", "low", "mid", "high", "vhigh"] as const;
+const FACADE_SELECTED_STEPS = [
+  "selected-vlow",
+  "selected-low",
+  "selected-mid",
+  "selected-high",
+  "selected-vhigh",
+] as const;
 type FacadeStep = (typeof FACADE_STEPS)[number];
-type FacadeVariant = FacadeStep | "dim" | "selected";
+type FacadeSelectedStep = (typeof FACADE_SELECTED_STEPS)[number];
+type FacadeVariant = FacadeStep | "dim" | "selected" | FacadeSelectedStep;
 type FacadeLod = "flat" | "subtle" | "coarse" | "fine";
 
 function facadeLodForZoom(zoom: number): FacadeLod {
@@ -264,11 +405,10 @@ function mixHex(a: string, b: string, t: number): string {
   return `#${mix(ar, br)}${mix(ag, bg)}${mix(ab, bb)}`;
 }
 
-// Дневное стекло — тёплый крем (#f6e7cc…#ffe9c9), ночное горящее — янтарь
-// (#ffc978…#ffd79a), ночное негорящее — глубокое тёмно-синее стекло.
+// Дневное стекло выбранного дома — тёплый крем (#f6e7cc…#ffe9c9),
+// ночное горящее — тёплый янтарь (#ffc978…#ffd79a).
 const DAY_CREAM_GLASS = ["#f6e7cc", "#f9e8ce", "#fce9cc", "#ffe9c9"] as const;
 const NIGHT_AMBER_GLASS = ["#ffc978", "#ffce82", "#ffd38e", "#ffd79a"] as const;
-const NIGHT_DARK_BLUE_GLASS = ["#122136", "#15263e", "#182a44", "#1b2e4a"] as const;
 
 type WindowKind = "narrow" | "single" | "wide" | "balcony";
 type FacadeCol = { x: number; kind: WindowKind; jitterX: number; aptGroup: number };
@@ -279,7 +419,11 @@ function makeFacadeImage(
   variant: FacadeVariant,
   lod: FacadeLod,
 ): ImageData {
-  const size = lod === "flat" ? FACADE_FLAT_SIZE : FACADE_SIZE;
+  const isSelected = variant === "selected" || variant.startsWith("selected-");
+  // Обычные дома в светлой теме на всех зумах и любые дома при zoom < 15.4 ("flat") —
+  // чистая плоская база цвета ступени без швов, рамок и окон.
+  const isFlatBase = lod === "flat" || (theme === "light" && !isSelected);
+  const size = isFlatBase ? FACADE_FLAT_SIZE : FACADE_SIZE;
   const canvas = document.createElement("canvas");
   canvas.width = size;
   canvas.height = size;
@@ -287,9 +431,9 @@ function makeFacadeImage(
   if (!ctx) throw new Error("canvas 2d недоступен");
   ctx.fillStyle = base;
   ctx.fillRect(0, 0, size, size);
-  if (lod === "flat") return ctx.getImageData(0, 0, size, size);
+  if (isFlatBase) return ctx.getImageData(0, 0, size, size);
 
-  // Детерминированный генератор — свой рисунок секций и огней для каждого варианта.
+  // Детерминированный генератор — свой рисунок огней для каждого варианта.
   let seed =
     (theme === "dark" ? 19 : 7) +
     (lod === "subtle" ? 37 : lod === "coarse" ? 73 : 127) +
@@ -303,47 +447,125 @@ function makeFacadeImage(
 
   const isFine = lod === "fine";
   const isSubtle = lod === "subtle";
-  // В fine (z >= 17) шаг этажа 14 px (27 этажей на 384 px);
-  // в coarse/subtle (z 15.4–17) шаг этажа 10 px (38 этажей на 384 px).
-  const rowH = isFine ? 14 : 10;
-  const rows = Math.floor(size / rowH);
 
-  // 4 архитектурные секции (подъезда) на ширину 384 px:
-  // в fine — 26 окон по горизонтали (6–7 окон в секции ~96 px, ширина окна с рамой 5–8 px);
-  // в coarse/subtle — 30 окон по горизонтали (7–8 окон в секции ~96 px).
+  // ── Ветка 1: Обычные дома ночью (база + только редкие тёплые огни 5–8%) ──
+  // Никаких швов и негорящих окон: только мелкие разбросанные огни (2–5 px),
+  // не более ~12 на дом в кадре.
+  if (!isSelected) {
+    const rowH = isFine ? 18 : 16;
+    const rows = Math.floor(size / rowH);
+    const numCols = 16;
+    const colStep = size / numCols;
+
+    type NightDot = {
+      wx: number;
+      wy: number;
+      ww: number;
+      wh: number;
+      score: number;
+      toneIdx: number;
+    };
+    const dots: NightDot[] = [];
+    const colBias = Array.from({ length: numCols }, () => (rnd() - 0.5) * 0.24);
+
+    for (let r = 0; r < rows; r++) {
+      const rowBoost = rnd() < 0.25 ? 0.18 : rnd() < 0.6 ? 0 : -0.15;
+      for (let c = 0; c < numCols; c++) {
+        const jx = Math.round((rnd() - 0.5) * 4);
+        const jy = Math.round((rnd() - 0.5) * 2);
+        const vr = rnd();
+        const ww = isSubtle
+          ? 3
+          : isFine
+            ? vr > 0.5
+              ? 4
+              : 3
+            : vr > 0.45
+              ? 4
+              : 3;
+        const wh = isSubtle
+          ? 3
+          : isFine
+            ? vr > 0.45
+              ? 5
+              : 4
+            : 4;
+        const wx = Math.max(2, Math.min(size - ww - 2, Math.round(c * colStep + colStep * 0.35 + jx)));
+        const wy = Math.max(2, Math.min(size - wh - 2, r * rowH + 4 + jy));
+        const score = rnd() * 0.72 + rowBoost + colBias[c];
+        dots.push({
+          wx,
+          wy,
+          ww,
+          wh,
+          score,
+          toneIdx: Math.floor(rnd() * 4),
+        });
+      }
+    }
+
+    // Строго 5–8% горящих окон: subtle 5.5% (единичные огни), остальные 7.0%.
+    const targetLitRatio = isSubtle ? 0.055 : 0.07;
+    const sorted = dots.map((d) => d.score).sort((a, b) => a - b);
+    const idx = Math.min(
+      sorted.length - 1,
+      Math.max(0, Math.floor(sorted.length * (1 - targetLitRatio))),
+    );
+    const litThreshold = sorted[idx];
+    const maxScore = sorted[sorted.length - 1];
+    const span = Math.max(0.001, maxScore - litThreshold);
+
+    for (const dot of dots) {
+      if (dot.score < litThreshold) continue;
+      const u = Math.min(1, Math.max(0, (dot.score - litThreshold) / span));
+      const amber = NIGHT_AMBER_GLASS[dot.toneIdx];
+      // На 15.4–16.0 (subtle) контраст строго ≤ 6%; на 16+ — тёплые янтарные огни.
+      const litT = isSubtle
+        ? 0.038 + u * 0.021 // max 0.059 (≤ 6%)
+        : u > 0.45
+          ? 0.82 + (u - 0.45) * 0.28
+          : 0.58 + u * 0.48;
+      ctx.fillStyle = mixHex(base, amber, Math.min(0.96, litT));
+      ctx.fillRect(dot.wx, dot.wy, dot.ww, dot.wh);
+
+      if (!isSubtle && u > 0.4) {
+        ctx.fillStyle = mixHex(base, "#ffd79a", Math.min(0.98, litT + 0.1));
+        ctx.fillRect(dot.wx, dot.wy, dot.ww, 1);
+      }
+    }
+
+    return ctx.getImageData(0, 0, size, size);
+  }
+
+  // ── Ветка 2: Выбранный дом (день — кремовые окна без тёмной сетки; ночь — тёплые окна) ──
+  // Никаких тёмных швов и внешних рамок вокруг каждого окна, чтобы фасад
+  // не превращался в решётку или вафлю.
+  const rowH = isFine ? 16 : 13;
+  const rows = Math.floor(size / rowH);
   const sectionWidths = [96, 94, 98, 96];
-  const rot = variant.charCodeAt(0) % sectionWidths.length;
+  const rot = variant.charCodeAt(variant.length - 1) % sectionWidths.length;
   const orderedSections = [
     ...sectionWidths.slice(rot),
     ...sectionWidths.slice(0, rot),
   ];
 
   const cols: FacadeCol[] = [];
-  const sectionSeamXs: number[] = [];
   let secStart = 0;
   let aptCounter = 0;
 
   for (let si = 0; si < orderedSections.length; si++) {
     const secW = orderedSections[si];
-    if (si > 0) sectionSeamXs.push(secStart);
-    const patternFine: WindowKind[] =
-      (si + rot) % 3 === 0
-        ? ["narrow", "single", "balcony", "single", "wide", "single"]
-        : (si + rot) % 3 === 1
-          ? ["single", "wide", "single", "balcony", "single", "balcony", "single"]
-          : ["single", "balcony", "single", "narrow", "single", "wide", "single"];
-    const patternCoarse: WindowKind[] =
+    const kinds: WindowKind[] =
       (si + rot) % 2 === 0
-        ? ["narrow", "single", "balcony", "single", "wide", "single", "balcony", "single"]
-        : ["single", "wide", "single", "narrow", "single", "balcony", "single"];
-    const kinds = isFine ? patternFine : patternCoarse;
+        ? ["single", "wide", "single", "balcony", "single"]
+        : ["narrow", "single", "balcony", "single", "wide"];
     const count = kinds.length;
-    const margin = isFine ? 5 : 4;
+    const margin = 7;
     const usable = secW - margin * 2;
     const step = usable / count;
 
     let inApt = 0;
-    let aptSize = 2 + Math.floor(rnd() * 2); // квартиры по 2–3 окна
+    let aptSize = 2 + Math.floor(rnd() * 2);
     for (let ci = 0; ci < count; ci++) {
       if (inApt >= aptSize) {
         aptCounter++;
@@ -351,8 +573,8 @@ function makeFacadeImage(
         aptSize = 2 + Math.floor(rnd() * 2);
       }
       inApt++;
-      const jitterX = rnd() < 0.32 ? -1 : rnd() < 0.64 ? 0 : 1;
-      const center = secStart + margin + Math.round(ci * step + step * 0.22);
+      const jitterX = rnd() < 0.3 ? -1 : rnd() < 0.7 ? 0 : 1;
+      const center = secStart + margin + Math.round(ci * step + step * 0.25);
       cols.push({
         x: center,
         kind: kinds[ci],
@@ -364,59 +586,11 @@ function makeFacadeImage(
     secStart += secW;
   }
 
-  // Вертикальные деформационные швы между подъездными секциями (1 px, чуть темнее базы).
-  const vertSeamAlpha = isSubtle
-    ? theme === "dark"
-      ? 0.035
-      : 0.02
-    : theme === "dark"
-      ? 0.08
-      : 0.035;
-  ctx.fillStyle = mixHex(base, "#000000", vertSeamAlpha);
-  for (const sx of sectionSeamXs) {
-    ctx.fillRect(sx, 0, 1, size);
-  }
-
-  // Межэтажный шов через ряд (1 px, чуть темнее базы) + тонкий пояс каждые 6 этажей.
-  const floorSeamAlpha = isSubtle
-    ? theme === "dark"
-      ? 0.055
-      : 0.03
-    : theme === "dark"
-      ? 0.14
-      : 0.055;
-  const majorSeamAlpha = isSubtle
-    ? theme === "dark"
-      ? 0.07
-      : 0.04
-    : theme === "dark"
-      ? 0.19
-      : 0.075;
-  const floorSeamColor = mixHex(base, "#000000", floorSeamAlpha);
-  const majorSeamColor = mixHex(base, "#000000", majorSeamAlpha);
-
-  for (let r = 0; r < rows; r++) {
-    const seamY = r * rowH + rowH - 1;
-    if (r % 6 === 5) {
-      ctx.fillStyle = majorSeamColor;
-      ctx.fillRect(0, seamY, size, 1);
-    } else if (r % 2 === 1) {
-      ctx.fillStyle = floorSeamColor;
-      ctx.fillRect(0, seamY, size, 1);
-    }
-  }
-
-  // Первый проход: генерируем все окна с квартирными кластерами, чтобы доля
-  // горящих окон в ночи строго попадала в 45–55% (selected) и 5–10% (остальные),
-  // а распределение было живым и неравномерным (не шахматка).
   type WinCell = {
-    row: number;
-    col: number;
     wx: number;
     wy: number;
     ww: number;
     wh: number;
-    kind: WindowKind;
     score: number;
     toneIdx: number;
     varR: number;
@@ -425,61 +599,38 @@ function makeFacadeImage(
   const colBias = cols.map(() => (rnd() - 0.5) * 0.22);
 
   for (let r = 0; r < rows; r++) {
-    // Архитектурные ярусы по 4–5 этажей: лёгкая смена ритма рядов.
-    const tier = Math.floor(r / 5);
-    const rowShift = (r + tier) % 3 === 0 ? 1 : 0;
-    const rowHDelta = isFine ? (r % 4 === 0 ? -1 : 0) : 0;
-
-    // Квартирный буст на текущем этаже (2–3 соседних окна загораются вместе).
     const aptBoosts: number[] = [];
     for (let a = 0; a <= aptCounter; a++) {
       const ar = rnd();
-      aptBoosts[a] = ar < 0.35 ? 0.42 : ar < 0.7 ? 0.16 : -0.22;
+      aptBoosts[a] = ar < 0.36 ? 0.42 : ar < 0.7 ? 0.16 : -0.22;
     }
 
     for (let c = 0; c < cols.length; c++) {
       const col = cols[c];
-      // На технических/крайних простенках (~3.5% ячеек) оставляем глухую панель,
-      // чтобы ряды не были идеально одинаковыми.
-      if (col.kind === "narrow" && (r + c * 3) % 11 === 0 && rnd() < 0.55) {
+      if (col.kind === "narrow" && (r + c * 3) % 11 === 0 && rnd() < 0.5) {
         continue;
       }
-
-      // На каждом 5-м этаже балконная группа может сменяться обычным окном.
-      const effectiveKind: WindowKind =
-        col.kind === "balcony" && r % 5 === 0 ? "single" : col.kind;
-
-      // Размеры стекла (без 1 px рамки):
-      // В fine: narrow 3px, single 4px, wide 5px, balcony 5px (с 1px рамой = 5..7 px, на экране z18 ≤ 8 px!).
-      // В coarse/subtle: narrow 3px, single 4px, wide 5px, balcony 5px.
-      const ww =
-        effectiveKind === "narrow"
-          ? 3
-          : effectiveKind === "single"
-            ? 4
-            : 5;
-
-      const baseWh = isFine ? 7 + rowHDelta : 5;
-      const wh = effectiveKind === "balcony" && isFine ? baseWh + 1 : baseWh;
-
-      const tierShiftX = (tier + c) % 5 === 0 ? (col.jitterX >= 0 ? 1 : -1) : col.jitterX;
-      const wx = Math.max(1, Math.min(size - ww - 2, col.x + tierShiftX));
-      const wy = r * rowH + (isFine ? 2 + (rowShift && wh < 8 ? 1 : 0) : 2);
-
+      const ww = isFine
+        ? col.kind === "wide" || col.kind === "balcony"
+          ? 5
+          : 4
+        : col.kind === "wide" || col.kind === "balcony"
+          ? 4
+          : 3;
+      const wh = isFine ? 6 : 4;
+      const wx = Math.max(2, Math.min(size - ww - 2, col.x + col.jitterX));
+      const wy = r * rowH + (isFine ? 4 : 3);
       const score =
         rnd() * 0.65 +
         (aptBoosts[col.aptGroup] ?? 0) +
         colBias[c] +
-        (effectiveKind === "narrow" ? -0.08 : 0);
+        (col.kind === "narrow" ? -0.08 : 0);
 
       cells.push({
-        row: r,
-        col: c,
         wx,
         wy,
         ww,
         wh,
-        kind: effectiveKind,
         score,
         toneIdx: Math.floor(rnd() * 4),
         varR: rnd(),
@@ -487,163 +638,52 @@ function makeFacadeImage(
     }
   }
 
-  // Вычисляем точный порог горящих окон по квантилю:
-  // - светлая тема: 0% горящих окон (не горит никто);
-  // - тёмная тема, selected: 50% горящих окон (строго в 45–55%);
-  // - тёмная тема, остальные дома: 6.5% (dim) .. 8% (ступени) горящих окон (строго в 5–10%).
-  const targetLitRatio =
-    theme === "light"
-      ? 0
-      : variant === "selected"
-        ? 0.5
-        : variant === "dim"
-          ? 0.065
-          : 0.08;
-
-  let litThreshold = Infinity;
-  let maxScore = 1;
-  if (targetLitRatio > 0 && cells.length > 0) {
-    const sorted = cells.map((cell) => cell.score).sort((a, b) => a - b);
-    const idx = Math.min(
-      sorted.length - 1,
-      Math.max(0, Math.floor(sorted.length * (1 - targetLitRatio))),
-    );
-    litThreshold = sorted[idx];
-    maxScore = sorted[sorted.length - 1];
+  if (theme === "light") {
+    // Светлая тема, выбранный дом: кремовые окна светлее фасада,
+    // без тёмной сетки, без тёмных швов и без тёмных подоконников.
+    for (const cell of cells) {
+      const { wx, wy, ww, wh, toneIdx, varR } = cell;
+      const cream = DAY_CREAM_GLASS[toneIdx];
+      const glassT = isSubtle ? 0.14 + varR * 0.06 : 0.30 + varR * 0.12;
+      ctx.fillStyle = mixHex(base, cream, glassT);
+      ctx.fillRect(wx, wy, ww, wh);
+      if (isFine) {
+        ctx.fillStyle = mixHex(base, "#ffe9c9", Math.min(0.48, glassT + 0.1));
+        ctx.fillRect(wx, wy, ww, 1);
+      }
+    }
+    return ctx.getImageData(0, 0, size, size);
   }
 
-  // Второй проход: рисуем рамы/откосы 1 px, стёкла и балконные перемычки.
+  // Тёмная тема, выбранный дом: ~48% горящих янтарных окон, без синей решётки.
+  const targetLitRatio = 0.48;
+  const sorted = cells.map((cell) => cell.score).sort((a, b) => a - b);
+  const idx = Math.min(
+    sorted.length - 1,
+    Math.max(0, Math.floor(sorted.length * (1 - targetLitRatio))),
+  );
+  const litThreshold = sorted[idx] ?? Infinity;
+  const maxScore = sorted[sorted.length - 1] ?? 1;
+  const span = Math.max(0.001, maxScore - litThreshold);
+
   for (const cell of cells) {
-    const { wx, wy, ww, wh, kind, score, toneIdx, varR } = cell;
+    const { wx, wy, ww, wh, score, toneIdx } = cell;
+    if (score < litThreshold) continue;
+    const u = Math.min(1, Math.max(0, (score - litThreshold) / span));
+    const amber = NIGHT_AMBER_GLASS[toneIdx];
+    const litT = isSubtle
+      ? 0.04 + u * 0.02
+      : u > 0.6
+        ? 0.84 + (u - 0.6) * 0.3
+        : u > 0.24
+          ? 0.58 + (u - 0.24) * 0.55
+          : 0.36 + u * 0.75;
 
-    if (theme === "light") {
-      // Светлая тема: не горит никто, стекло кремовое (#f6e7cc…#ffe9c9),
-      // реальный контраст по яркости к фасаду ≤ 10% (в subtle ≤ 5%).
-      const cream = DAY_CREAM_GLASS[toneIdx];
-      const glassT = isSubtle
-        ? 0.16 + varR * 0.08
-        : 0.34 + varR * 0.14;
-      const frameT = isSubtle
-        ? Math.min(0.28, glassT + 0.06)
-        : Math.min(0.58, glassT + 0.12);
-
-      const frameColor = mixHex(base, "#ffe9c9", frameT);
-      const glassColor = mixHex(base, cream, glassT);
-      const sillShadow = mixHex(base, "#000000", isSubtle ? 0.04 : 0.085);
-
-      // Рамка/откос 1 px светлее стекла
-      ctx.fillStyle = frameColor;
-      ctx.fillRect(wx - 1, wy - 1, ww + 2, wh + 2);
-
-      // Кремовое стекло
-      ctx.fillStyle = glassColor;
-      ctx.fillRect(wx, wy, ww, wh);
-
-      // Тонкая 1 px линия подоконника снизу
-      ctx.fillStyle = sillShadow;
-      ctx.fillRect(wx - 1, wy + wh, ww + 2, 1);
-
-      // Балконная перемычка или импост широкого окна на крупном плане
-      if (isFine && kind === "balcony" && ww >= 5) {
-        ctx.fillStyle = frameColor;
-        ctx.fillRect(wx + 3, wy, 1, wh);
-      } else if (isFine && kind === "wide" && ww >= 5) {
-        ctx.fillStyle = frameColor;
-        ctx.fillRect(wx + 2, wy, 1, wh);
-      }
-      continue;
-    }
-
-    // Тёмная тема: горящие янтарные (#ffc978…#ffd79a) vs негорящие тёмно-синие окна.
-    const isLit = score >= litThreshold;
-
-    if (isLit) {
-      const span = Math.max(0.001, maxScore - litThreshold);
-      const u = Math.min(1, Math.max(0, (score - litThreshold) / span));
-      const amber = NIGHT_AMBER_GLASS[toneIdx];
-
-      // Часть окон горит ярко, часть средне, часть тускло (свет за шторами).
-      let litT: number;
-      if (isSubtle) {
-        // На 15.4–16.0 контраст ≤ 8%.
-        litT = 0.045 + u * 0.035;
-      } else if (variant === "selected") {
-        litT =
-          u > 0.6
-            ? 0.88 + (u - 0.6) * 0.3 // яркие янтарные окна (0.88..1.0)
-            : u > 0.24
-              ? 0.62 + (u - 0.24) * 0.6 // средние тёплые (0.62..0.84)
-              : 0.38 + u * 0.85; // тусклые (0.38..0.58)
-      } else {
-        // Редкие огни остальных домов (5–10%): часть ярче, часть тусклее.
-        litT =
-          u > 0.52
-            ? 0.72 + (u - 0.52) * 0.42
-            : 0.42 + u * 0.48;
-        if (variant === "dim") litT *= 0.85;
-      }
-
-      const glassColor = mixHex(base, amber, Math.min(0.98, litT));
-      // Рамка/откос 1 px: снаружи мягкий тёплый откос, а рама проёма на 1 px светлее стекла.
-      const revealColor = mixHex(
-        base,
-        amber,
-        isSubtle ? Math.min(0.08, litT * 0.65) : Math.min(0.55, litT * 0.42),
-      );
-      const brightFrameColor = mixHex(
-        glassColor,
-        "#ffd79a",
-        isSubtle ? 0.08 : 0.45,
-      );
-
-      ctx.fillStyle = revealColor;
-      ctx.fillRect(wx - 1, wy - 1, ww + 2, wh + 2);
-
-      ctx.fillStyle = glassColor;
-      ctx.fillRect(wx, wy, ww, wh);
-
-      // Рамка/блик 1 px светлее стекла по верхнему/левому краю или центру яркого окна
-      ctx.fillStyle = brightFrameColor;
+    ctx.fillStyle = mixHex(base, amber, Math.min(0.95, litT));
+    ctx.fillRect(wx, wy, ww, wh);
+    if (!isSubtle) {
+      ctx.fillStyle = mixHex(base, "#ffd79a", Math.min(0.98, litT + 0.12));
       ctx.fillRect(wx, wy, ww, 1);
-      if (isFine && u > 0.5 && ww >= 4 && wh >= 5) {
-        ctx.fillRect(wx + 1, wy + 1, ww - 2, wh - 2);
-      }
-
-      if (isFine && kind === "balcony" && ww >= 5) {
-        ctx.fillStyle = revealColor;
-        ctx.fillRect(wx + 3, wy, 1, wh);
-      }
-    } else {
-      // Негорящее окно в ночи: глубокое тёмно-синее стекло (не серое!),
-      // и рамка/откос 1 px светлее стекла.
-      const darkBlue = NIGHT_DARK_BLUE_GLASS[toneIdx];
-      const darkT = isSubtle
-        ? 0.04 + varR * 0.035 // ≤ 8% контраста на 15.4–16.0
-        : variant === "selected"
-          ? 0.58 + varR * 0.14
-          : 0.5 + varR * 0.14;
-
-      const glassColor = mixHex(base, darkBlue, darkT);
-      // Рамка/откос 1 px светлее тёмно-синего стекла:
-      const frameColor = isSubtle
-        ? mixHex(base, "#2b4263", 0.045)
-        : mixHex(glassColor, "#5676a3", 0.28);
-
-      ctx.fillStyle = frameColor;
-      ctx.fillRect(wx - 1, wy - 1, ww + 2, wh + 2);
-
-      ctx.fillStyle = glassColor;
-      ctx.fillRect(wx, wy, ww, wh);
-
-      if (isFine && kind === "balcony" && ww >= 5) {
-        ctx.fillStyle = frameColor;
-        ctx.fillRect(wx + 3, wy, 1, wh);
-        // Тонкая плита балкона снизу
-        ctx.fillRect(wx - 1, wy + wh, ww + 2, 1);
-      } else if (isFine && kind === "wide" && ww >= 5) {
-        ctx.fillStyle = frameColor;
-        ctx.fillRect(wx + 2, wy, 1, wh);
-      }
     }
   }
 
@@ -653,9 +693,28 @@ function makeFacadeImage(
 const facadeImageName = (theme: Theme, variant: FacadeVariant, lod: FacadeLod) =>
   `facade-${theme}-${variant}-${lod}`;
 
-// Тот же step, что и у цвета: индексы → ступени. Выбранный дом в светлой
-// теме на всех зумах остаётся домом: фасад берётся по его ступени, а
-// «выбранность» читается по ореолу на земле, обводке и акцентной крыше.
+const selectedFacadePatternExpr = (
+  theme: Theme,
+  s: ColorStops | null,
+  lod: FacadeLod,
+) => {
+  if (theme === "dark") return facadeImageName("dark", "selected", lod) as never;
+  return [
+    "step",
+    ["coalesce", ["get", "index"], s?.mid ?? 5],
+    facadeImageName("light", "selected-vlow", lod),
+    s?.t1 ?? 5,
+    facadeImageName("light", "selected-low", lod),
+    s?.t2 ?? 7,
+    facadeImageName("light", "selected-mid", lod),
+    s?.t3 ?? 9,
+    facadeImageName("light", "selected-high", lod),
+    s?.t4 ?? 11,
+    facadeImageName("light", "selected-vhigh", lod),
+  ] as never;
+};
+
+// Тот же step, что и у цвета: индексы → ступени.
 const facadePatternExpr = (theme: Theme, s: ColorStops | null, lod: FacadeLod) => {
   const stepExpr = [
     "step",
@@ -673,9 +732,7 @@ const facadePatternExpr = (theme: Theme, s: ColorStops | null, lod: FacadeLod) =
   return [
     "case",
     ["to-boolean", ["feature-state", "selected"]],
-    // В тёмной теме у выбранного дома своя текстура с плотно горящими янтарными окнами (45–55%),
-    // в светлой теме база выбранного дома — цвет его ступени (без заливки тела в зелёный).
-    theme === "dark" ? facadeImageName(theme, "selected", lod) : stepExpr,
+    selectedFacadePatternExpr(theme, s, lod),
     ["to-boolean", ["feature-state", "inactive"]],
     facadeImageName(theme, "dim", lod),
     stepExpr,
@@ -1626,10 +1683,13 @@ export default function Map() {
             },
             trees: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
             glow: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
-              // Отдельная геометрия выбранного дома: в тёмной теме несёт
-              // текстуру facade-dark-selected-* с плотно горящими окнами (45–55%),
-              // в светлой теме ниже порога окон рисует только акцентную плиту крыши.
+              // Отдельная геометрия выбранного дома и тонкого контура его крыши (~1.5 px).
               selectedBuilding: {
+                type: "geojson",
+                maxzoom: 16,
+                data: { type: "FeatureCollection", features: [] },
+              },
+              selectedRoofEdge: {
                 type: "geojson",
                 maxzoom: 16,
                 data: { type: "FeatureCollection", features: [] },
@@ -1731,15 +1791,17 @@ export default function Map() {
               },
             },
             {
-              // Мягкое свечение под выбранным домом (как на макетах).
+              // Мягкое свечение у основания выбранного дома (эллипс в плоскости земли):
+              // ночь — тёпло-зелёное, суммарная opacity 0.20–0.25; день — 0.10–0.12.
               id: "glow-outer",
               type: "circle",
               source: "glow",
               paint: {
                 "circle-color": palette.selected,
-                "circle-radius": ["interpolate", ["linear"], ["zoom"], 14, 30, 17, 84],
-                "circle-opacity": 0.2,
+                "circle-radius": ["interpolate", ["linear"], ["zoom"], 14, 28, 17, 76],
+                "circle-opacity": themeRef.current === "dark" ? 0.13 : 0.06,
                 "circle-blur": 1,
+                "circle-pitch-alignment": "map",
               },
             },
             {
@@ -1748,9 +1810,10 @@ export default function Map() {
               source: "glow",
               paint: {
                 "circle-color": palette.selected,
-                "circle-radius": ["interpolate", ["linear"], ["zoom"], 14, 14, 17, 40],
-                "circle-opacity": 0.38,
-                "circle-blur": 0.8,
+                "circle-radius": ["interpolate", ["linear"], ["zoom"], 14, 14, 17, 38],
+                "circle-opacity": themeRef.current === "dark" ? 0.1 : 0.05,
+                "circle-blur": 0.85,
+                "circle-pitch-alignment": "map",
               },
             },
             // Мягкая многослойная тень под домами: 3 плоских fill со сдвигом
@@ -1770,6 +1833,43 @@ export default function Map() {
               },
             })),
             {
+              // Мягкое свечение по footprint у основания выбранного дома.
+              id: "outline-halo",
+              type: "line",
+              source: "buildings",
+              ...buildingSourceLayer,
+              layout: { "line-cap": "round", "line-join": "round" },
+              paint: {
+                "line-color": palette.halo,
+                "line-width": ["interpolate", ["linear"], ["zoom"], 14, 10, 17, 22],
+                "line-blur": ["interpolate", ["linear"], ["zoom"], 14, 7, 17, 15],
+                "line-opacity": [
+                  "case",
+                  ["to-boolean", ["feature-state", "selected"]],
+                  themeRef.current === "dark" ? 0.18 : 0.09,
+                  0,
+                ],
+              },
+            },
+            {
+              // Спокойный тонкий контур у основания выбранного дома (1.6 px, opacity 0.55).
+              id: "outline-core",
+              type: "line",
+              source: "buildings",
+              ...buildingSourceLayer,
+              layout: { "line-cap": "round", "line-join": "round" },
+              paint: {
+                "line-color": palette.outlineCore,
+                "line-width": 1.6,
+                "line-opacity": [
+                  "case",
+                  ["to-boolean", ["feature-state", "selected"]],
+                  0.55,
+                  0,
+                ],
+              },
+            },
+            {
               id: "buildings",
               type: "fill-extrusion",
               source: "buildings",
@@ -1782,95 +1882,85 @@ export default function Map() {
                   colorStops,
                   themeRef.current === "dark" ? palette.selectedBody : null,
                 ),
-                "fill-extrusion-height":
-                  themeRef.current === "dark"
-                    ? ([
-                        "case",
-                        ["to-boolean", ["feature-state", "selected"]],
-                        0,
-                        ["coalesce", ["get", "height"], 9],
-                      ] as never)
-                    : (["coalesce", ["get", "height"], 9] as never),
+                "fill-extrusion-height": [
+                  "case",
+                  ["to-boolean", ["feature-state", "selected"]],
+                  0,
+                  ["coalesce", ["get", "height"], 9],
+                ] as never,
                 "fill-extrusion-base": 0,
                 "fill-extrusion-opacity": 0.95,
                 "fill-extrusion-vertical-gradient": true,
               },
             },
             {
-              // Выбранный дом: в тёмной теме рисует корпус с отдельной текстурой
-              // плотно горящих янтарных окон (facade-dark-selected-*), в светлой
-              // теме ниже порога окон — только акцентную плиту крыши.
+              // Выбранный дом: корпус со спокойными окнами в обеих темах.
               id: "buildings-selected-body",
               type: "fill-extrusion",
               source: "selectedBuilding",
               paint: {
                 "fill-extrusion-color":
-                  themeRef.current === "dark" ? palette.selectedBody : palette.selectedRoof,
-                "fill-extrusion-base":
                   themeRef.current === "dark"
-                    ? 0
-                    : (["coalesce", ["get", "height"], 9] as never),
-                "fill-extrusion-height":
-                  themeRef.current === "dark"
-                    ? (["coalesce", ["get", "height"], 9] as never)
-                    : (["+", ["coalesce", ["get", "height"], 9], 0.3] as never),
+                    ? palette.selectedBody
+                    : (stepColorsExpr(palette, colorStops, 0) as never),
+                "fill-extrusion-base": 0,
+                "fill-extrusion-height": ["coalesce", ["get", "height"], 9] as never,
                 "fill-extrusion-opacity": 0.95,
-                "fill-extrusion-vertical-gradient": themeRef.current === "dark",
+                "fill-extrusion-vertical-gradient": true,
               },
             },
             {
-              // Крыша: тонкая плита в цвет ступени поверх фасада. Нужна
-              // потому, что fill-extrusion-pattern красит и верхнюю грань —
-              // без неё крыши выглядят «в окнах». У выбранного дома — 0,3 м
-              // и спокойный оттенок selectedRoof.
-              // Показываем только вместе с окнами (zoom >= FACADE_MIN_ZOOM).
+              // Крыша обычных домов: тонкая плита в цвет ступени поверх фасада,
+              // чтобы fill-extrusion-pattern не рисовал окна на верхней грани.
               id: "buildings-roof",
               type: "fill-extrusion",
               source: "buildings",
               ...buildingSourceLayer,
               layout: { visibility: "none" },
               paint: {
-                "fill-extrusion-color": buildingColorExpr(palette, colorStops, palette.selectedRoof),
-                "fill-extrusion-base": ["coalesce", ["get", "height"], 9],
-                "fill-extrusion-height": [
-                  "+",
+                "fill-extrusion-color": buildingRoofColorExpr(palette, colorStops),
+                "fill-extrusion-base": [
+                  "case",
+                  ["to-boolean", ["feature-state", "selected"]],
+                  0,
                   ["coalesce", ["get", "height"], 9],
-                  ["case", ["to-boolean", ["feature-state", "selected"]], 0.3, 0.6],
-                ],
+                ] as never,
+                "fill-extrusion-height": [
+                  "case",
+                  ["to-boolean", ["feature-state", "selected"]],
+                  0,
+                  ["+", ["coalesce", ["get", "height"], 9], 0.5],
+                ] as never,
                 "fill-extrusion-opacity": 0.95,
                 "fill-extrusion-vertical-gradient": false,
               },
             },
             {
-              id: "outline-halo",
-              type: "line",
-              source: "buildings",
-              ...buildingSourceLayer,
+              // Тонкий контур крыши выбранного дома (~1.5 px, спокойный зелёный, opacity 0.7):
+              // лежит чуть ниже крыши buildings-selected-roof и выступает только по внешнему периметру.
+              id: "buildings-selected-roof-edge",
+              type: "fill-extrusion",
+              source: "selectedRoofEdge",
               paint: {
-                "line-color": palette.halo,
-                "line-width": 16,
-                "line-opacity": [
-                  "case",
-                  ["to-boolean", ["feature-state", "selected"]],
-                  0.5,
-                  0,
-                ],
+                "fill-extrusion-color": palette.outlineCore,
+                "fill-extrusion-base": ["coalesce", ["get", "height"], 9] as never,
+                "fill-extrusion-height": ["+", ["coalesce", ["get", "height"], 9], 0.28] as never,
+                "fill-extrusion-opacity": 0.7,
+                "fill-extrusion-vertical-gradient": false,
               },
             },
             {
-              id: "outline-core",
-              type: "line",
-              source: "buildings",
-              ...buildingSourceLayer,
+              // Крыша выбранного дома: цвет ступени дома (на 5% светлее), не мятная.
+              // Перекрывает внутреннюю часть крыши и любые стыки тайлов.
+              id: "buildings-selected-roof",
+              type: "fill-extrusion",
+              source: "selectedBuilding",
               paint: {
-                "line-color": palette.outlineCore,
-                "line-width": 3.5,
-                "line-opacity": [
-                  "case",
-                  ["to-boolean", ["feature-state", "selected"]],
-                  1,
-                  0,
-                ],
+                "fill-extrusion-color": stepColorsExpr(palette, colorStops, 0.05) as never,
+                "fill-extrusion-base": ["coalesce", ["get", "height"], 9] as never,
+                "fill-extrusion-height": ["+", ["coalesce", ["get", "height"], 9], 0.35] as never,
+                "fill-extrusion-opacity": 1,
+                "fill-extrusion-vertical-gradient": false,
               },
             },
             {
@@ -2206,26 +2296,39 @@ export default function Map() {
         for (const lod of lods) {
           for (const step of FACADE_STEPS) {
             add(step, p[step], lod);
+            if (t === "light") {
+              add(`selected-${step}` as FacadeSelectedStep, p[step], lod);
+            }
           }
           add("dim", p.dim, lod);
-          add(
-            "selected",
-            t === "light" && lod === "flat" ? p.selectedRoof : p.selectedBody,
-            lod,
-          );
+          add("selected", p.selectedBody, lod);
         }
       };
 
+      let currentSelectedFeatures: maplibregl.GeoJSONFeature[] = [];
+      const refreshSelectedRoofEdge = () => {
+        if (!map) return;
+        const edgeSrc = map.getSource("selectedRoofEdge") as maplibregl.GeoJSONSource | null;
+        if (!edgeSrc) return;
+        edgeSrc.setData({
+          type: "FeatureCollection",
+          features: currentSelectedFeatures.length
+            ? buildRoofEdgeFeatures(currentSelectedFeatures, map.getZoom())
+            : [],
+        } as never);
+      };
+
       // Четыре уровня текстуры фасадов по зуму:
-      // z < 15.4 ("flat") — чистый цвет без окон и без крыши-плиты;
-      // z 15.4–16.0 ("subtle") — почти незаметные окна (≤ 8% контраста) + крыша;
-      // z 16.0–17.0 ("coarse") — окна читаются (включая зум выбора 16.6) + крыша;
-      // z >= 17.0 ("fine") — детальные фасады (рамы 1 px, швы через ряд, ≤ 8 px окно) + крыша.
+      // z < 15.4 ("flat") — чистый цвет без окон и без крыши-плиты обычных домов;
+      // z 15.4–16.0 ("subtle") — единичные огни в ночи (≤ 6% контраста);
+      // z 16.0–17.0 ("coarse") — редкие огни в ночи и окна выбранного дома;
+      // z >= 17.0 ("fine") — крупный план.
       // Pattern не снимаем через null (в MapLibre 6 это ломало рендер слоя),
       // а подменяем набор картинок.
       let currentFacadeLod: FacadeLod | null = null;
       const syncFacades = (t: Theme) => {
         if (!map || !map.getLayer("buildings")) return;
+        refreshSelectedRoofEdge();
         const lod = facadeLodForZoom(map.getZoom());
         if (lod === currentFacadeLod) return;
         currentFacadeLod = lod;
@@ -2245,12 +2348,12 @@ export default function Map() {
           map.setPaintProperty(
             "buildings-selected-body",
             "fill-extrusion-pattern",
-            facadeImageName(t, "selected", lod),
+            selectedFacadePatternExpr(t, colorStops, lod),
           );
           map.setLayoutProperty(
             "buildings-selected-body",
             "visibility",
-            t === "dark" || !hasWindows ? "visible" : "none",
+            "visible",
           );
         }
         // Шейдер pattern-варианта компилируется не в том же кадре, а карта
@@ -2273,42 +2376,52 @@ export default function Map() {
         map.setPaintProperty(
           "buildings",
           "fill-extrusion-height",
-          t === "dark"
-            ? ([
-                "case",
-                ["to-boolean", ["feature-state", "selected"]],
-                0,
-                ["coalesce", ["get", "height"], 9],
-              ] as never)
-            : (["coalesce", ["get", "height"], 9] as never),
+          [
+            "case",
+            ["to-boolean", ["feature-state", "selected"]],
+            0,
+            ["coalesce", ["get", "height"], 9],
+          ] as never,
         );
         map.setPaintProperty(
           "buildings-selected-body",
           "fill-extrusion-color",
-          t === "dark" ? p.selectedBody : p.selectedRoof,
+          t === "dark" ? p.selectedBody : (stepColorsExpr(p, colorStops, 0) as never),
         );
         map.setPaintProperty(
           "buildings-selected-body",
           "fill-extrusion-base",
-          t === "dark" ? 0 : (["coalesce", ["get", "height"], 9] as never),
+          0,
         );
         map.setPaintProperty(
           "buildings-selected-body",
           "fill-extrusion-height",
-          t === "dark"
-            ? (["coalesce", ["get", "height"], 9] as never)
-            : (["+", ["coalesce", ["get", "height"], 9], 0.3] as never),
+          ["coalesce", ["get", "height"], 9] as never,
         );
         map.setPaintProperty(
           "buildings-selected-body",
           "fill-extrusion-vertical-gradient",
-          t === "dark",
+          true,
         );
         map.setPaintProperty(
           "buildings-roof",
           "fill-extrusion-color",
-          buildingColorExpr(p, colorStops, p.selectedRoof),
+          buildingRoofColorExpr(p, colorStops),
         );
+        if (map.getLayer("buildings-selected-roof")) {
+          map.setPaintProperty(
+            "buildings-selected-roof",
+            "fill-extrusion-color",
+            stepColorsExpr(p, colorStops, 0.05) as never,
+          );
+        }
+        if (map.getLayer("buildings-selected-roof-edge")) {
+          map.setPaintProperty(
+            "buildings-selected-roof-edge",
+            "fill-extrusion-color",
+            p.outlineCore,
+          );
+        }
         // У темы свой набор картинок — пере-применяем pattern принудительно.
         // Активную тему готовим заранее: pattern включается на zoomend уже в
         // готовом атласе, иначе первый кадр может пропустить слой.
@@ -2320,7 +2433,15 @@ export default function Map() {
             map.setPaintProperty(s.id, "fill-opacity", s.opacity[t]);
           }
         }
+        map.setPaintProperty("glow-outer", "circle-opacity", t === "dark" ? 0.13 : 0.06);
+        map.setPaintProperty("glow-inner", "circle-opacity", t === "dark" ? 0.1 : 0.05);
         map.setPaintProperty("outline-halo", "line-color", p.halo);
+        map.setPaintProperty("outline-halo", "line-opacity", [
+          "case",
+          ["to-boolean", ["feature-state", "selected"]],
+          t === "dark" ? 0.18 : 0.09,
+          0,
+        ] as never);
         map.setPaintProperty("outline-core", "line-color", p.outlineCore);
         map.setPaintProperty("redzones-fill", "fill-color", p.redzone);
         for (const [id, paint] of Object.entries(basemapPaint(p))) {
@@ -2359,9 +2480,10 @@ export default function Map() {
         rebuildLabels();
       };
 
-      // Порог окон: переключаем ровно по окончании зума (и на load через
+      // Порог окон: переключаем ровно по окончании зума/движения (и на load через
       // applyThemeRef). Во время инерции карта не дёргается.
       map.on("zoomend", () => syncFacades(themeRef.current));
+      map.on("moveend", () => syncFacades(themeRef.current));
 
       let selectedId: number | null = null;
       const allIds = buildingMeta.map((m) => m.id);
@@ -2419,38 +2541,98 @@ export default function Map() {
       };
 
       const setSelectedBody = (features: maplibregl.GeoJSONFeature[]) => {
+        currentSelectedFeatures = features;
         const src = map?.getSource("selectedBuilding") as maplibregl.GeoJSONSource | null;
         src?.setData({
           type: "FeatureCollection",
-          features: features.map((feature) => ({
-            type: "Feature",
-            id: feature.id ?? feature.properties?.id,
-            geometry: feature.geometry,
-            properties: {
-              id: feature.id ?? feature.properties?.id,
-              height: feature.properties?.height ?? 9,
-            },
-          })),
+          features: features.map((feature) => {
+            const rawId = feature.id ?? feature.properties?.id;
+            const numId = typeof rawId === "number" ? rawId : Number(rawId);
+            const meta = Number.isFinite(numId) ? metaById[numId] : undefined;
+            return {
+              type: "Feature",
+              id: rawId,
+              geometry: feature.geometry,
+              properties: {
+                id: rawId,
+                height: feature.properties?.height ?? 9,
+                index: feature.properties?.index ?? meta?.index ?? colorStops?.mid ?? 5,
+              },
+            };
+          }),
         } as never);
+        refreshSelectedRoofEdge();
       };
 
-      // Геометрия выбранного дома для слоя подсветки: берём из источника
-      // (geojson или тайлов), с фолбэком на отрисованные фичи. Вызываем
-      // несколько раз — тайлы вокруг дома могут догрузиться после flyTo.
+      const geometryScore = (geom: Geometry): number => {
+        const ringScore = (ring: Position[]) => {
+          if (!ring || ring.length < 3) return 0;
+          let area2 = 0;
+          for (let i = 0; i < ring.length - 1; i++) {
+            area2 += ring[i][0] * ring[i + 1][1] - ring[i + 1][0] * ring[i][1];
+          }
+          // Приоритет: полнота контура (число вершин) + площадь полигона.
+          return ring.length * 1e-7 + Math.abs(area2);
+        };
+        if (geom.type === "Polygon") {
+          return ringScore(geom.coordinates[0]);
+        }
+        if (geom.type === "MultiPolygon") {
+          return geom.coordinates.reduce((acc, poly) => acc + ringScore(poly[0]), 0);
+        }
+        return 0;
+      };
+
+      // Геометрия выбранного дома для слоя подсветки: выбираем наиболее полный
+      // неразрезанный полигон здания из доступных тайлов и не перезатираем его
+      // обрезанным фрагментом при переходе на крупный зум.
       const captureSelectedBody = (id: number) => {
         if (!map) return;
         const opts = tileMode ? { sourceLayer: "buildings" } : undefined;
         const matches = (f: maplibregl.GeoJSONFeature) =>
           Number(f.id) === id || Number(f.properties?.id) === id;
-        let found = map
-          .querySourceFeatures("buildings", opts as never)
-          .filter(matches);
+        let found: maplibregl.GeoJSONFeature[] = [];
+        if (!tileMode && buildings) {
+          const direct = buildings.features.find((f) => Number(f.properties.id) === id);
+          if (direct) {
+            found = [direct as unknown as maplibregl.GeoJSONFeature];
+          }
+        }
+        if (!found.length) {
+          found = map
+            .querySourceFeatures("buildings", opts as never)
+            .filter(matches);
+        }
         if (!found.length) {
           found = map
             .queryRenderedFeatures({ layers: ["buildings"] })
             .filter(matches);
         }
-        if (found.length) setSelectedBody(found);
+        if (!found.length) return;
+
+        let best = found[0];
+        let bestScore = geometryScore(best.geometry);
+        for (let i = 1; i < found.length; i++) {
+          const sc = geometryScore(found[i].geometry);
+          if (sc > bestScore) {
+            best = found[i];
+            bestScore = sc;
+          }
+        }
+
+        if (
+          currentSelectedFeatures.length === 1 &&
+          Number(
+            currentSelectedFeatures[0].id ?? currentSelectedFeatures[0].properties?.id,
+          ) === id
+        ) {
+          const prevScore = geometryScore(currentSelectedFeatures[0].geometry);
+          if (prevScore > bestScore * 1.02) {
+            return;
+          }
+        }
+
+        setSelectedBody([best]);
       };
 
       const deselect = () => {
@@ -2613,11 +2795,19 @@ export default function Map() {
         }
       });
 
-      const buildingHitLayers = () =>
-        map?.getLayer("buildings-selected-body") &&
-        map.getLayoutProperty("buildings-selected-body", "visibility") !== "none"
-          ? ["buildings-selected-body", "buildings"]
-          : ["buildings"];
+      const buildingHitLayers = () => {
+        const layers = ["buildings"];
+        for (const id of [
+          "buildings-selected-roof-edge",
+          "buildings-selected-roof",
+          "buildings-selected-body",
+        ]) {
+          if (map?.getLayer(id) && map.getLayoutProperty(id, "visibility") !== "none") {
+            layers.unshift(id);
+          }
+        }
+        return layers;
+      };
 
       map.on("click", (e) => {
         if (!map || !map.getLayer("buildings")) return;
