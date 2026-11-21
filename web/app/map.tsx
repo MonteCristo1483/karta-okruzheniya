@@ -47,16 +47,29 @@ maplibregl.setWorkerUrl("maplibre-gl-worker.mjs");
 // Палитры карты по темам (мягкие акценты, не неон — SPEC).
 const MAP_THEMES = {
   light: {
-    // Дома: 5 различимых ступеней балла (квинтили: терракота → тан → песок → шалфей → зелень).
-    vlow: "#cf8f7c",
-    low: "#d8ab8b",
-    mid: "#d8cfae",
-    high: "#a8c9a7",
-    vhigh: "#74bd8f",
+    // Обычные дома: 5 приглушённых ступеней балла (смешаны с нейтральным #c3ccd6 на 60%).
+    vlow: "#c8b4b2",
+    low: "#cbbfb8",
+    mid: "#cbcdc6",
+    high: "#b8cbc3",
+    vhigh: "#a3c6ba",
+    // Выбранный дом: яркий цвет ступени (не приглушать).
+    selectedVlow: "#cf8f7c",
+    selectedLow: "#d8ab8b",
+    selectedMid: "#d8cfae",
+    selectedHigh: "#a8c9a7",
+    selectedVhigh: "#74bd8f",
+    // Крыши обычных домов: почти нейтральные светлые — mix(крыша, #f2f5f8, 0.60).
+    roofVlow: "#e1dbdd",
+    roofLow: "#e2dfdf",
+    roofMid: "#e2e5e4",
+    roofHigh: "#dbe4e3",
+    roofVhigh: "#d2e2df",
+    roofDim: "#d8dfea",
     selected: "#38b874",
     // Крыша выбранного дома — цвет его ступени (на 5% светлее), не мятная.
     selectedRoof: "#dfd7b8",
-    // В светлой теме выбранный дом без заливки тела на всех зумах (тело красится по ступени балла).
+    // В светлой теме выбранный дом без заливки тела на всех зумах (тело красится по яркой ступени балла).
     selectedBody: "#d8cfae",
     dim: "#b8c4d4",
     halo: "#38b874",
@@ -91,15 +104,29 @@ const MAP_THEMES = {
     shadow: "#1a2838",
   },
   dark: {
-    vlow: "#4c5a70",
-    low: "#54637c",
-    mid: "#3a4b66",
-    high: "#3f5c70",
-    vhigh: "#4f7d68",
+    // Обычные дома: 5 ступеней, смешанных с #3a4760 на 35%.
+    vlow: "#46536a",
+    low: "#4b5972",
+    mid: "#3a4a64",
+    high: "#3d556a",
+    vhigh: "#486a65",
+    // Выбранный дом: неприглушённые ступени (ярче обычных).
+    selectedVlow: "#4c5a70",
+    selectedLow: "#54637c",
+    selectedMid: "#3a4b66",
+    selectedHigh: "#3f5c70",
+    selectedVhigh: "#4f7d68",
+    // Крыши обычных домов в тёмной теме.
+    roofVlow: "#46536a",
+    roofLow: "#4b5972",
+    roofMid: "#3a4a64",
+    roofHigh: "#3d556a",
+    roofVhigh: "#486a65",
+    roofDim: "#2a3340",
     selected: "#5ec98f",
-    selectedRoof: "#4c5c73",
-    // Тёмная тема: благородный тёмный сланцевый фасад выбранного дома (выделяется плотно горящими янтарными окнами, ореолом и крышей без зелёной заливки стены).
-    selectedBody: "#45546a",
+    selectedRoof: "#586a84",
+    // Тёмная тема: благородный сланцевый фасад выбранного дома (ярче обычных домов и dim).
+    selectedBody: "#50627c",
     dim: "#2a3340",
     halo: "#5ec98f",
     outlineCore: "#58c288",
@@ -198,33 +225,79 @@ const stepColorsExpr = (p: Palette, s: ColorStops | null, lighten = 0) => {
     : ["step", ["coalesce", ["get", "index"], 5], tone(p.low), 5, tone(p.mid), 7, tone(p.high)];
 };
 
+const selectedStepColorsExpr = (p: Palette, s: ColorStops | null, lighten = 0) => {
+  const tone = (c: string) => (lighten > 0 ? mixHex(c, "#ffffff", lighten) : c);
+  return s
+    ? [
+        "step",
+        ["coalesce", ["get", "index"], s.mid],
+        tone(p.selectedVlow),
+        s.t1,
+        tone(p.selectedLow),
+        s.t2,
+        tone(p.selectedMid),
+        s.t3,
+        tone(p.selectedHigh),
+        s.t4,
+        tone(p.selectedVhigh),
+      ]
+    : [
+        "step",
+        ["coalesce", ["get", "index"], 5],
+        tone(p.selectedLow),
+        5,
+        tone(p.selectedMid),
+        7,
+        tone(p.selectedHigh),
+      ];
+};
+
+const roofStepColorsExpr = (p: Palette, s: ColorStops | null) =>
+  s
+    ? [
+        "step",
+        ["coalesce", ["get", "index"], s.mid],
+        p.roofVlow,
+        s.t1,
+        p.roofLow,
+        s.t2,
+        p.roofMid,
+        s.t3,
+        p.roofHigh,
+        s.t4,
+        p.roofVhigh,
+      ]
+    : ["step", ["coalesce", ["get", "index"], 5], p.roofLow, 5, p.roofMid, 7, p.roofHigh];
+
 const buildingColorExpr = (
   p: Palette,
   s: ColorStops | null,
   selectedColor: string | null = null,
 ) => {
   const stepExpr = stepColorsExpr(p, s, 0);
+  const selectedStepExpr = selectedStepColorsExpr(p, s, 0);
   return [
     "case",
     ["to-boolean", ["feature-state", "selected"]],
-    selectedColor ?? stepExpr,
+    selectedColor ?? selectedStepExpr,
     ["to-boolean", ["feature-state", "inactive"]],
     p.dim,
     stepExpr,
   ] as never;
 };
 
-// Крыша обычных и выбранного дома: цвет ступени дома (у выбранного на 5% светлее), без мятной плиты.
+// Крыши обычных домов — почти нейтральные светлые (light) или тон ступени (dark);
+// у выбранного дома — яркий цвет его ступени (на 5% светлее), без мятной плиты.
 const buildingRoofColorExpr = (p: Palette, s: ColorStops | null) => {
-  const stepExpr = stepColorsExpr(p, s, 0);
-  const selectedRoofStepExpr = stepColorsExpr(p, s, 0.05);
+  const roofStepExpr = roofStepColorsExpr(p, s);
+  const selectedRoofStepExpr = selectedStepColorsExpr(p, s, 0.05);
   return [
     "case",
     ["to-boolean", ["feature-state", "selected"]],
     selectedRoofStepExpr,
     ["to-boolean", ["feature-state", "inactive"]],
-    p.dim,
-    stepExpr,
+    p.roofDim,
+    roofStepExpr,
   ] as never;
 };
 
@@ -555,15 +628,15 @@ function resolveSelectedBodyColor(
   const idx =
     typeof indexVal === "number" && Number.isFinite(indexVal) ? indexVal : (s?.mid ?? 5);
   if (!s) {
-    if (idx < 5) return p.low;
-    if (idx < 7) return p.mid;
-    return p.high;
+    if (idx < 5) return p.selectedLow;
+    if (idx < 7) return p.selectedMid;
+    return p.selectedHigh;
   }
-  if (idx < s.t1) return p.vlow;
-  if (idx < s.t2) return p.low;
-  if (idx < s.t3) return p.mid;
-  if (idx < s.t4) return p.high;
-  return p.vhigh;
+  if (idx < s.t1) return p.selectedVlow;
+  if (idx < s.t2) return p.selectedLow;
+  if (idx < s.t3) return p.selectedMid;
+  if (idx < s.t4) return p.selectedHigh;
+  return p.selectedVhigh;
 }
 
 function buildQuadRing(
@@ -1343,7 +1416,14 @@ const selectedFacadePatternExpr = (
 };
 
 // Тот же step, что и у цвета: индексы → ступени.
-const facadePatternExpr = (theme: Theme, s: ColorStops | null, lod: FacadeLod) => {
+// fill-extrusion-pattern в MapLibre не поддерживает feature-state, поэтому
+// состояние выбора передаём явно через activeSelectedId.
+const facadePatternExpr = (
+  theme: Theme,
+  s: ColorStops | null,
+  lod: FacadeLod,
+  activeSelectedId: number | null = null,
+) => {
   const stepExpr = [
     "step",
     ["coalesce", ["get", "index"], s?.mid ?? 5],
@@ -1357,13 +1437,14 @@ const facadePatternExpr = (theme: Theme, s: ColorStops | null, lod: FacadeLod) =
     s?.t4 ?? 11,
     facadeImageName(theme, "vhigh", lod),
   ];
+  if (activeSelectedId === null) {
+    return stepExpr as never;
+  }
   return [
     "case",
-    ["to-boolean", ["feature-state", "selected"]],
+    ["==", ["coalesce", ["to-number", ["get", "id"]], ["id"]], activeSelectedId],
     selectedFacadePatternExpr(theme, s, lod),
-    ["to-boolean", ["feature-state", "inactive"]],
     facadeImageName(theme, "dim", lod),
-    stepExpr,
   ] as never;
 };
 
@@ -2565,7 +2646,7 @@ export default function Map() {
                 "fill-extrusion-color":
                   themeRef.current === "dark"
                     ? palette.selectedBody
-                    : (stepColorsExpr(palette, colorStops, 0) as never),
+                    : (selectedStepColorsExpr(palette, colorStops, 0) as never),
                 "fill-extrusion-base": 0,
                 "fill-extrusion-height": ["coalesce", ["get", "height"], 9] as never,
                 "fill-extrusion-opacity": 0.95,
@@ -2573,13 +2654,12 @@ export default function Map() {
               },
             },
             {
-              // Крыша обычных домов: тонкая плита в цвет ступени поверх фасада,
-              // чтобы fill-extrusion-pattern не рисовал окна на верхней грани.
+              // Крыша обычных домов: тонкая плита поверх фасада (в светлой теме — почти нейтральная светлая).
               id: "buildings-roof",
               type: "fill-extrusion",
               source: "buildings",
+              minzoom: 14,
               ...buildingSourceLayer,
-              layout: { visibility: "none" },
               paint: {
                 "fill-extrusion-color": buildingRoofColorExpr(palette, colorStops),
                 "fill-extrusion-base": [
@@ -2613,13 +2693,13 @@ export default function Map() {
               },
             },
             {
-              // Крыша выбранного дома: цвет ступени дома (на 5% светлее), не мятная.
+              // Крыша выбранного дома: яркий цвет ступени дома (на 5% светлее), не мятная.
               // Перекрывает внутреннюю часть крыши и любые стыки тайлов.
               id: "buildings-selected-roof",
               type: "fill-extrusion",
               source: "selectedBuilding",
               paint: {
-                "fill-extrusion-color": stepColorsExpr(palette, colorStops, 0.05) as never,
+                "fill-extrusion-color": selectedStepColorsExpr(palette, colorStops, 0.05) as never,
                 "fill-extrusion-base": ["coalesce", ["get", "height"], 9] as never,
                 "fill-extrusion-height": ["+", ["coalesce", ["get", "height"], 9], 0.35] as never,
                 "fill-extrusion-opacity": 1,
@@ -2966,6 +3046,13 @@ export default function Map() {
       const addFacadeImages = (t: Theme) => {
         if (!map) return;
         const p = MAP_THEMES[t];
+        const selectedStepColor: Record<FacadeStep, string> = {
+          vlow: p.selectedVlow,
+          low: p.selectedLow,
+          mid: p.selectedMid,
+          high: p.selectedHigh,
+          vhigh: p.selectedVhigh,
+        };
         const lods: FacadeLod[] = ["flat", "subtle", "coarse", "fine"];
         const add = (variant: FacadeVariant, baseColor: string, lod: FacadeLod) => {
           const name = facadeImageName(t, variant, lod);
@@ -2978,7 +3065,7 @@ export default function Map() {
           for (const step of FACADE_STEPS) {
             add(step, p[step], lod);
             if (t === "light") {
-              add(`selected-${step}` as FacadeSelectedStep, p[step], lod);
+              add(`selected-${step}` as FacadeSelectedStep, selectedStepColor[step], lod);
             }
           }
           add("dim", p.dim, lod);
@@ -3213,12 +3300,12 @@ export default function Map() {
       // z >= 17.0 ("fine") — крупный план.
       // Pattern не снимаем через null (в MapLibre 6 это ломало рендер слоя),
       // а подменяем набор картинок.
+      let selectedId: number | null = null;
       let currentFacadeLod: FacadeLod | null = null;
       const syncFacades = (t: Theme) => {
         if (!map || !map.getLayer("buildings")) return;
         refreshSelectedRoofEdge();
         const lod = facadeLodForZoom(map.getZoom());
-        const hasWindows = lod !== "flat";
         syncSelectedWindowTheme(t);
         if (lod === currentFacadeLod) return;
         currentFacadeLod = lod;
@@ -3226,13 +3313,9 @@ export default function Map() {
         map.setPaintProperty(
           "buildings",
           "fill-extrusion-pattern",
-          facadePatternExpr(t, colorStops, lod),
+          facadePatternExpr(t, colorStops, lod, selectedId),
         );
-        map.setLayoutProperty(
-          "buildings-roof",
-          "visibility",
-          hasWindows ? "visible" : "none",
-        );
+        map.setLayoutProperty("buildings-roof", "visibility", "visible");
         if (map.getLayer("buildings-selected-body")) {
           map.setLayoutProperty(
             "buildings-selected-body",
@@ -3270,7 +3353,7 @@ export default function Map() {
         map.setPaintProperty(
           "buildings-selected-body",
           "fill-extrusion-color",
-          t === "dark" ? p.selectedBody : (stepColorsExpr(p, colorStops, 0) as never),
+          t === "dark" ? p.selectedBody : (selectedStepColorsExpr(p, colorStops, 0) as never),
         );
         map.setPaintProperty(
           "buildings-selected-body",
@@ -3296,7 +3379,7 @@ export default function Map() {
           map.setPaintProperty(
             "buildings-selected-roof",
             "fill-extrusion-color",
-            stepColorsExpr(p, colorStops, 0.05) as never,
+            selectedStepColorsExpr(p, colorStops, 0.05) as never,
           );
         }
         if (map.getLayer("buildings-selected-roof-edge")) {
@@ -3414,7 +3497,6 @@ export default function Map() {
         else rebuildForViewport();
       });
 
-      let selectedId: number | null = null;
       const allIds = buildingMeta.map((m) => m.id);
       const metaById: Record<number, BuildingMeta> = {};
       for (const m of buildingMeta) metaById[m.id] = m;
@@ -3423,6 +3505,8 @@ export default function Map() {
       let appliedSelectedId: number | null = null;
       const applySelection = () => {
         if (!map || !map.getSource("buildings")) return;
+        currentFacadeLod = null;
+        syncFacades(themeRef.current);
         // Векторному источнику нужен sourceLayer и для feature-state.
         const stateSource = tileMode
           ? { source: "buildings", sourceLayer: "buildings" }
@@ -3923,6 +4007,7 @@ export default function Map() {
       const buildingHitLayers = () => {
         const layers = ["buildings"];
         for (const id of [
+          "buildings-roof",
           "buildings-selected-roof-edge",
           "buildings-selected-roof",
           "buildings-selected-body",
