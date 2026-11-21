@@ -357,7 +357,7 @@ const HERO_FLOOR_FIRST_M = 1.0;
 const HERO_FLOOR_STEP_M = 3.0;
 const HERO_MAX_FLOORS = 30;
 const HERO_MAX_TOTAL_POLYGONS = 2000;
-const HERO_MAX_WINDOW_CELLS = 1250;
+const HERO_MAX_WINDOW_CELLS = 1200;
 const HERO_HALO_SCALE = 1.2;
 
 const HERO_WINDOW_LAYER_ID = "buildings-selected-windows";
@@ -488,6 +488,13 @@ function facadeCameraBearing(geom: Geometry): number | null {
 // (union) в один footprint. Порядок колец и дыры сохраняет polygon-clipping:
 // внешние кольца CCW, внутренние (дворы) CW.
 function unionFootprintGeometries(geoms: Geometry[]): Geometry | null {
+  if (geoms.length === 1 && geoms[0].type === "Polygon") {
+    const rings = geoms[0].coordinates
+      .map(cleanLonLatRing)
+      .filter((ring) => ring.length >= 4);
+    return rings.length ? { type: "Polygon", coordinates: rings } : null;
+  }
+
   const polygons: LonLatPair[][][] = [];
   for (const geom of geoms) {
     if (geom.type === "Polygon") {
@@ -581,8 +588,8 @@ function buildQuadRing(
 
 function buildSelectedWindowFeatures(
   features: maplibregl.GeoJSONFeature[],
-  theme: Theme,
   colorStops: ColorStops | null,
+  includeHalo: boolean,
 ): FeatureCollection {
   const edges: HeroFacadeEdge[] = [];
   const bodyOccluders: Feature[] = [];
@@ -674,7 +681,8 @@ function buildSelectedWindowFeatures(
     const buildingHeight = Math.max(0, Number(f.properties?.height ?? 9));
     const indexVal =
       typeof f.properties?.index === "number" ? f.properties.index : Number(f.properties?.index);
-    const bodyColor = resolveSelectedBodyColor(theme, indexVal, colorStops);
+    const bodyColorLight = resolveSelectedBodyColor("light", indexVal, colorStops);
+    const bodyColorDark = resolveSelectedBodyColor("dark", indexVal, colorStops);
 
     const insetGeometry = (geom: Geometry): Geometry => {
       if (geom.type === "Polygon") {
@@ -699,7 +707,8 @@ function buildSelectedWindowFeatures(
         kind: "body",
         base: 0,
         height: buildingHeight,
-        color: bodyColor,
+        colorLight: bodyColorLight,
+        colorDark: bodyColorDark,
       },
       geometry: insetGeometry(f.geometry),
     });
@@ -869,14 +878,10 @@ function buildSelectedWindowFeatures(
     const isLit = sp.score >= litThreshold;
     const blendT = Math.min(1, Math.max(0, sp.aptToneT * 0.65 + sp.toneT * 0.35));
 
-    let winColor: string;
-    if (theme === "light") {
-      winColor = mixHex("#f2e3c8", "#ffe9c9", blendT);
-    } else if (isLit) {
-      winColor = mixHex("#ffc978", "#ffd79a", blendT);
-    } else {
-      winColor = mixHex("#16263c", "#1b2e4a", sp.toneT);
-    }
+    const winColorLight = mixHex("#f2e3c8", "#ffe9c9", blendT);
+    const winColorDark = isLit
+      ? mixHex("#ffc978", "#ffd79a", blendT)
+      : mixHex("#16263c", "#1b2e4a", sp.toneT);
 
     const halfW = sp.winWidth * 0.5;
     const s0 = Math.max(HERO_WIN_CORNER_MARGIN_M, sp.sCenter - halfW);
@@ -889,7 +894,8 @@ function buildSelectedWindowFeatures(
         kind: "window",
         base: Number(sp.winBase.toFixed(2)),
         height: Number(sp.winTop.toFixed(2)),
-        color: winColor,
+        colorLight: winColorLight,
+        colorDark: winColorDark,
         lit: isLit,
       },
       geometry: {
@@ -898,7 +904,7 @@ function buildSelectedWindowFeatures(
       },
     });
 
-    if (theme === "dark" && isLit && outFeatures.length < HERO_MAX_TOTAL_POLYGONS) {
+    if (includeHalo && isLit && outFeatures.length < HERO_MAX_TOTAL_POLYGONS) {
       const haloHalfW = sp.winWidth * HERO_HALO_SCALE * 0.5;
       const hs0 = Math.max(HERO_WIN_CORNER_MARGIN_M * 0.75, sp.sCenter - haloHalfW);
       const hs1 = Math.min(
@@ -916,7 +922,8 @@ function buildSelectedWindowFeatures(
           kind: "halo",
           base: Number(haloBase.toFixed(2)),
           height: Number(haloTop.toFixed(2)),
-          color: winColor,
+          colorLight: winColorLight,
+          colorDark: winColorDark,
           lit: true,
         },
         geometry: {
@@ -2980,17 +2987,61 @@ export default function Map() {
       };
 
       let currentSelectedFeatures: maplibregl.GeoJSONFeature[] = [];
-      // V4b5: последняя собранная геометрия и её площадь — чтобы не дёргать
-      // окна на каждый sourcedata и не откатываться с целого контура на обрезок.
+      let currentSelectedId: number | null = null;
       let currentSelectedSignature: string | null = null;
       let currentSelectedArea = 0;
-      // Если геометрия дома ещё не приехала к моменту flyTo, доворачиваем
-      // камеру на длинный фасад, как только sourcedata/idle её отдаст.
       let pendingFacadeBearingId: number | null = null;
+      let currentRoofEdgeZoom: number | null = null;
+      const selectedWindowCache = new globalThis.Map<
+        number,
+        { signature: string; includeHalo: boolean; data: FeatureCollection }
+      >();
+      const cacheSelectedWindows = (
+        id: number,
+        entry: { signature: string; includeHalo: boolean; data: FeatureCollection },
+      ) => {
+        selectedWindowCache.delete(id);
+        selectedWindowCache.set(id, entry);
+        if (selectedWindowCache.size > 8) {
+          const oldest = selectedWindowCache.keys().next().value;
+          if (oldest !== undefined) selectedWindowCache.delete(oldest);
+        }
+      };
+      let captureToken = 0;
+      let captureRequested = false;
+      let captureScheduled = false;
+      let selectionMovePending = false;
+      let captureFrame: number | null = null;
+      let pendingCaptureMoveEnd: (() => void) | null = null;
+      let pendingCaptureIdle: (() => void) | null = null;
+
+      const cancelSelectedCapture = () => {
+        captureToken++;
+        captureRequested = false;
+        captureScheduled = false;
+        selectionMovePending = false;
+        if (captureFrame !== null) {
+          window.cancelAnimationFrame(captureFrame);
+          captureFrame = null;
+        }
+        if (pendingCaptureMoveEnd) {
+          map?.off("moveend", pendingCaptureMoveEnd);
+          pendingCaptureMoveEnd = null;
+        }
+        if (pendingCaptureIdle) {
+          map?.off("idle", pendingCaptureIdle);
+          pendingCaptureIdle = null;
+        }
+        return captureToken;
+      };
+
       const refreshSelectedRoofEdge = () => {
         if (!map) return;
         const edgeSrc = map.getSource("selectedRoofEdge") as maplibregl.GeoJSONSource | null;
         if (!edgeSrc) return;
+        const zoom = map.getZoom();
+        if (currentRoofEdgeZoom === zoom) return;
+        currentRoofEdgeZoom = zoom;
         edgeSrc.setData({
           type: "FeatureCollection",
           features: currentSelectedFeatures.length
@@ -2999,58 +3050,127 @@ export default function Map() {
         } as never);
       };
 
-      const removeSelectedWindows = () => {
+      const clearSelectedWindows = () => {
         if (!map) return;
-        if (map.getLayer(HERO_HALO_LAYER_ID)) {
-          map.removeLayer(HERO_HALO_LAYER_ID);
-        }
-        if (map.getLayer(HERO_WINDOW_LAYER_ID)) {
-          map.removeLayer(HERO_WINDOW_LAYER_ID);
-        }
-        if (map.getSource(HERO_WINDOWS_SOURCE_ID)) {
-          map.removeSource(HERO_WINDOWS_SOURCE_ID);
-        }
+        const src = map.getSource(HERO_WINDOWS_SOURCE_ID) as maplibregl.GeoJSONSource | null;
+        src?.setData({ type: "FeatureCollection", features: [] } as never);
         (
           window as unknown as { __selectedWindowsData?: FeatureCollection | null }
         ).__selectedWindowsData = null;
       };
 
-      const rebuildSelectedWindows = (t: Theme) => {
+      let currentSelectedWindowTheme: Theme | null = null;
+      let currentSelectedWindowVisibility: boolean | null = null;
+      let currentSelectedHaloVisibility: boolean | null = null;
+      const syncSelectedWindowTheme = (t: Theme) => {
         if (!map) return;
-        removeSelectedWindows();
-        if (!currentSelectedFeatures.length) return;
-        const data = buildSelectedWindowFeatures(currentSelectedFeatures, t, colorStops);
-        if (!data.features.length) return;
+        const colorProperty = t === "dark" ? "colorDark" : "colorLight";
+        const lodVisible = facadeLodForZoom(map.getZoom()) !== "flat";
+        const haloVisible =
+          t === "dark" && window.matchMedia("(min-width: 768px)").matches && lodVisible;
+        if (
+          currentSelectedWindowTheme !== t &&
+          map.getLayer(HERO_HALO_LAYER_ID)
+        ) {
+          map.setPaintProperty(
+            HERO_HALO_LAYER_ID,
+            "fill-extrusion-color",
+            ["get", colorProperty] as never,
+          );
+        }
+        if (
+          currentSelectedHaloVisibility !== haloVisible &&
+          map.getLayer(HERO_HALO_LAYER_ID)
+        ) {
+          map.setLayoutProperty(
+            HERO_HALO_LAYER_ID,
+            "visibility",
+            haloVisible ? "visible" : "none",
+          );
+        }
+        if (
+          currentSelectedWindowTheme !== t &&
+          map.getLayer(HERO_WINDOW_LAYER_ID)
+        ) {
+          map.setPaintProperty(
+            HERO_WINDOW_LAYER_ID,
+            "fill-extrusion-color",
+            ["get", colorProperty] as never,
+          );
+        }
+        if (
+          currentSelectedWindowVisibility !== lodVisible &&
+          map.getLayer(HERO_WINDOW_LAYER_ID)
+        ) {
+          map.setLayoutProperty(
+            HERO_WINDOW_LAYER_ID,
+            "visibility",
+            lodVisible ? "visible" : "none",
+          );
+        }
+        currentSelectedWindowTheme = t;
+        currentSelectedWindowVisibility = lodVisible;
+        currentSelectedHaloVisibility = haloVisible;
+      };
+
+      const rebuildSelectedWindows = (id: number, signature: string) => {
+        if (!map) return;
+        if (!currentSelectedFeatures.length) {
+          clearSelectedWindows();
+          return;
+        }
+        const includeHalo = window.matchMedia("(min-width: 768px)").matches;
+        const cached = selectedWindowCache.get(id);
+        let data =
+          cached?.signature === signature && cached.includeHalo === includeHalo
+            ? cached.data
+            : null;
+        if (data && cached) {
+          selectedWindowCache.delete(id);
+          selectedWindowCache.set(id, cached);
+        } else {
+          data = buildSelectedWindowFeatures(
+            currentSelectedFeatures,
+            colorStops,
+            includeHalo,
+          );
+          cacheSelectedWindows(id, { signature, includeHalo, data });
+        }
         (
           window as unknown as { __selectedWindowsData?: FeatureCollection | null }
-        ).__selectedWindowsData = data;
+        ).__selectedWindowsData = data.features.length ? data : null;
 
-        map.addSource(HERO_WINDOWS_SOURCE_ID, {
-          type: "geojson",
-          maxzoom: 22,
-          tolerance: 0,
-          data,
-        });
+        const existingSource = map.getSource(
+          HERO_WINDOWS_SOURCE_ID,
+        ) as maplibregl.GeoJSONSource | null;
+        if (existingSource) {
+          existingSource.setData(data as never);
+        } else {
+          map.addSource(HERO_WINDOWS_SOURCE_ID, {
+            type: "geojson",
+            maxzoom: 22,
+            tolerance: 0,
+            data,
+          });
+        }
+        if (!data.features.length) return;
 
         const beforeId = map.getLayer("buildings-selected-roof-edge")
           ? "buildings-selected-roof-edge"
           : map.getLayer("routes-glow")
             ? "routes-glow"
             : undefined;
-        const vis =
-          facadeLodForZoom(map.getZoom()) !== "flat" ? "visible" : "none";
-
-        if (t === "dark") {
+        if (!map.getLayer(HERO_HALO_LAYER_ID)) {
           map.addLayer(
             {
               id: HERO_HALO_LAYER_ID,
               type: "fill-extrusion",
               source: HERO_WINDOWS_SOURCE_ID,
               minzoom: FACADE_COARSE_MIN_ZOOM,
-              filter: ["!=", ["get", "kind"], "window"],
-              layout: { visibility: vis },
+              filter: ["==", ["get", "kind"], "halo"],
+              layout: { visibility: "none" },
               paint: {
-                "fill-extrusion-color": ["get", "color"] as never,
+                "fill-extrusion-color": ["get", "colorDark"] as never,
                 "fill-extrusion-base": ["get", "base"] as never,
                 "fill-extrusion-height": ["get", "height"] as never,
                 "fill-extrusion-opacity": 0.14,
@@ -3060,25 +3180,30 @@ export default function Map() {
             beforeId,
           );
         }
-
-        map.addLayer(
-          {
-            id: HERO_WINDOW_LAYER_ID,
-            type: "fill-extrusion",
-            source: HERO_WINDOWS_SOURCE_ID,
-            minzoom: FACADE_COARSE_MIN_ZOOM,
-            filter: ["!=", ["get", "kind"], "halo"],
-            layout: { visibility: vis },
-            paint: {
-              "fill-extrusion-color": ["get", "color"] as never,
-              "fill-extrusion-base": ["get", "base"] as never,
-              "fill-extrusion-height": ["get", "height"] as never,
-              "fill-extrusion-opacity": 0.96,
-              "fill-extrusion-vertical-gradient": false,
+        if (!map.getLayer(HERO_WINDOW_LAYER_ID)) {
+          map.addLayer(
+            {
+              id: HERO_WINDOW_LAYER_ID,
+              type: "fill-extrusion",
+              source: HERO_WINDOWS_SOURCE_ID,
+              minzoom: FACADE_COARSE_MIN_ZOOM,
+              filter: ["!=", ["get", "kind"], "halo"],
+              layout: { visibility: "none" },
+              paint: {
+                "fill-extrusion-color": ["get", "colorDark"] as never,
+                "fill-extrusion-base": ["get", "base"] as never,
+                "fill-extrusion-height": ["get", "height"] as never,
+                "fill-extrusion-opacity": 0.96,
+                "fill-extrusion-vertical-gradient": false,
+              },
             },
-          },
-          beforeId,
-        );
+            beforeId,
+          );
+        }
+        currentSelectedWindowTheme = null;
+        currentSelectedWindowVisibility = null;
+        currentSelectedHaloVisibility = null;
+        syncSelectedWindowTheme(themeRef.current);
       };
 
       // Четыре уровня текстуры фасадов по зуму:
@@ -3091,32 +3216,10 @@ export default function Map() {
       let currentFacadeLod: FacadeLod | null = null;
       const syncFacades = (t: Theme) => {
         if (!map || !map.getLayer("buildings")) return;
-        if (selectedId !== null && !currentSelectedFeatures.length) {
-          captureSelectedBody(selectedId);
-        }
-        if (
-          pendingFacadeBearingId !== null &&
-          selectedId === pendingFacadeBearingId &&
-          currentSelectedFeatures.length
-        ) {
-          const b = facadeCameraBearing(currentSelectedFeatures[0].geometry);
-          pendingFacadeBearingId = null;
-          if (b !== null && Math.abs(b - map.getBearing()) > 1) {
-            map.easeTo({ bearing: b, duration: 700 });
-          }
-        }
         refreshSelectedRoofEdge();
         const lod = facadeLodForZoom(map.getZoom());
         const hasWindows = lod !== "flat";
-        for (const winLayerId of [HERO_WINDOW_LAYER_ID, HERO_HALO_LAYER_ID]) {
-          if (map.getLayer(winLayerId)) {
-            map.setLayoutProperty(
-              winLayerId,
-              "visibility",
-              hasWindows ? "visible" : "none",
-            );
-          }
-        }
+        syncSelectedWindowTheme(t);
         if (lod === currentFacadeLod) return;
         currentFacadeLod = lod;
         addFacadeImages(t);
@@ -3207,7 +3310,7 @@ export default function Map() {
         // Активную тему готовим заранее: pattern включается на zoomend уже в
         // готовом атласе, иначе первый кадр может пропустить слой.
         addFacadeImages(t);
-        rebuildSelectedWindows(t);
+        syncSelectedWindowTheme(t);
         currentFacadeLod = null;
         syncFacades(t);
         for (const s of BUILDING_SHADOW_LAYERS) {
@@ -3289,18 +3392,61 @@ export default function Map() {
       // applyThemeRef). Во время инерции карта не дёргается.
       map.on("zoomend", () => syncFacades(themeRef.current));
       map.on("moveend", () => syncFacades(themeRef.current));
+      let selectedWindowDesktop = window.matchMedia("(min-width: 768px)").matches;
+      map.on("resize", () => {
+        const nextDesktop = window.matchMedia("(min-width: 768px)").matches;
+        if (nextDesktop === selectedWindowDesktop) return;
+        selectedWindowDesktop = nextDesktop;
+        const id = currentSelectedId;
+        const signature = currentSelectedSignature;
+        if (id === null || signature === null) return;
+        const rebuildForViewport = () => {
+          if (
+            currentSelectedId !== id ||
+            currentSelectedSignature !== signature
+          ) {
+            return;
+          }
+          selectedWindowCache.delete(id);
+          rebuildSelectedWindows(id, signature);
+        };
+        if (map?.isMoving()) map.once("moveend", rebuildForViewport);
+        else rebuildForViewport();
+      });
 
       let selectedId: number | null = null;
       const allIds = buildingMeta.map((m) => m.id);
       const metaById: Record<number, BuildingMeta> = {};
       for (const m of buildingMeta) metaById[m.id] = m;
 
+      let featureStateInitialized = false;
+      let appliedSelectedId: number | null = null;
       const applySelection = () => {
         if (!map || !map.getSource("buildings")) return;
         // Векторному источнику нужен sourceLayer и для feature-state.
         const stateSource = tileMode
           ? { source: "buildings", sourceLayer: "buildings" }
           : { source: "buildings" };
+        if (
+          featureStateInitialized &&
+          selectedId !== null &&
+          appliedSelectedId !== null
+        ) {
+          if (appliedSelectedId !== null && appliedSelectedId !== selectedId) {
+            map.setFeatureState(
+              { ...stateSource, id: appliedSelectedId },
+              { selected: false, inactive: true },
+            );
+          }
+          if (appliedSelectedId !== selectedId) {
+            map.setFeatureState(
+              { ...stateSource, id: selectedId },
+              { selected: true, inactive: false },
+            );
+          }
+          appliedSelectedId = selectedId;
+          return;
+        }
         for (const id of allIds) {
           map.setFeatureState(
             { ...stateSource, id },
@@ -3310,19 +3456,74 @@ export default function Map() {
             },
           );
         }
+        featureStateInitialized = true;
+        appliedSelectedId = selectedId;
       };
 
-      // В режиме PMTiles тайлы нового зума (после flyTo) приходят позже
-      // вызова selectById. Пересобираем контур на sourcedata/idle (с дебаунсом),
-      // чтобы дождаться всех частей разрезанного дома без мигания.
-      let captureTimer: number | null = null;
-      const scheduleSelectedCapture = () => {
-        if (selectedId === null) return;
-        if (captureTimer !== null) window.clearTimeout(captureTimer);
-        captureTimer = window.setTimeout(() => {
-          captureTimer = null;
-          if (selectedId !== null) captureSelectedBody(selectedId);
-        }, 160);
+      const scheduleSelectedCapture = (
+        id: number | null = selectedId,
+        token = captureToken,
+      ) => {
+        const activeMap = map;
+        if (
+          !activeMap ||
+          id === null ||
+          id !== selectedId ||
+          token !== captureToken
+        ) {
+          return;
+        }
+        captureRequested = true;
+        if (selectionMovePending) return;
+        if (captureScheduled) return;
+        if (activeMap.isMoving()) {
+          if (!pendingCaptureMoveEnd) {
+            const onMoveEnd = () => {
+              pendingCaptureMoveEnd = null;
+              selectionMovePending = false;
+              window.requestAnimationFrame(() => scheduleSelectedCapture(id, token));
+            };
+            pendingCaptureMoveEnd = onMoveEnd;
+            activeMap.once("moveend", onMoveEnd);
+          }
+          return;
+        }
+
+        captureScheduled = true;
+        const runCapture = () => {
+          if (!captureScheduled) return;
+          captureScheduled = false;
+          if (pendingCaptureIdle) {
+            activeMap.off("idle", pendingCaptureIdle);
+            pendingCaptureIdle = null;
+          }
+          if (
+            token !== captureToken ||
+            id !== selectedId ||
+            !captureRequested
+          ) {
+            return;
+          }
+          if (activeMap.isMoving()) {
+            scheduleSelectedCapture(id, token);
+            return;
+          }
+          captureRequested = false;
+          captureSelectedBody(id, token);
+        };
+        pendingCaptureIdle = runCapture;
+        activeMap.once("idle", runCapture);
+        captureFrame = window.requestAnimationFrame(() => {
+          captureFrame = null;
+          if (
+            token === captureToken &&
+            id === selectedId &&
+            !activeMap.isMoving() &&
+            activeMap.loaded()
+          ) {
+            runCapture();
+          }
+        });
       };
 
       const setUrlBuilding = (id: number | null) => {
@@ -3367,9 +3568,17 @@ export default function Map() {
         const nextSignature = normalized.length
           ? normalized.map((f) => geometrySignature(f.geometry)).join("&")
           : null;
-        // Та же геометрия — не пересобираем окна (sourcedata/idle приходят часто).
-        if (nextSignature !== null && nextSignature === currentSelectedSignature) return;
+        const rawId = normalized[0]?.properties.id;
+        const nextId = rawId == null ? null : Number(rawId);
+        if (
+          nextSignature !== null &&
+          nextId === currentSelectedId &&
+          nextSignature === currentSelectedSignature
+        ) {
+          return;
+        }
         if (nextSignature === null && currentSelectedSignature === null) return;
+        currentSelectedId = nextId;
         currentSelectedSignature = nextSignature;
         currentSelectedArea = normalized.reduce(
           (acc, f) => acc + footprintAreaM2(f.geometry),
@@ -3381,18 +3590,61 @@ export default function Map() {
           type: "FeatureCollection",
           features: normalized,
         } as never);
+        currentRoofEdgeZoom = null;
         refreshSelectedRoofEdge();
-        rebuildSelectedWindows(themeRef.current);
+        if (nextId !== null && nextSignature !== null) {
+          rebuildSelectedWindows(nextId, nextSignature);
+        } else {
+          clearSelectedWindows();
+        }
+      };
+
+      const rotateToFacadeIfSafe = (id: number, geometry: Geometry) => {
+        if (!map || pendingFacadeBearingId !== id || selectedId !== id) return;
+        pendingFacadeBearingId = null;
+        const target = facadeCameraBearing(geometry);
+        if (target === null) return;
+        const current = map.getBearing();
+        const delta = ((((target - current + 180) % 360) + 360) % 360) - 180;
+        // Не доворачиваемся, если фасад уже далеко от направления луча;
+        // угол — всегда кратчайший, дополнительный предел защищает от рывка.
+        if (Math.abs(delta) >= 20) return;
+        const adjustment = Math.max(-35, Math.min(35, delta));
+        if (Math.abs(adjustment) > 1) {
+          map.easeTo({ bearing: current + adjustment, duration: 700 });
+        }
       };
 
       // Геометрия выбранного дома: берём все части с одним id из всех
       // загруженных тайлов (дом режется границами PMTiles) и объединяем их
       // в один footprint, чтобы нормали окон считались по целому контуру.
-      const captureSelectedBody = (id: number, force = false) => {
-        if (!map) return;
-        // Во время инерции/полёта не пересобираем: дождёмся moveend/idle.
-        // Явный выбор дома (force) собираем сразу.
-        if (!force && map.isMoving()) return;
+      const selectedBodyCache = new globalThis.Map<
+        number,
+        {
+          partsSignature: string;
+          feature: maplibregl.GeoJSONFeature;
+          area: number;
+        }
+      >();
+      const rememberSelectedBody = (
+        id: number,
+        entry: {
+          partsSignature: string;
+          feature: maplibregl.GeoJSONFeature;
+          area: number;
+        },
+      ) => {
+        selectedBodyCache.delete(id);
+        selectedBodyCache.set(id, entry);
+        if (selectedBodyCache.size > 8) {
+          const oldest = selectedBodyCache.keys().next().value;
+          if (oldest !== undefined) selectedBodyCache.delete(oldest);
+        }
+      };
+      let lastCaptureAttemptId: number | null = null;
+      let lastCaptureAttemptSignature: string | null = null;
+      const captureSelectedBody = (id: number, token: number) => {
+        if (!map || map.isMoving() || token !== captureToken || selectedId !== id) return;
         const opts = tileMode ? { sourceLayer: "buildings" } : undefined;
         const matches = (f: maplibregl.GeoJSONFeature) =>
           Number(f.id) === id || Number(f.properties?.id) === id;
@@ -3419,15 +3671,32 @@ export default function Map() {
         }
         if (!found.length) return;
 
+        const partsSignature = [...seen].sort().join("&");
+        const cached = selectedBodyCache.get(id);
+        if (cached?.partsSignature === partsSignature) {
+          selectedBodyCache.delete(id);
+          selectedBodyCache.set(id, cached);
+          setSelectedBody([cached.feature]);
+          currentSelectedArea = cached.area;
+          rotateToFacadeIfSafe(id, cached.feature.geometry);
+          return;
+        }
+        if (
+          currentSelectedId === id &&
+          lastCaptureAttemptId === id &&
+          lastCaptureAttemptSignature === partsSignature
+        ) {
+          return;
+        }
+        lastCaptureAttemptId = id;
+        lastCaptureAttemptSignature = partsSignature;
+
         const geometry = unionFootprintGeometries(found.map((f) => f.geometry));
         if (!geometry) return;
 
         // Не откатываемся на обрезок, если часть тайлов выгрузилась при движении.
-        const previousId = Number(
-          currentSelectedFeatures[0]?.id ?? currentSelectedFeatures[0]?.properties?.id,
-        );
         if (
-          previousId === id &&
+          currentSelectedId === id &&
           currentSelectedArea > 0 &&
           footprintAreaM2(geometry) < currentSelectedArea * 0.98
         ) {
@@ -3454,22 +3723,28 @@ export default function Map() {
           properties: {
             id,
             height: height ?? 9,
-            ...(indexVal !== undefined ? { index: indexVal } : {}),
+          ...(indexVal !== undefined ? { index: indexVal } : {}),
           },
         };
-        setSelectedBody([unified as unknown as maplibregl.GeoJSONFeature]);
+        const feature = unified as unknown as maplibregl.GeoJSONFeature;
+        setSelectedBody([feature]);
+        rememberSelectedBody(id, {
+          partsSignature,
+          feature,
+          area: currentSelectedArea,
+        });
+        rotateToFacadeIfSafe(id, geometry);
       };
 
       map.on("sourcedata", (e) => {
         if (e.sourceId !== "buildings") return;
-        if (e.tile || e.isSourceLoaded) {
-          applySelection();
-          scheduleSelectedCapture();
+        if (selectedId !== null && (e.tile || e.isSourceLoaded)) {
+          scheduleSelectedCapture(selectedId, captureToken);
         }
       });
-      map.on("idle", scheduleSelectedCapture);
 
       const deselect = () => {
+        cancelSelectedCapture();
         selectedId = null;
         pendingFacadeBearingId = null;
         routesRef.current = null;
@@ -3523,28 +3798,43 @@ export default function Map() {
         }
       };
 
-      const flyToBuilding = (center: [number, number], bearing: number | null) => {
+      const flyToBuilding = (
+        center: [number, number],
+        id: number,
+        token: number,
+      ) => {
         // Ждём две отрисовки, чтобы шторка с новым контентом заняла размер,
         // затем центрируем здание в видимой области карты: на мобиле —
         // padding снизу под шторку, на десктопе — padding справа под док.
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
-            if (!map) return;
+            if (!map || token !== captureToken || selectedId !== id) return;
             const sheetEl = document.getElementById("building-sheet");
             const rect = sheetEl?.getBoundingClientRect();
             const desktop = window.matchMedia("(min-width: 768px)").matches;
+            const onMoveEnd = () => {
+              pendingCaptureMoveEnd = null;
+              selectionMovePending = false;
+              window.requestAnimationFrame(() => scheduleSelectedCapture(id, token));
+            };
             map.flyTo({
               center,
               // Сразу приближаем до зума выбора дома (16.6, режим coarse),
               // чтобы фасады с окнами были видны сразу после клика.
               zoom: Math.max(map.getZoom(), FACADE_SELECT_ZOOM),
-              ...(bearing !== null ? { bearing } : {}),
               speed: 1.1,
               curve: 1.3,
               padding: desktop
                 ? { right: (rect?.width ?? 0) + 24, bottom: 0 }
                 : { bottom: (rect?.height ?? 0) + 24 },
             });
+            if (map.isMoving()) {
+              pendingCaptureMoveEnd = onMoveEnd;
+              map.once("moveend", onMoveEnd);
+            } else {
+              selectionMovePending = false;
+              requestAnimationFrame(() => scheduleSelectedCapture(id, token));
+            }
           });
         });
       };
@@ -3553,6 +3843,8 @@ export default function Map() {
       const selectById = (id: number) => {
         const meta = metaById[id];
         if (!meta) return;
+        const token = cancelSelectedCapture();
+        selectionMovePending = Boolean(meta.center);
         selectedId = id;
         setDeepLinkError(null);
         applySelection();
@@ -3595,36 +3887,15 @@ export default function Map() {
 
         const center = meta.center;
         setGlow(center);
-        if (
-          currentSelectedFeatures.length > 0 &&
-          Number(
-            currentSelectedFeatures[0].id ?? currentSelectedFeatures[0].properties?.id,
-          ) !== id
-        ) {
+        if (currentSelectedId !== id) {
           setSelectedBody([]);
         }
         pendingFacadeBearingId = id;
-        captureSelectedBody(id, true);
-        const selectedGeom = currentSelectedFeatures[0]?.geometry;
-        const facadeBearing = selectedGeom ? facadeCameraBearing(selectedGeom) : null;
-        if (facadeBearing !== null) pendingFacadeBearingId = null;
         if (center) {
-          flyToBuilding(center, facadeBearing);
+          flyToBuilding(center, id, token);
+        } else {
+          scheduleSelectedCapture(id, token);
         }
-        // Тайлы вокруг дома могут прийти после flyTo — повторим на idle.
-        // Проверяем selectedId: пока ждали, могли выбрать другой дом.
-        const captureIfCurrent = () => {
-          if (selectedId === id) {
-            applySelection();
-            captureSelectedBody(id);
-          }
-        };
-        map?.once("idle", captureIfCurrent);
-        map?.once("moveend", () => {
-          captureIfCurrent();
-          map?.once("idle", captureIfCurrent);
-        });
-        window.setTimeout(captureIfCurrent, 1200);
       };
       selectRef.current = selectById;
 
