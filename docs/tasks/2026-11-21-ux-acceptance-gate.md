@@ -2,6 +2,8 @@
 
 **Рекомендуемая модель:** GPT-6 Luna (workflow/security design).
 **Исполнитель:** одна сессия; сначала бриф должен попасть в `origin/main`.
+**Bootstrap:** владелец подтвердил включение Code Owner review для `main`
+21.11.2026; `.github/CODEOWNERS` опубликован.
 
 ## Обязательный bootstrap-предохранитель
 
