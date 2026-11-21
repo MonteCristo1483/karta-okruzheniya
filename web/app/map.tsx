@@ -776,6 +776,40 @@ const FACADE_COARSE_MIN_ZOOM = 15.4;
 const FACADE_MID_MIN_ZOOM = 16.0;
 const FACADE_FINE_MIN_ZOOM = 17;
 const FACADE_SELECT_ZOOM = 16.6;
+// V4b6: неоновое свечение у основания выбранного дома (только тёмная тема).
+// Три обводки по footprint на земле + яркая кромка + подсветка низа стен.
+// Ширина и прозрачность интерполируются по зуму, чтобы свечение не «худело»
+// при приближении: на 15.4 — ×0.8, на 18 — ×1.3.
+const GLOW_GROUND_COLOR = "#2ee6a0";
+const GLOW_EDGE_COLOR = "#7dffcf";
+const GLOW_RINGS = [
+  { id: "glow-ground-1", width: 14, blur: 8, opacity: 0.34 },
+  { id: "glow-ground-2", width: 34, blur: 20, opacity: 0.2 },
+  { id: "glow-ground-3", width: 72, blur: 40, opacity: 0.1 },
+] as const;
+const GLOW_BASE_LAYER_ID = "glow-base-walls";
+const GLOW_EDGE_LAYER_ID = "glow-ground-edge";
+
+function glowZoomScale(base: number): unknown[] {
+  return [
+    "interpolate",
+    ["linear"],
+    ["zoom"],
+    FACADE_COARSE_MIN_ZOOM,
+    base * 0.8,
+    FACADE_SELECT_ZOOM,
+    base,
+    18,
+    base * 1.3,
+  ];
+}
+
+// В светлой теме свечение едва заметно (максимум ~0.08 суммарно).
+function glowRingOpacity(base: number, theme: Theme): unknown[] {
+  const o = theme === "dark" ? base : base * 0.18;
+  return glowZoomScale(o);
+}
+
 const FACADE_STEPS = ["vlow", "low", "mid", "high", "vhigh"] as const;
 const FACADE_SELECTED_STEPS = [
   "selected-vlow",
@@ -2286,6 +2320,41 @@ export default function Map() {
                 ],
               },
             },
+            // V4b6: три концентрических обводки по footprint выбранного дома
+            // на земле, под зданиями. Источник selectedBuilding уже содержит
+            // полный контур, поэтому свет переезжает вместе с выбором.
+            ...GLOW_RINGS.map((ring) => ({
+              id: ring.id,
+              type: "line" as const,
+              source: "selectedBuilding",
+              minzoom: FACADE_COARSE_MIN_ZOOM,
+              layout: {
+                "line-cap": "round" as const,
+                "line-join": "round" as const,
+              },
+              paint: {
+                "line-color": GLOW_GROUND_COLOR,
+                "line-width": glowZoomScale(ring.width) as never,
+                "line-blur": ring.blur,
+                "line-opacity": glowRingOpacity(
+                  ring.opacity,
+                  themeRef.current,
+                ) as never,
+              },
+            })),
+            {
+              // Яркая «неоновая» кромка по краю footprint — без blur.
+              id: GLOW_EDGE_LAYER_ID,
+              type: "line",
+              source: "selectedBuilding",
+              minzoom: FACADE_COARSE_MIN_ZOOM,
+              layout: { "line-cap": "round", "line-join": "round" },
+              paint: {
+                "line-color": GLOW_EDGE_COLOR,
+                "line-width": ["interpolate", ["linear"], ["zoom"], 15.4, 2, 18, 2.5] as never,
+                "line-opacity": themeRef.current === "dark" ? 0.5 : 0.08,
+              },
+            },
             {
               id: "buildings",
               type: "fill-extrusion",
@@ -2377,6 +2446,24 @@ export default function Map() {
                 "fill-extrusion-base": ["coalesce", ["get", "height"], 9] as never,
                 "fill-extrusion-height": ["+", ["coalesce", ["get", "height"], 9], 0.35] as never,
                 "fill-extrusion-opacity": 1,
+                "fill-extrusion-vertical-gradient": false,
+              },
+            },
+            {
+              // V4b6: подсветка нижнего пояса стен (0.6–0.9 м). Выше — обычный
+              // фасад. Только тёмная тема, над зданиями и под маршрутами/зонами.
+              id: GLOW_BASE_LAYER_ID,
+              type: "fill-extrusion",
+              source: "selectedBuilding",
+              minzoom: FACADE_COARSE_MIN_ZOOM,
+              layout: {
+                visibility: themeRef.current === "dark" ? "visible" : "none",
+              },
+              paint: {
+                "fill-extrusion-color": GLOW_GROUND_COLOR,
+                "fill-extrusion-base": 0,
+                "fill-extrusion-height": 0.9,
+                "fill-extrusion-opacity": 0.2,
                 "fill-extrusion-vertical-gradient": false,
               },
             },
@@ -2950,6 +3037,29 @@ export default function Map() {
           0,
         ] as never);
         map.setPaintProperty("outline-core", "line-color", p.outlineCore);
+        // V4b6: земляное свечение и подсветка низа стен — только тёмная тема.
+        for (const ring of GLOW_RINGS) {
+          if (!map.getLayer(ring.id)) continue;
+          map.setPaintProperty(
+            ring.id,
+            "line-opacity",
+            glowRingOpacity(ring.opacity, t) as never,
+          );
+        }
+        if (map.getLayer(GLOW_EDGE_LAYER_ID)) {
+          map.setPaintProperty(
+            GLOW_EDGE_LAYER_ID,
+            "line-opacity",
+            t === "dark" ? 0.5 : 0.08,
+          );
+        }
+        if (map.getLayer(GLOW_BASE_LAYER_ID)) {
+          map.setLayoutProperty(
+            GLOW_BASE_LAYER_ID,
+            "visibility",
+            t === "dark" ? "visible" : "none",
+          );
+        }
         map.setPaintProperty("redzones-fill", "fill-color", p.redzone);
         for (const [id, paint] of Object.entries(basemapPaint(p))) {
           if (!map.getLayer(id)) continue;
