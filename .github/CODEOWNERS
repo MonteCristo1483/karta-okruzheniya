@@ -1,0 +1,5 @@
+# UX, release automation and scoring changes require the repository owner's review.
+/web/ @MonteCristo1483
+/.github/workflows/ @MonteCristo1483
+/.github/CODEOWNERS @MonteCristo1483
+/config/scoring.json @MonteCristo1483

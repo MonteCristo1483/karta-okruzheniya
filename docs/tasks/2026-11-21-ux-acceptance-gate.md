@@ -3,6 +3,17 @@
 **Рекомендуемая модель:** GPT-6 Luna (workflow/security design).
 **Исполнитель:** одна сессия; сначала бриф должен попасть в `origin/main`.
 
+## Обязательный bootstrap-предохранитель
+
+До передачи кода исполнителю владелец включает для `main` GitHub rule:
+PR required, Code Owner approval required, stale approvals dismissed и no
+bypass. CODEOWNERS — `/.github/CODEOWNERS`; точные действия владельца —
+`docs/tasks/2026-11-21-owner-enable-codeowners.md`.
+
+Если это правило не активно, задача **только read-only design**: не пушить
+изменённый workflow под текущим Autopilot, который выполняется из push-ветки
+с write permissions и может сам изменить свой gate.
+
 ## Проблема
 
 `.github/workflows/autopilot.yml` после push запускает тесты, открывает PR,
@@ -20,9 +31,9 @@ production без предварительной приёмки.
 
 1. UX PR после зелёных тестов остаётся открытым; отсутствие approval никогда
    не приводит к merge или Deploy.
-2. Владелец подтверждает кадры/сценарий явным label `ux-approved` (либо
-   эквивалентом, описанным в отчёте). Только после label запускается безопасный
-   путь merge/deploy.
+2. Владелец подтверждает кадры/сценарий явным approval (label `ux-approved`
+   либо безопасный эквивалент, описанный в отчёте). Только после него
+   запускается доверенный путь merge/deploy.
 3. Перед merge проверяется, что тесты относятся к текущему HEAD PR; push новых
    коммитов сбрасывает ранее полученное approval или требует нового подтверждения.
 4. Негативный путь проверен: без label / при красных тестах merge и Deploy
