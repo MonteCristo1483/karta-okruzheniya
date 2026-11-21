@@ -89,11 +89,11 @@
    бриф по первому источнику.
 3. ~~Поэлементная матрица визуала карты~~ — готова:
    `docs/research/visual-reference-matrix-2026-11-21.md`; карточка исключена.
-4. **Bootstrap owner review в GitHub settings** — необходим до gate-кода;
-   инструкция `docs/tasks/2026-11-21-owner-enable-codeowners.md`.
-5. **UX merge gate** — бриф
-   `docs/tasks/2026-11-21-ux-acceptance-gate.md`; прошлый исполнитель
-   остановился безопасно, изменений кода нет. Не начинать до шага 4.
+4. ~~Bootstrap owner review в GitHub settings~~ — владелец подтвердил, что
+   правило включено 21.11; `.github/CODEOWNERS` в `main`.
+5. **UX merge gate** — следующий кодовый исполнитель:
+   `docs/tasks/2026-11-21-ux-acceptance-gate.md`. Предыдущий исполнитель
+   остановился безопасно без изменений; теперь bootstrap подтверждён.
 6. **Починить линии маршрутов при активном слое**:
    `docs/tasks/2026-11-21-routes-visible-when-enabled.md`; после release gate.
 7. Затем первый небольшой шаг data-сетки — source registry/provenance;
