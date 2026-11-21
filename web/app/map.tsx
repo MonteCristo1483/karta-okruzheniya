@@ -210,16 +210,21 @@ const buildingColorExpr = (
 };
 
 // ── Окна на фасадах: pattern-текстуры, сгенерированные в runtime ─────────
-// Гипотеза: fill-extrusion-pattern в MapLibre 6 — data-driven (style spec:
-// cross-faded-data-driven), поэтому текстуру можно выбирать по ступени
-// индекса. Файлов и спрайт-хоста нет: 96×96 canvas → map.addImage.
-// Два уровня текстуры по зуму:
-// - z < 13.5 ("flat"): чистый цвет ступени без окон и без крыши-плиты;
-// - z 13.5–16.5 ("coarse"): крупная сетка окон с мягким контрастом (без муара);
-// - z >= 16.5 ("fine"): детальная текстура этажей.
+// fill-extrusion-pattern в MapLibre 6 тайлится в экранном пространстве
+// каждого целочисленного зума (на z17 координаты тайла в 2× плотнее z16,
+// на z18 — в 4× плотнее z16). Чтобы при отдалении не выходило «одно большое
+// окно на дом», а при приближении — микросетка из сотен мелких точек,
+// используем три уровня LOD:
+// - z < 15.4 ("flat"): чистый цвет ступени без окон (на обзоре 13.5–15.35);
+// - z 15.4–17 ("coarse"): ячейка 12 px, окно 6×7 px с мягким 1 px ореолом
+//   (~10–12 px на экране при z 15.4–16.9);
+// - z >= 17 ("fine"): ячейка 24 px, окно 10×13 px с мягким 1 px контуром
+//   (компенсирует удвоение тайловой сетки на z17–18: окна остаются ~10–12 px
+//   на экране и дают аккуратные 3–5 рядов вместо мелкого шума).
 const FACADE_SIZE = 96;
-const FACADE_COARSE_MIN_ZOOM = 13.5;
-const FACADE_MIN_ZOOM = 16.5;
+const FACADE_COARSE_MIN_ZOOM = 15.4;
+const FACADE_FINE_MIN_ZOOM = 17;
+const FACADE_SELECT_ZOOM = 16.6;
 const FACADE_STEPS = ["vlow", "low", "mid", "high", "vhigh"] as const;
 type FacadeStep = (typeof FACADE_STEPS)[number];
 type FacadeVariant = FacadeStep | "dim" | "selected";
@@ -227,7 +232,7 @@ type FacadeLod = "flat" | "coarse" | "fine";
 
 function facadeLodForZoom(zoom: number): FacadeLod {
   if (zoom < FACADE_COARSE_MIN_ZOOM) return "flat";
-  if (zoom < FACADE_MIN_ZOOM) return "coarse";
+  if (zoom < FACADE_FINE_MIN_ZOOM) return "coarse";
   return "fine";
 }
 
@@ -251,10 +256,11 @@ function mixHex(a: string, b: string, t: number): string {
 }
 
 // 96×96 на экране (pixelRatio 1):
-// - "fine": 8×8 ячеек по 12 px, окно 5×7 px + тонкий шов этажа;
-// - "coarse": 6×6 ячеек по 16 px, окно 7×9 px с мягким ореолом и пониженным контрастом
-//   (на обзорном зуме 13.5–16.5 читается как тёплые окна диорамы без муара и «шахматки»);
-// - "flat": плоская база для зумов < 13.5.
+// - "flat": плоская база без окон для зумов < 15.4;
+// - "coarse" (15.4–17): 8×8 ячеек по 12 px, окно 6×7 px + 1 px мягкий ореол 8×9 px
+//   (на z16.6 при масштабе 1.52× даёт ~10–12 px на экране);
+// - "fine" (>= 17): 4×4 ячейки по 24 px, окно 10×13 px + 1 px контур 12×15 px
+//   (на z17–18 сохраняет размер окна ~10–12 px на экране без микросетки).
 function makeFacadeImage(
   base: string,
   theme: Theme,
@@ -285,46 +291,48 @@ function makeFacadeImage(
 
   if (lod === "coarse") {
     const cell = 12;
-    const seam = mixHex(base, "#000000", theme === "dark" ? 0.1 : 0.045);
+    const seam = mixHex(base, "#000000", theme === "dark" ? 0.13 : 0.06);
     ctx.fillStyle = seam;
     for (let y = 0; y < size; y += cell) ctx.fillRect(0, y + cell - 1, size, 1);
 
-    const lit = theme === "dark" ? "#dbeafe" : "#fffcf2";
-    const weak = variant === "dim" ? 0.13 : theme === "dark" ? 0.22 : 0.28;
-    const strong = variant === "dim" ? 0.21 : theme === "dark" ? 0.42 : 0.48;
+    const lit = theme === "dark" ? "#dbeafe" : "#ffffff";
+    const weak = variant === "dim" ? 0.18 : theme === "dark" ? 0.28 : 0.36;
+    const strong = variant === "dim" ? 0.28 : theme === "dark" ? 0.5 : 0.58;
 
     for (let y = 0; y < size; y += cell) {
       for (let x = 0; x < size; x += cell) {
         const r = rnd();
-        // ~22% окон приглушены, чтобы убрать регулярную «шахматку» на обзоре.
-        const t = r < 0.22 ? weak * 0.4 : weak + (strong - weak) * r;
-        // Мягкий 1 px ореол вокруг окна сглаживает переход на наклонных гранях (анти-муар).
-        ctx.fillStyle = mixHex(base, lit, t * 0.5);
-        ctx.fillRect(x + 3, y + 2, 7, 8);
+        // ~16% окон приглушены, чтобы убрать регулярную «шахматку».
+        const t = r < 0.16 ? weak * 0.55 : weak + (strong - weak) * r;
+        // Мягкий 1 px ореол вокруг окна сглаживает переход на наклонных гранях.
+        ctx.fillStyle = mixHex(base, lit, t * 0.45);
+        ctx.fillRect(x + 2, y + 2, 8, 9);
         ctx.fillStyle = mixHex(base, lit, t);
-        ctx.fillRect(x + 4, y + 3, 5, 6);
+        ctx.fillRect(x + 3, y + 3, 6, 7);
       }
     }
     return ctx.getImageData(0, 0, size, size);
   }
 
-  const cell = 12;
-  // Сетка: только шов этажа (вертикальные стыки на дистанции дают муар).
+  const cell = 24;
+  // Сетка на крупном плане (z >= 17): ячейка 24×24 px, окно 10×13 px (на экране ~10–12 px).
   const seam = mixHex(base, "#000000", theme === "dark" ? 0.16 : 0.07);
   ctx.fillStyle = seam;
   for (let y = 0; y < size; y += cell) ctx.fillRect(0, y + cell - 1, size, 1);
 
   const lit = theme === "dark" ? "#d7e6ff" : "#ffffff";
-  const weak = variant === "dim" ? 0.18 : theme === "dark" ? 0.26 : 0.34;
-  const strong = variant === "dim" ? 0.26 : theme === "dark" ? 0.5 : 0.58;
+  const weak = variant === "dim" ? 0.2 : theme === "dark" ? 0.28 : 0.36;
+  const strong = variant === "dim" ? 0.3 : theme === "dark" ? 0.52 : 0.6;
 
   for (let y = 0; y < size; y += cell) {
     for (let x = 0; x < size; x += cell) {
       const r = rnd();
       // Часть окон «не горит» — иначе фасад выглядит шахматкой.
-      const t = r < 0.16 ? weak * 0.45 : weak + (strong - weak) * r;
+      const t = r < 0.16 ? weak * 0.55 : weak + (strong - weak) * r;
+      ctx.fillStyle = mixHex(base, lit, t * 0.45);
+      ctx.fillRect(x + 6, y + 4, 12, 15);
       ctx.fillStyle = mixHex(base, lit, t);
-      ctx.fillRect(x + 4, y + 3, 5, 7);
+      ctx.fillRect(x + 7, y + 5, 10, 13);
     }
   }
 
@@ -1342,9 +1350,17 @@ export default function Map() {
               layout: { "line-cap": "round", "line-join": "round" },
               paint: {
                 "line-color": palette.redzone,
-                "line-width": 15,
-                "line-blur": 12,
-                "line-opacity": themeRef.current === "dark" ? 0.3 : 0.25,
+                "line-width": ["interpolate", ["linear"], ["zoom"], 14, 9, 17.5, 24],
+                "line-blur": ["interpolate", ["linear"], ["zoom"], 14, 7, 17.5, 18],
+                "line-opacity": [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  14,
+                  themeRef.current === "dark" ? 0.26 : 0.22,
+                  17.5,
+                  themeRef.current === "dark" ? 0.36 : 0.3,
+                ],
               },
             },
             {
@@ -1352,7 +1368,10 @@ export default function Map() {
               type: "fill",
               source: "redzones",
               filter: ["==", ["geometry-type"], "Polygon"],
-              paint: { "fill-color": palette.redzone, "fill-opacity": 0.12 },
+              paint: {
+                "fill-color": palette.redzone,
+                "fill-opacity": ["interpolate", ["linear"], ["zoom"], 14, 0.1, 17.5, 0.16],
+              },
             },
             {
               id: "redzones-road",
@@ -1362,8 +1381,8 @@ export default function Map() {
               layout: { "line-cap": "round", "line-join": "round" },
               paint: {
                 "line-color": palette.redzone,
-                "line-width": 2,
-                "line-opacity": 0.5,
+                "line-width": ["interpolate", ["linear"], ["zoom"], 14, 1.6, 17.5, 2.8],
+                "line-opacity": ["interpolate", ["linear"], ["zoom"], 14, 0.48, 17.5, 0.62],
               },
             },
             {
@@ -1374,8 +1393,8 @@ export default function Map() {
               filter: ["==", ["get", "kind"], "railway"],
               paint: {
                 "line-color": palette.redzone,
-                "line-width": 2,
-                "line-opacity": 0.5,
+                "line-width": ["interpolate", ["linear"], ["zoom"], 14, 1.6, 17.5, 2.8],
+                "line-opacity": ["interpolate", ["linear"], ["zoom"], 14, 0.48, 17.5, 0.6],
                 "line-dasharray": [3, 3],
               },
             },
@@ -1542,9 +1561,17 @@ export default function Map() {
               layout: { "line-cap": "round", "line-join": "round" },
               paint: {
                 "line-color": palette.route,
-                "line-width": 14,
-                "line-blur": 8,
-                "line-opacity": themeRef.current === "dark" ? 0.3 : 0.22,
+                "line-width": ["interpolate", ["linear"], ["zoom"], 14, 10, 17.5, 24],
+                "line-blur": ["interpolate", ["linear"], ["zoom"], 14, 6, 17.5, 15],
+                "line-opacity": [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  14,
+                  themeRef.current === "dark" ? 0.26 : 0.22,
+                  17.5,
+                  themeRef.current === "dark" ? 0.36 : 0.3,
+                ],
               },
             },
             {
@@ -1555,8 +1582,8 @@ export default function Map() {
               layout: { "line-cap": "round", "line-join": "round" },
               paint: {
                 "line-color": palette.route,
-                "line-width": 4,
-                "line-opacity": 0.85,
+                "line-width": ["interpolate", ["linear"], ["zoom"], 14, 3.2, 17.5, 5.8],
+                "line-opacity": 0.88,
               },
             },
             {
@@ -1567,7 +1594,7 @@ export default function Map() {
               layout: { "line-cap": "round", "line-join": "round" },
               paint: {
                 "line-color": palette.routeCore,
-                "line-width": 2.6,
+                "line-width": ["interpolate", ["linear"], ["zoom"], 14, 2, 17.5, 3.6],
                 "line-opacity": 0.95,
               },
             },
@@ -1863,10 +1890,10 @@ export default function Map() {
         }
       };
 
-      // Два уровня текстуры фасадов по зуму:
-      // z < 13.5 ("flat") — чистый цвет без окон и без крыши-плиты;
-      // z 13.5–16.5 ("coarse") — грубая сетка окон на обзоре + крыша;
-      // z >= 16.5 ("fine") — детальная текстура + крыша.
+      // Три уровня текстуры фасадов по зуму:
+      // z < 15.4 ("flat") — чистый цвет без окон и без крыши-плиты;
+      // z 15.4–17 ("coarse") — сетка окон ~10–12 px на экране + крыша;
+      // z >= 17 ("fine") — крупная ячейка 24 px под z17–18 (~10–12 px на экране) + крыша.
       // Pattern не снимаем через null (в MapLibre 6 это ломало рендер слоя),
       // а подменяем набор картинок.
       let currentFacadeLod: FacadeLod | null = null;
@@ -1958,11 +1985,27 @@ export default function Map() {
           }
         }
         map.setPaintProperty("redzones-glow", "line-color", p.redzone);
-        map.setPaintProperty("redzones-glow", "line-opacity", t === "dark" ? 0.3 : 0.25);
+        map.setPaintProperty("redzones-glow", "line-opacity", [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          14,
+          t === "dark" ? 0.26 : 0.22,
+          17.5,
+          t === "dark" ? 0.36 : 0.3,
+        ] as never);
         map.setPaintProperty("redzones-road", "line-color", p.redzone);
         map.setPaintProperty("redzones-rail", "line-color", p.redzone);
         map.setPaintProperty("routes-glow", "line-color", p.route);
-        map.setPaintProperty("routes-glow", "line-opacity", t === "dark" ? 0.3 : 0.22);
+        map.setPaintProperty("routes-glow", "line-opacity", [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          14,
+          t === "dark" ? 0.26 : 0.22,
+          17.5,
+          t === "dark" ? 0.36 : 0.3,
+        ] as never);
         map.setPaintProperty("routes-line", "line-color", p.route);
         map.setPaintProperty("routes-dots", "line-color", p.routeCore);
         map.setPaintProperty("isochrone-fill", "fill-color", p.iso);
@@ -2128,9 +2171,9 @@ export default function Map() {
             const desktop = window.matchMedia("(min-width: 768px)").matches;
             map.flyTo({
               center,
-              // Сразу приближаем до порога окон (+0.1): на 15.2 pattern
-              // выключен, и выбор дома не показывает фасады.
-              zoom: Math.max(map.getZoom(), FACADE_MIN_ZOOM + 0.1),
+              // Сразу приближаем до зума выбора дома (16.6, режим coarse),
+              // чтобы фасады с окнами были видны сразу после клика.
+              zoom: Math.max(map.getZoom(), FACADE_SELECT_ZOOM),
               speed: 1.1,
               curve: 1.3,
               padding: desktop
