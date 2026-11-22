@@ -3302,6 +3302,7 @@ export default function Map() {
       // а подменяем набор картинок.
       let selectedId: number | null = null;
       let currentFacadeLod: FacadeLod | null = null;
+      let selectedBodyRevealPending = false;
       const syncFacades = (t: Theme) => {
         if (!map || !map.getLayer("buildings")) return;
         refreshSelectedRoofEdge();
@@ -3316,7 +3317,10 @@ export default function Map() {
           facadePatternExpr(t, colorStops, lod, selectedId),
         );
         map.setLayoutProperty("buildings-roof", "visibility", "visible");
-        if (map.getLayer("buildings-selected-body")) {
+        if (
+          map.getLayer("buildings-selected-body") &&
+          !selectedBodyRevealPending
+        ) {
           map.setLayoutProperty(
             "buildings-selected-body",
             "visibility",
@@ -3503,7 +3507,7 @@ export default function Map() {
 
       let featureStateInitialized = false;
       let appliedSelectedId: number | null = null;
-      const applySelection = () => {
+      const applySelection = (activateSelected = true) => {
         if (!map || !map.getSource("buildings")) return;
         currentFacadeLod = null;
         syncFacades(themeRef.current);
@@ -3511,37 +3515,77 @@ export default function Map() {
         const stateSource = tileMode
           ? { source: "buildings", sourceLayer: "buildings" }
           : { source: "buildings" };
-        if (
-          featureStateInitialized &&
-          selectedId !== null &&
-          appliedSelectedId !== null
-        ) {
+        if (featureStateInitialized && selectedId !== null) {
           if (appliedSelectedId !== null && appliedSelectedId !== selectedId) {
             map.setFeatureState(
               { ...stateSource, id: appliedSelectedId },
               { selected: false, inactive: true },
             );
           }
-          if (appliedSelectedId !== selectedId) {
+          if (activateSelected && appliedSelectedId !== selectedId) {
             map.setFeatureState(
               { ...stateSource, id: selectedId },
               { selected: true, inactive: false },
             );
+          } else if (!activateSelected) {
+            map.setFeatureState(
+              { ...stateSource, id: selectedId },
+              { selected: false, inactive: false },
+            );
           }
-          appliedSelectedId = selectedId;
+          appliedSelectedId = activateSelected ? selectedId : null;
           return;
         }
         for (const id of allIds) {
           map.setFeatureState(
             { ...stateSource, id },
             {
-              selected: id === selectedId,
+              selected: activateSelected && id === selectedId,
               inactive: selectedId !== null && id !== selectedId,
             },
           );
         }
         featureStateInitialized = true;
-        appliedSelectedId = selectedId;
+        appliedSelectedId = activateSelected ? selectedId : null;
+      };
+
+      const setSelectedBodyLayerVisible = (visible: boolean) => {
+        if (!map?.getLayer("buildings-selected-body")) return;
+        map.setLayoutProperty(
+          "buildings-selected-body",
+          "visibility",
+          visible ? "visible" : "none",
+        );
+      };
+
+      const scheduleSelectedBodyReveal = (id: number, token: number) => {
+        const activeMap = map;
+        if (
+          !activeMap ||
+          id !== selectedId ||
+          token !== captureToken ||
+          currentSelectedId !== id ||
+          !currentSelectedFeatures.length
+        ) {
+          return;
+        }
+        const reveal = () => {
+          pendingCaptureIdle = null;
+          if (
+            token !== captureToken ||
+            id !== selectedId ||
+            currentSelectedId !== id ||
+            !currentSelectedFeatures.length
+          ) {
+            return;
+          }
+          applySelection();
+          selectedBodyRevealPending = false;
+          setSelectedBodyLayerVisible(true);
+        };
+        if (pendingCaptureIdle) activeMap.off("idle", pendingCaptureIdle);
+        pendingCaptureIdle = reveal;
+        activeMap.once("idle", reveal);
       };
 
       const scheduleSelectedCapture = (
@@ -3760,8 +3804,10 @@ export default function Map() {
         if (cached?.partsSignature === partsSignature) {
           selectedBodyCache.delete(id);
           selectedBodyCache.set(id, cached);
+          setSelectedBodyLayerVisible(false);
           setSelectedBody([cached.feature]);
           currentSelectedArea = cached.area;
+          scheduleSelectedBodyReveal(id, token);
           rotateToFacadeIfSafe(id, cached.feature.geometry);
           return;
         }
@@ -3811,12 +3857,14 @@ export default function Map() {
           },
         };
         const feature = unified as unknown as maplibregl.GeoJSONFeature;
+        setSelectedBodyLayerVisible(false);
         setSelectedBody([feature]);
         rememberSelectedBody(id, {
           partsSignature,
           feature,
           area: currentSelectedArea,
         });
+        scheduleSelectedBodyReveal(id, token);
         rotateToFacadeIfSafe(id, geometry);
       };
 
@@ -3830,12 +3878,14 @@ export default function Map() {
       const deselect = () => {
         cancelSelectedCapture();
         selectedId = null;
+        selectedBodyRevealPending = false;
         pendingFacadeBearingId = null;
         routesRef.current = null;
         applySelection();
         updateSelected(null);
         setGlow(null);
         setSelectedBody([]);
+        setSelectedBodyLayerVisible(true);
         rebuildOverlays(null, visibleRef.current);
         setUrlBuilding(null);
         map?.easeTo({ padding: { top: 0, bottom: 0, left: 0, right: 0 }, duration: 300 });
@@ -3930,8 +3980,10 @@ export default function Map() {
         const token = cancelSelectedCapture();
         selectionMovePending = Boolean(meta.center);
         selectedId = id;
+        selectedBodyRevealPending = true;
         setDeepLinkError(null);
-        applySelection();
+        applySelection(false);
+        setSelectedBodyLayerVisible(false);
 
         // На geojson-пути breakdown по-прежнему берём из фичи. В тайлах его
         // нет: он приедет из routes/<id>.json вместе с маршрутами.
