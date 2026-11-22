@@ -4110,6 +4110,7 @@ export default function Map() {
   return (
     <div className="relative h-full w-full">
       <div ref={containerRef} className="map-gradient map-grade h-full w-full" />
+      <div className="map-haze pointer-events-none absolute inset-x-0 top-0" aria-hidden />
       <div className="map-vignette pointer-events-none absolute inset-0" aria-hidden />
       <LayersPanel
         visibility={visible}
