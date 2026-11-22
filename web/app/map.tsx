@@ -178,7 +178,7 @@ const MAP_LIGHT: Record<Theme, ThemeLight> = {
     // передние и левые фасады светлые, правые — в тени, что согласуется
     // со сдвигом контактных теней на земле [+x, +y] (вправо-вниз).
     color: "#fff6ea",
-    intensity: 0.7,
+    intensity: 0.5,
     position: [1.5, 245, 46],
   },
   dark: {
