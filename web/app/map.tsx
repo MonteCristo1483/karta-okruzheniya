@@ -86,8 +86,8 @@ const MAP_THEMES = {
     // Подложка: светлая дневная диорама (земля светлее зданий по тону, улицы светлее земли).
     land: "#c3d2e2",
     landUse: "#cbd8e6",
-    park: "#7cc98f",
-    wood: "#5fb47a",
+    park: "#579b68",
+    wood: "#428b58",
     water: "#35b8d0",
     waterLine: "#248fa9",
     roadMinor: "#fbfdff",
@@ -99,8 +99,8 @@ const MAP_THEMES = {
     labelHalo: "#ffffff",
     labelWater: "#0c4a6e",
     labelWaterHalo: "#ffffff",
-    tree: "#5fb876",
-    treeDark: "#3e8e55",
+    tree: "#4a9960",
+    treeDark: "#2f6f43",
     shadow: "#1a2838",
   },
   dark: {
