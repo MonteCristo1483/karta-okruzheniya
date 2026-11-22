@@ -51,6 +51,27 @@ body {
   filter: saturate(1.06) contrast(1.03);
 }
 
+.map-haze {
+  z-index: 1;
+  height: 96px;
+  background: linear-gradient(
+    180deg,
+    rgba(227, 235, 244, 0.32) 0%,
+    rgba(227, 235, 244, 0.14) 45%,
+    rgba(227, 235, 244, 0) 100%
+  );
+}
+
+@media (max-width: 767px) {
+  .map-haze {
+    height: 72px;
+  }
+}
+
+[data-theme="dark"] .map-haze {
+  display: none;
+}
+
 .map-vignette {
   z-index: 1;
   background: radial-gradient(
