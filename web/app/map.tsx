@@ -951,7 +951,7 @@ function buildSelectedWindowFeatures(
     const isLit = sp.score >= litThreshold;
     const blendT = Math.min(1, Math.max(0, sp.aptToneT * 0.65 + sp.toneT * 0.35));
 
-    const winColorLight = mixHex("#f2e3c8", "#ffe9c9", blendT);
+    const winColorLight = mixHex("#d4b795", "#e3c7a5", blendT);
     const winColorDark = isLit
       ? mixHex("#ffc978", "#ffd79a", blendT)
       : mixHex("#16263c", "#1b2e4a", sp.toneT);
