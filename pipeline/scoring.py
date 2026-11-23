@@ -10,9 +10,12 @@ Valhalla) — берём его минуты и длину; иначе счит�
   linear — ближайшая линия из linear (kind = названию штрафа, веса по classes);
   zones  — ближайший полигон из zones (kind = названию штрафа, без весов).
 
+Балл считается только жилым (is_home = TRUE). Нежилые здания остаются на
+карте, но балла не получают.
+
 Использование:
-  python scoring.py             — все здания buildings_presnya
-  python scoring.py 123 456 ... — конкретные osm_id из buildings (для T12)
+  python scoring.py             — жилые здания buildings_presnya
+  python scoring.py 123 456 ... — конкретные жилые osm_id из buildings (для T12)
 """
 
 from __future__ import annotations
@@ -153,9 +156,9 @@ def clamp(value: Decimal, low: Decimal, high: Decimal) -> Decimal:
 
 def scope_from_args(argv: list[str]) -> tuple[str, list]:
     if not argv:
-        return "buildings_presnya", []
+        return "(SELECT * FROM buildings_presnya WHERE is_home)", []
     ids = [int(a) for a in argv]
-    return "(SELECT * FROM buildings WHERE osm_id = ANY(%s))", [ids]
+    return "(SELECT * FROM buildings WHERE osm_id = ANY(%s) AND is_home)", [ids]
 
 
 def collect_bonuses(cur, scope: str, scope_params: list, cfg: dict, routes_map: dict) -> dict:

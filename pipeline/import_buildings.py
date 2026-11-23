@@ -5,6 +5,9 @@
 multipolygon-отношения с тегом building=*. Геометрия в WGS84 (EPSG:4326)
 загружается как WKB. Теги height, building:levels, addr:street,
 addr:housenumber сохраняются текстом (сырые значения OSM, парсинг — в T4).
+Весь набор тегов area пишется в tags JSONB, а is_home вычисляется по
+config/buildings.json через buildings_filter.is_home (единственное правило).
+Повторный импорт обновляет теги и флаг у существующих строк.
 
 Требования: запущенный PostGIS (docker compose up -d) и установленные
 зависимости из pipeline/requirements.txt в pipeline/.venv.
@@ -17,6 +20,9 @@ import time
 
 import osmium
 import psycopg
+from psycopg.types.json import Jsonb
+
+from buildings_filter import is_home
 
 PBF_PATH = "data/raw/moscow.osm.pbf"
 from db import DB_DSN
@@ -30,8 +36,17 @@ CREATE TABLE IF NOT EXISTS buildings (
     height           TEXT,
     building_levels  TEXT,
     addr_street      TEXT,
-    addr_housenumber TEXT
+    addr_housenumber TEXT,
+    tags             JSONB,
+    is_home          BOOLEAN NOT NULL DEFAULT TRUE
 )
+"""
+
+# База могла быть создана до появления tags/is_home: обновляем схему
+# идемпотентно. Новые колонки добавляет и migration 004.
+ALTER_TABLE = """
+ALTER TABLE buildings ADD COLUMN IF NOT EXISTS tags JSONB;
+ALTER TABLE buildings ADD COLUMN IF NOT EXISTS is_home BOOLEAN NOT NULL DEFAULT TRUE
 """
 
 CREATE_INDEX = """
@@ -39,9 +54,19 @@ CREATE INDEX IF NOT EXISTS buildings_geometry_idx ON buildings USING GIST (geome
 """
 
 INSERT = """
-INSERT INTO buildings (osm_id, geometry, height, building_levels, addr_street, addr_housenumber)
-VALUES (%s, ST_GeomFromEWKB(decode(%s, 'hex')), %s, %s, %s, %s)
-ON CONFLICT (osm_id) DO NOTHING
+INSERT INTO buildings (
+    osm_id, geometry, height, building_levels, addr_street, addr_housenumber,
+    tags, is_home
+)
+VALUES (%s, ST_GeomFromEWKB(decode(%s, 'hex')), %s, %s, %s, %s, %s, %s)
+ON CONFLICT (osm_id) DO UPDATE
+SET geometry         = EXCLUDED.geometry,
+    height           = EXCLUDED.height,
+    building_levels  = EXCLUDED.building_levels,
+    addr_street      = EXCLUDED.addr_street,
+    addr_housenumber = EXCLUDED.addr_housenumber,
+    tags             = EXCLUDED.tags,
+    is_home          = EXCLUDED.is_home
 """
 
 
@@ -62,13 +87,16 @@ class BuildingImporter(osmium.SimpleHandler):
         except RuntimeError:
             self.skipped += 1
             return
+        tags = dict(a.tags)
         self.buffer.append((
             a.id,
             wkb_hex,
-            a.tags.get("height"),
-            a.tags.get("building:levels"),
-            a.tags.get("addr:street"),
-            a.tags.get("addr:housenumber"),
+            tags.get("height"),
+            tags.get("building:levels"),
+            tags.get("addr:street"),
+            tags.get("addr:housenumber"),
+            Jsonb(tags),
+            is_home(tags),
         ))
         self.count += 1
         if len(self.buffer) >= BATCH_SIZE:
@@ -92,6 +120,7 @@ def main() -> int:
     print(f"Читаю {PBF_PATH} ...")
     with psycopg.connect(DB_DSN) as conn, conn.cursor() as cur:
         cur.execute(CREATE_TABLE)
+        cur.execute(ALTER_TABLE)
         cur.execute(CREATE_INDEX)
 
         importer = BuildingImporter(cur)

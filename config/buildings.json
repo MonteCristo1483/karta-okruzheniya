@@ -1,0 +1,22 @@
+{
+  "require_address": true,
+  "default_is_home": true,
+  "non_home_building": [
+    "garage", "garages", "garage_boxes", "shed", "hut", "roof", "carport",
+    "construction", "ruins", "industrial", "warehouse", "factory",
+    "manufacture", "service", "parking", "hangar", "barn", "stable",
+    "greenhouse", "kiosk", "transformer_tower", "bridge", "canopy",
+    "storage_tank", "water_tower", "silo", "tank", "container",
+    "grandstand", "allotment_house", "retail", "commercial", "office",
+    "hotel", "church", "school", "hospital"
+  ],
+  "non_home_tags": {
+    "shop": ["mall"],
+    "tourism": ["hotel", "hostel", "motel"],
+    "amenity": ["place_of_worship", "school", "university", "college",
+                "hospital", "clinic", "kindergarten"],
+    "man_made": ["works", "gasometer", "silo", "storage_tank", "water_tower"],
+    "power": ["plant", "substation"],
+    "landuse": ["industrial", "railway"]
+  }
+}

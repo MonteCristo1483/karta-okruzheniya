@@ -72,6 +72,7 @@ SET distance_m = EXCLUDED.distance_m,
 BUILDINGS = """
 SELECT b.osm_id, ST_Y(ST_Centroid(b.geometry)), ST_X(ST_Centroid(b.geometry))
 FROM buildings_presnya b
+WHERE b.is_home
 """
 
 # Для калибровки (флаг --all): здания в эталонных районах.
@@ -85,7 +86,7 @@ BUILDINGS_ALL = """
 SELECT DISTINCT b.osm_id, ST_Centroid(b.geometry) AS c
 FROM buildings b
 JOIN districts d ON ST_Intersects(b.geometry, d.geometry)
-WHERE d.osm_id = ANY(%s)
+WHERE d.osm_id = ANY(%s) AND b.is_home
 """
 
 POI_ALL = """
@@ -198,7 +199,7 @@ def main() -> int:
     # уходит в обход через весь район (найдено 19.11.2026: 2.6 км вместо
     # 150 м у Тверского бульвара и Красной Пресни).
     buildings_sql = BUILDINGS_ALL if scope_all else """
-        SELECT osm_id, ST_Centroid(geometry) AS c FROM buildings_presnya
+        SELECT osm_id, ST_Centroid(geometry) AS c FROM buildings_presnya WHERE is_home
     """
     buildings_params = [district_ids] if scope_all else []
     poi_area_sql = """
