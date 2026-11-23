@@ -28,6 +28,8 @@ exit code 1; предупреждения (покрытие, подозрите�
 from __future__ import annotations
 
 import argparse
+import gzip
+import hashlib
 import json
 import math
 import re
@@ -97,7 +99,11 @@ def load_features(path: Path, report: Report, name: str) -> list[dict]:
     except (OSError, json.JSONDecodeError) as exc:
         report.add("critical", "broken_json", f"{path.name}: {exc}")
         return []
-    if payload.get("type") != "FeatureCollection" or not isinstance(payload.get("features"), list):
+    if (
+        not isinstance(payload, dict)
+        or payload.get("type") != "FeatureCollection"
+        or not isinstance(payload.get("features"), list)
+    ):
         report.add("critical", "bad_collection", f"{path.name}: не FeatureCollection")
         return []
     features = payload["features"]
@@ -213,6 +219,11 @@ def check_buildings(features: list[dict], cfg: dict, report: Report) -> None:
                     or height <= 0 or height > 400:
                 report.add("warning", "suspicious_height",
                            f"подозрительная высота: {height!r}", building_id, address)
+
+        # Нежилые здания присутствуют на карте, но для них не рассчитываются
+        # индекс окружения и breakdown.
+        if props.get("is_home") is False:
+            continue
 
         index = props.get("index")
         if not isinstance(index, (int, float)):
@@ -380,23 +391,39 @@ def check_routes(data_dir: Path, cfg: dict, report: Report) -> None:
     routes_dir = data_dir / "routes"
     if not routes_dir.is_dir():
         return
-    files = list(routes_dir.glob("*.json"))
+    files = sorted([*routes_dir.rglob("*.json"), *routes_dir.rglob("*.json.gz")])
     report.stats["route_files"] = len(files)
     categories = set(cfg["bonuses"]["categories"])
     for path in files:
         try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
+            raw = gzip.decompress(path.read_bytes()) if path.suffix == ".gz" else path.read_bytes()
+            payload = json.loads(raw)
+        except (OSError, EOFError, gzip.BadGzipFile, json.JSONDecodeError) as exc:
             report.add("critical", "broken_route", f"{path.name}: {exc}")
             continue
-        for category, entry in (payload.get("categories") or {}).items():
-            if category not in categories:
-                report.add("warning", "unknown_route_category",
-                           f"{path.name}: категория {category!r}")
-            if dec(entry.get("minutes", 0)) < 0 or dec(entry.get("distance_m", 0)) < 0:
-                report.add("critical", "negative_route",
-                           f"{path.name}: минуты {entry.get('minutes')}, "
-                           f"метры {entry.get('distance_m')}")
+        if not isinstance(payload, dict):
+            report.add("critical", "broken_route", f"{path.name}: корень маршрута не объект")
+            continue
+        routes = [payload] if "categories" in payload else payload.values()
+        for route in routes:
+            if not isinstance(route, dict):
+                report.add("critical", "broken_route", f"{path.name}: запись маршрута не объект")
+                continue
+            route_categories = route.get("categories") or {}
+            if not isinstance(route_categories, dict):
+                report.add("critical", "broken_route", f"{path.name}: categories не объект")
+                continue
+            for category, entry in route_categories.items():
+                if not isinstance(entry, dict):
+                    report.add("critical", "broken_route", f"{path.name}: категория {category} не объект")
+                    continue
+                if category not in categories:
+                    report.add("warning", "unknown_route_category",
+                               f"{path.name}: категория {category!r}")
+                if dec(entry.get("minutes", 0)) < 0 or dec(entry.get("distance_m", 0)) < 0:
+                    report.add("critical", "negative_route",
+                               f"{path.name}: минуты {entry.get('minutes')}, "
+                               f"метры {entry.get('distance_m')}")
 
 
 def check_isochrones(data_dir: Path, report: Report) -> None:
@@ -405,32 +432,287 @@ def check_isochrones(data_dir: Path, report: Report) -> None:
     if not iso_dir.is_dir():
         report.add("warning", "missing_isochrones", "нет папки isochrones")
         return
-    files = list(iso_dir.glob("*.json"))
+    files = sorted([*iso_dir.rglob("*.json"), *iso_dir.rglob("*.json.gz")])
     report.stats["isochrone_files"] = len(files)
     expected = {"5", "10", "15"}
     for path in files:
         try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
+            raw = gzip.decompress(path.read_bytes()) if path.suffix == ".gz" else path.read_bytes()
+            payload = json.loads(raw)
+        except (OSError, EOFError, gzip.BadGzipFile, json.JSONDecodeError) as exc:
             report.add("critical", "broken_isochrone", f"{path.name}: {exc}")
             continue
-        if set(payload) != expected:
-            report.add("warning", "bad_contours",
-                       f"{path.name}: контуры {sorted(payload)}")
+        if not isinstance(payload, dict):
+            report.add("critical", "broken_isochrone", f"{path.name}: корень изохрон не объект")
             continue
-        for minutes, geometry in payload.items():
-            if not isinstance(geometry, dict) or geometry.get("type") not in (
-                "Polygon", "MultiPolygon",
-            ):
-                report.add("critical", "bad_isochrone_geometry",
-                           f"{path.name}: {minutes} мин — {type(geometry).__name__}")
+        buildings = payload.values() if path.suffix == ".gz" else [payload]
+        for contours in buildings:
+            if not isinstance(contours, dict) or set(contours) != expected:
+                keys = sorted(contours) if isinstance(contours, dict) else []
+                report.add("warning", "bad_contours",
+                           f"{path.name}: контуры {keys}")
                 continue
-            check_geometry(geometry, report, f"изохрона {path.stem}, {minutes} мин")
+            for minutes, geometry in contours.items():
+                if not isinstance(geometry, dict) or geometry.get("type") not in (
+                    "Polygon", "MultiPolygon",
+                ):
+                    report.add("critical", "bad_isochrone_geometry",
+                               f"{path.name}: {minutes} мин — {type(geometry).__name__}")
+                    continue
+                check_geometry(geometry, report, f"изохрона {path.stem}, {minutes} мин")
 
 
-def validate_export(data_dir: Path, config_path: Path = CONFIG_PATH) -> Report:
+def manifest_file_path(data_dir: Path, manifest_path: object) -> Path | None:
+    if not isinstance(manifest_path, str):
+        return None
+    parts = Path(manifest_path).parts
+    if not parts or parts[0] != "data" or ".." in parts or Path(manifest_path).is_absolute():
+        return None
+    return data_dir.joinpath(*parts[1:])
+
+
+def validate_district_export(data_dir: Path, cfg: dict, report: Report) -> Report:
+    manifest_path = data_dir / "districts" / "manifest.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        report.add("critical", "bad_manifest", f"manifest.json: {exc}")
+        return report
+
+    if (
+        not isinstance(manifest, dict)
+        or manifest.get("v") != 1
+        or not isinstance(manifest.get("districts"), list)
+    ):
+        report.add("critical", "bad_manifest", "неподдерживаемая версия или нет districts")
+        return report
+    districts = manifest["districts"]
+    report.stats["districts"] = len(districts)
+    seen_districts: set[int] = set()
+    all_buildings: list[dict] = []
+    district_buildings: list[list[dict]] = []
+    all_poi: list[dict] = []
+    all_redzones: list[dict] = []
+    home_ids: set[int] = set()
+    required_roles = {
+        "buildings_geojson",
+        "buildings_pmtiles",
+        "basemap_geojson",
+        "basemap_pmtiles",
+    }
+    sample_hashes: set[Path] = set()
+
+    index_meta = manifest.get("index")
+    if not isinstance(index_meta, dict):
+        index_meta = {}
+    index_path = manifest_file_path(data_dir, index_meta.get("path"))
+    if index_path is None or not index_path.is_file():
+        report.add("critical", "missing_index", "нет data/index.json.gz")
+    else:
+        if index_meta.get("bytes") != index_path.stat().st_size:
+            report.add("critical", "bad_file_size", "index.json.gz: размер не совпадает с манифестом")
+        sample_hashes.add(index_path)
+
+    for district in districts:
+        if not isinstance(district, dict):
+            report.add("critical", "bad_district", "описание района должно быть объектом")
+            continue
+        district_id = district.get("id")
+        if not isinstance(district_id, int) or district_id <= 0:
+            report.add("critical", "bad_district", f"некорректный id района: {district_id!r}")
+            continue
+        if district_id in seen_districts:
+            report.add("critical", "duplicate_district", f"id района повторяется: {district_id}")
+        seen_districts.add(district_id)
+        bbox = district.get("bbox")
+        if (
+            not isinstance(bbox, list)
+            or len(bbox) != 4
+            or any(not isinstance(value, (int, float)) for value in bbox)
+            or bbox[0] >= bbox[2]
+            or bbox[1] >= bbox[3]
+        ):
+            report.add("critical", "bad_district_bbox", f"район {district_id}: некорректный bbox")
+
+        files = district.get("files")
+        if not isinstance(files, list):
+            report.add("critical", "bad_district_files", f"район {district_id}: нет files")
+            continue
+        entries_by_role: dict[str, list[dict]] = {}
+        for entry in files:
+            if not isinstance(entry, dict):
+                report.add("critical", "bad_manifest_file", f"район {district_id}: некорректный файл")
+                continue
+            role = entry.get("role")
+            if not isinstance(role, str):
+                report.add("critical", "bad_manifest_file", f"район {district_id}: нет role")
+                continue
+            entries_by_role.setdefault(role, []).append(entry)
+            path = manifest_file_path(data_dir, entry.get("path"))
+            if path is None:
+                report.add("critical", "bad_manifest_path", f"район {district_id}: путь вне data/")
+                continue
+            if not path.is_file():
+                report.add("critical", "missing_file", f"нет файла {entry.get('path')}")
+                continue
+            expected_bytes = entry.get("bytes")
+            if isinstance(expected_bytes, int) and expected_bytes != path.stat().st_size:
+                report.add("critical", "bad_file_size", f"{entry.get('path')}: размер не совпадает")
+            digest = entry.get("sha256")
+            if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+                report.add("critical", "bad_manifest_sha", f"{entry.get('path')}: нет sha256")
+            elif (
+                role in {"buildings_geojson", "buildings_pmtiles", "basemap_geojson", "basemap_pmtiles"}
+                or (role in {"routes", "isochrones"} and entry.get("shard") == 0)
+            ):
+                sample_hashes.add(path)
+
+        for role in required_roles:
+            if len(entries_by_role.get(role, [])) != 1:
+                report.add(
+                    "critical",
+                    "bad_manifest_roles",
+                    f"район {district_id}: ожидался один файл {role}",
+                )
+        for role in ("routes", "isochrones"):
+            shards = {
+                entry.get("shard")
+                for entry in entries_by_role.get(role, [])
+                if isinstance(entry.get("shard"), int)
+            }
+            if shards != set(range(16)):
+                report.add(
+                    "critical",
+                    "bad_manifest_shards",
+                    f"район {district_id}: {role} должны содержать шарды 0–15",
+                )
+
+        building_entries = entries_by_role.get("buildings_geojson", [])
+        if building_entries:
+            buildings = load_features(
+                manifest_file_path(data_dir, building_entries[0].get("path")) or Path(),
+                report,
+                f"buildings_{district_id}",
+            )
+            for feature in buildings:
+                props = feature.get("properties") or {}
+                if not isinstance(props.get("is_home"), bool):
+                    report.add(
+                        "critical",
+                        "bad_home_flag",
+                        f"здание {props.get('id')}: is_home должен быть boolean",
+                        props.get("id") if isinstance(props.get("id"), int) else None,
+                    )
+                elif props["is_home"] and isinstance(props.get("id"), int):
+                    home_ids.add(props["id"])
+            all_buildings.extend(buildings)
+            district_buildings.append(buildings)
+
+        for filename, target, label in (
+            ("poi.geojson", all_poi, f"poi_{district_id}"),
+            ("redzones.geojson", all_redzones, f"redzones_{district_id}"),
+        ):
+            layer_path = data_dir / "districts" / str(district_id) / filename
+            target.extend(load_features(layer_path, report, label))
+
+    for city_file in ("buildings.pmtiles", "basemap.pmtiles"):
+        path = data_dir / city_file
+        if not path.is_file() or path.stat().st_size == 0:
+            report.add("critical", "missing_city_pmtiles", f"нет или пустой data/{city_file}")
+            continue
+        with path.open("rb") as fh:
+            header = fh.read(8)
+        if header[:7] != b"PMTiles" or len(header) < 8 or header[7] != 3:
+            report.add("critical", "bad_city_pmtiles", f"data/{city_file}: неверный PMTiles v3 header")
+
+    for path in sample_hashes:
+        expected = None
+        if path == index_path:
+            expected = index_meta.get("sha256")
+        else:
+            for district in districts:
+                if not isinstance(district, dict):
+                    continue
+                for entry in district.get("files") or []:
+                    if manifest_file_path(data_dir, entry.get("path")) == path:
+                        expected = entry.get("sha256")
+                        break
+                if expected:
+                    break
+        if not isinstance(expected, str):
+            report.add("critical", "bad_manifest_sha", f"{path.name}: нет sha256")
+            continue
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        if digest != expected:
+            report.add("critical", "sha_mismatch", f"{path.name}: sha256 не совпадает")
+
+    if index_path is not None and index_path.is_file():
+        try:
+            index = json.loads(gzip.decompress(index_path.read_bytes()))
+            if not isinstance(index, dict):
+                raise ValueError("корень индекса должен быть объектом")
+            columns = ("ids", "lon", "lat", "addr")
+            lengths = [len(index.get(column, [])) for column in columns]
+            if (
+                index.get("v") != 1
+                or len(set(lengths)) != 1
+                or lengths[0] == 0
+                or len(set(index["ids"])) != lengths[0]
+            ):
+                raise ValueError("неверная версия, пустые или расходящиеся колонки")
+            indexed_ids = set(index["ids"])
+            if indexed_ids != home_ids:
+                report.add(
+                    "critical",
+                    "index_home_mismatch",
+                    f"индекс содержит {len(indexed_ids)} id, жилых домов {len(home_ids)}",
+                )
+            report.stats["search_index"] = lengths[0]
+        except (OSError, EOFError, gzip.BadGzipFile, json.JSONDecodeError, ValueError, TypeError, KeyError) as exc:
+            report.add("critical", "bad_search_index", f"index.json.gz: {exc}")
+
+    report.stats["buildings"] = len(all_buildings)
+    report.stats["poi"] = len(all_poi)
+    report.stats["redzones"] = len(all_redzones)
+    building_stats = {
+        "buildings_with_address": 0,
+        "buildings_with_year": 0,
+        "buildings_with_height": 0,
+    }
+    for features in district_buildings:
+        district_report = Report(data_dir=data_dir)
+        check_buildings(features, cfg, district_report)
+        report.issues.extend(district_report.issues)
+        for key in building_stats:
+            building_stats[key] += district_report.stats.get(key, 0)
+    report.stats.update(building_stats)
+    total_buildings = len(all_buildings)
+    if total_buildings:
+        report.coverage.update({
+            "address_pct": round(100 * building_stats["buildings_with_address"] / total_buildings, 1),
+            "year_pct": round(100 * building_stats["buildings_with_year"] / total_buildings, 1),
+            "height_pct": round(100 * building_stats["buildings_with_height"] / total_buildings, 1),
+        })
+    check_poi(all_poi, cfg, report)
+    check_redzones(all_redzones, cfg, report)
+    check_routes(data_dir, cfg, report)
+    check_isochrones(data_dir, report)
+    return report
+
+
+def validate_export(
+    data_dir: Path,
+    config_path: Path = CONFIG_PATH,
+    export_format: str = "auto",
+) -> Report:
     cfg = load_config(config_path)
     report = Report(data_dir=data_dir)
+    has_manifest = (data_dir / "districts" / "manifest.json").is_file()
+    if export_format == "new" and not has_manifest:
+        report.add("critical", "missing_manifest", "нет districts/manifest.json")
+        return report
+    if export_format == "new" or (export_format == "auto" and has_manifest):
+        return validate_district_export(data_dir, cfg, report)
     buildings = load_features(data_dir / "presnya_buildings.geojson", report, "buildings")
     poi = load_features(data_dir / "presnya_poi.geojson", report, "poi")
     redzones = load_features(data_dir / "presnya_redzones.geojson", report, "redzones")
@@ -445,6 +727,8 @@ def validate_export(data_dir: Path, config_path: Path = CONFIG_PATH) -> Report:
 def format_report(report: Report, details: int = 5) -> str:
     stats = report.stats
     lines = [f"Выгрузка: {report.data_dir}"]
+    if "districts" in stats:
+        lines.append(f"Районов {stats.get('districts', 0)} · индекс поиска {stats.get('search_index', 0)}")
     lines.append(
         "Зданий {buildings} · POI {poi} · зон {redzones} · маршрутов {route_files} · изохрон {isochrone_files}".format(
             buildings=stats.get("buildings", 0),
@@ -498,12 +782,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("data_dir", nargs="?", default=str(DEFAULT_DATA_DIR),
                         help="папка с *.geojson (по умолчанию web/public/data)")
     parser.add_argument("--config", default=str(CONFIG_PATH))
+    parser.add_argument("--format", choices=("auto", "legacy", "new"), default="auto")
     parser.add_argument("--details", type=int, default=5,
                         help="сколько примеров показывать на каждый код ошибки")
     parser.add_argument("--json", action="store_true", help="отчёт в JSON")
     args = parser.parse_args(argv)
 
-    report = validate_export(Path(args.data_dir), Path(args.config))
+    report = validate_export(Path(args.data_dir), Path(args.config), args.format)
     if args.json:
         payload = {
             "data_dir": str(report.data_dir),

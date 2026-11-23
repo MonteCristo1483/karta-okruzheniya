@@ -7,6 +7,8 @@
 from __future__ import annotations
 
 import copy
+import gzip
+import hashlib
 import json
 import sys
 import tempfile
@@ -103,6 +105,123 @@ def write_export(root: Path, buildings: list[dict] | None = None,
     for name, features in files.items():
         payload = {"type": "FeatureCollection", "features": features}
         (data / name).write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    return data
+
+
+def write_district_export(root: Path) -> Path:
+    data = root / "new-data"
+    district_id = 99
+    district_dir = data / "districts" / str(district_id)
+    district_dir.mkdir(parents=True)
+    building_feature = globals()["building"](1, is_home=True)
+    poi_features = default_poi()
+    redzone_features = [redzone()]
+
+    def write_json(path: Path, payload: dict) -> bytes:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        content = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        path.write_bytes(content)
+        return content
+
+    def write_gzip_json(path: Path, payload: dict) -> bytes:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        content = gzip.compress(json.dumps(payload).encode("utf-8"), mtime=0)
+        path.write_bytes(content)
+        return content
+
+    def entry(role: str, relative_path: str, content: bytes, shard: int | None = None) -> dict:
+        result = {
+            "role": role,
+            "path": f"data/{relative_path}",
+            "bytes": len(content),
+            "sha256": hashlib.sha256(content).hexdigest(),
+        }
+        if shard is not None:
+            result["shard"] = shard
+        return result
+
+    manifest_files = []
+    for filename, role, features in (
+        ("buildings.geojson", "buildings_geojson", [building_feature]),
+        ("poi.geojson", "poi_geojson", poi_features),
+        ("redzones.geojson", "redzones_geojson", redzone_features),
+        ("basemap.geojson", "basemap_geojson", []),
+    ):
+        payload = {"type": "FeatureCollection", "features": features}
+        content = write_json(district_dir / filename, payload)
+        if role in {"buildings_geojson", "basemap_geojson"}:
+            manifest_files.append(
+                entry(role, f"districts/{district_id}/{filename}", content)
+            )
+
+    for filename, role in (
+        ("buildings.pmtiles", "buildings_pmtiles"),
+        ("basemap.pmtiles", "basemap_pmtiles"),
+    ):
+        path = district_dir / filename
+        path.write_bytes(b"tile")
+        manifest_files.append(
+            entry(role, f"districts/{district_id}/{filename}", path.read_bytes())
+        )
+
+    routes_dir = data / "routes" / str(district_id)
+    isochrones_dir = data / "isochrones" / str(district_id)
+    valid_route = {
+        "1": {
+            "categories": {
+                "parks": {
+                    "minutes": 1,
+                    "distance_m": 10,
+                    "geometry": {"type": "LineString", "coordinates": []},
+                }
+            }
+        }
+    }
+    iso_geometry = {
+        "type": "Polygon",
+        "coordinates": [[[37.56, 55.76], [37.561, 55.76],
+                         [37.561, 55.761], [37.56, 55.76]]],
+    }
+    for shard in range(16):
+        route_content = write_gzip_json(
+            routes_dir / f"{shard}.json.gz",
+            valid_route if shard == 1 else {},
+        )
+        iso_content = write_gzip_json(
+            isochrones_dir / f"{shard}.json.gz",
+            {"1": {"5": iso_geometry, "10": iso_geometry, "15": iso_geometry}}
+            if shard == 1
+            else {},
+        )
+        manifest_files.append(
+            entry("routes", f"routes/{district_id}/{shard}.json.gz", route_content, shard)
+        )
+        manifest_files.append(
+            entry("isochrones", f"isochrones/{district_id}/{shard}.json.gz", iso_content, shard)
+        )
+
+    index_content = write_gzip_json(
+        data / "index.json.gz",
+        {"v": 1, "ids": [1], "lon": [37.56], "lat": [55.76], "addr": ["ул. Тестовая, 1"]},
+    )
+    index_meta = {
+        "role": "index",
+        "path": "data/index.json.gz",
+        "bytes": len(index_content),
+        "sha256": hashlib.sha256(index_content).hexdigest(),
+    }
+    write_json(data / "districts" / "manifest.json", {
+        "v": 1,
+        "index": index_meta,
+        "districts": [{
+            "id": district_id,
+            "name": "Тестовый район",
+            "bbox": [37.54, 55.74, 37.59, 55.79],
+            "files": manifest_files,
+        }],
+    })
+    (data / "buildings.pmtiles").write_bytes(b"PMTiles\x03city buildings")
+    (data / "basemap.pmtiles").write_bytes(b"PMTiles\x03city basemap")
     return data
 
 
@@ -273,6 +392,37 @@ class TestIsochrones(ValidatorTestCase):
         data = self.write_iso({"5": bad, "10": self.iso_geom(), "15": self.iso_geom()})
         report = validate_export(data, CONFIG_PATH)
         self.assertIn("outside_moscow", self.codes(report, "critical"))
+
+
+class TestDistrictExport(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.data = write_district_export(Path(self.tmp.name))
+
+    def test_new_format_validates_manifest_index_and_gzip_shards(self):
+        report = validate_export(self.data, CONFIG_PATH, "new")
+        self.assertEqual(report.critical(), [])
+        self.assertEqual(report.stats["districts"], 1)
+        self.assertEqual(report.stats["search_index"], 1)
+        self.assertEqual(report.stats["buildings"], 1)
+        self.assertEqual(report.stats["route_files"], 16)
+        self.assertEqual(report.stats["isochrone_files"], 16)
+
+    def test_new_format_checks_sample_sha256(self):
+        tile = self.data / "districts" / "99" / "buildings.pmtiles"
+        tile.write_bytes(b"bad!")
+        report = validate_export(self.data, CONFIG_PATH, "new")
+        self.assertIn("sha_mismatch", {issue.code for issue in report.critical()})
+
+    def test_new_format_rejects_invalid_city_pmtiles_header(self):
+        (self.data / "basemap.pmtiles").write_bytes(b"not pmtiles")
+        report = validate_export(self.data, CONFIG_PATH, "new")
+        self.assertIn("bad_city_pmtiles", {issue.code for issue in report.critical()})
+
+    def test_explicit_new_format_requires_manifest(self):
+        report = validate_export(Path(self.tmp.name) / "missing", CONFIG_PATH, "new")
+        self.assertIn("missing_manifest", {issue.code for issue in report.critical()})
 
 
 if __name__ == "__main__":

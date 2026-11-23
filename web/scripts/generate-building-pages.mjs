@@ -10,7 +10,8 @@
  *   node scripts/generate-building-pages.mjs --id 28121119   # одна страница
  *   node scripts/generate-building-pages.mjs                 # все дома + sitemap
  *
- * Читает public/data/presnya_buildings.geojson, пишет dist/r/<id>/index.html.
+ * Читает public/data/districts/<id>/buildings.geojson (или старый export),
+ * пишет dist/r/<id>/index.html.
  * Данные в git не коммитятся — скрипт запускается после пайплайна/сборки.
  */
 
@@ -25,7 +26,9 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const WEB_ROOT = fileURLToPath(new URL("..", import.meta.url));
-const DATA_PATH = join(WEB_ROOT, "public", "data", "presnya_buildings.geojson");
+const PUBLIC_DATA = join(WEB_ROOT, "public", "data");
+const LEGACY_DATA_PATH = join(PUBLIC_DATA, "presnya_buildings.geojson");
+const MANIFEST_PATH = join(PUBLIC_DATA, "districts", "manifest.json");
 const DIST_ROOT = join(WEB_ROOT, "dist");
 const BASE = "https://montecristo1483.github.io/karta-okruzheniya";
 const OG_IMAGE = `${BASE}/og.jpg`;
@@ -63,6 +66,33 @@ const PERCENTILE_LABELS = {
 const PENALTY_KINDS = ["road", "railway", "construction", "industrial"];
 const RED_FLAG_PENALTY = -0.2;
 const SEVERE_PENALTY = -0.5;
+
+function loadDatasets() {
+  if (existsSync(MANIFEST_PATH)) {
+    const manifest = JSON.parse(readFileSync(MANIFEST_PATH, "utf8"));
+    return manifest.districts.map((district) => {
+      const path = join(PUBLIC_DATA, "districts", String(district.id), "buildings.geojson");
+      if (!existsSync(path)) throw new Error(`Нет данных района: ${path}`);
+      const data = JSON.parse(readFileSync(path, "utf8"));
+      const features = (data.features ?? []).filter(
+        (feature) => feature.properties?.is_home === true,
+      );
+      const name = String(district.name ?? "");
+      const phrase = /Арбат/i.test(name)
+        ? "Арбате"
+        : /Тверск/i.test(name)
+          ? "Тверском районе"
+          : "Пресне";
+      return { phrase, features };
+    });
+  }
+
+  if (!existsSync(LEGACY_DATA_PATH)) {
+    throw new Error(`Нет данных домов: ${LEGACY_DATA_PATH}`);
+  }
+  const data = JSON.parse(readFileSync(LEGACY_DATA_PATH, "utf8"));
+  return [{ phrase: "Пресне", features: data.features ?? [] }];
+}
 
 function esc(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => {
@@ -330,49 +360,57 @@ h1{font-size:24px;line-height:1.2;margin:0 0 4px}
 }
 
 function main() {
-  if (!existsSync(DATA_PATH)) {
-    console.error(`Нет данных: ${DATA_PATH}. Сначала пайплайн/экспорт.`);
-    process.exit(1);
-  }
   if (!existsSync(DIST_ROOT)) {
     console.error(`Нет сборки: ${DIST_ROOT}. Сначала next build.`);
     process.exit(1);
   }
 
-  const data = JSON.parse(readFileSync(DATA_PATH, "utf8"));
-  const features = data.features ?? [];
-  const series = Object.fromEntries(
-    PENALTY_KINDS.map((kind) => [
-      kind,
-      features.map(
-        (f) =>
-          f.properties.breakdown?.penalties?.[kind]?.distance_m ??
-          Number.POSITIVE_INFINITY,
-      ),
-    ]),
+  const datasets = loadDatasets().map((dataset) => ({
+    ...dataset,
+    series: Object.fromEntries(
+      PENALTY_KINDS.map((kind) => [
+        kind,
+        dataset.features.map(
+          (feature) =>
+            feature.properties.breakdown?.penalties?.[kind]?.distance_m ??
+            Number.POSITIVE_INFINITY,
+        ),
+      ]),
+    ),
+  }));
+  const seenIds = new Set();
+  const records = datasets.flatMap((dataset) =>
+    dataset.features
+      .filter((feature) => {
+        const id = String(feature.properties.id);
+        if (seenIds.has(id)) return false;
+        seenIds.add(id);
+        return true;
+      })
+      .map((feature) => ({ feature, dataset })),
   );
 
-  const percentileFor = (kind, distance) => {
-    const values = series[kind];
+  const percentileFor = (dataset, kind, distance) => {
+    const values = dataset.series[kind];
     if (!values?.length) return 0;
     let farther = 0;
     for (const value of values) if (value > distance) farther += 1;
     return farther / values.length;
   };
 
-  const render = (feature) => {
+  const render = (feature, dataset) => {
     const props = feature.properties;
     const facts = buildFacts(props);
     const distanceOf = (kind) =>
       props.breakdown?.penalties?.[kind]?.distance_m ?? Number.POSITIVE_INFINITY;
     const worst = PENALTY_KINDS.map((kind) => ({
       kind,
-      p: percentileFor(kind, distanceOf(kind)),
+      p: percentileFor(dataset, kind, distanceOf(kind)),
     }))
       .filter(({ kind, p }) => p >= 0.6 && facts.red.some(([k]) => k === kind))
       .sort((a, b) => b.p - a.p)[0];
     const percentileLine = worst
-      ? `По ${PERCENTILE_LABELS[worst.kind]} хуже ${Math.round(worst.p * 100)}% домов Пресни`
+      ? `По ${PERCENTILE_LABELS[worst.kind]} хуже ${Math.round(worst.p * 100)}% домов в ${dataset.phrase}`
       : "";
     return pageHtml(props, facts, percentileLine);
   };
@@ -381,28 +419,32 @@ function main() {
   const onlyId = idFlag !== -1 ? process.argv[idFlag + 1] : null;
 
   if (onlyId) {
-    const feature = features.find((f) => String(f.properties.id) === String(onlyId));
-    if (!feature) {
-      console.error(`Дом ${onlyId} не найден в ${DATA_PATH}`);
+    const record = records.find(
+      ({ feature }) => String(feature.properties.id) === String(onlyId),
+    );
+    if (!record) {
+      console.error(`Дом ${onlyId} не найден в данных районов`);
       process.exit(1);
     }
+    const { feature, dataset } = record;
     const dir = join(DIST_ROOT, "r", String(feature.properties.id));
     mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "index.html"), render(feature), "utf8");
+    writeFileSync(join(dir, "index.html"), render(feature, dataset), "utf8");
     console.log(`Готово: dist/r/${feature.properties.id}/index.html`);
     return;
   }
 
   rmSync(join(DIST_ROOT, "r"), { recursive: true, force: true });
   let count = 0;
-  for (const feature of features) {
+  for (const { feature, dataset } of records) {
     const dir = join(DIST_ROOT, "r", String(feature.properties.id));
     mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "index.html"), render(feature), "utf8");
+    writeFileSync(join(dir, "index.html"), render(feature, dataset), "utf8");
     count += 1;
   }
 
-  const urls = features
+  const urls = records
+    .map(({ feature }) => feature)
     .filter((f) => f.properties.address)
     .map(
       (f) =>
