@@ -96,7 +96,7 @@ class BuildingImporter(osmium.SimpleHandler):
             tags.get("addr:street"),
             tags.get("addr:housenumber"),
             Jsonb(tags),
-            is_home(tags),
+            is_home(tags, a.id),
         ))
         self.count += 1
         if len(self.buffer) >= BATCH_SIZE:
