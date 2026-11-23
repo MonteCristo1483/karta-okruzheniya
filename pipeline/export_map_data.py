@@ -49,6 +49,15 @@ SELECT b.osm_id,
                  AND n.addr_housenumber IS NOT NULL
                  AND b.addr_housenumber IS NOT NULL
                  AND split_part(n.addr_housenumber, ' ', 1) = split_part(b.addr_housenumber, ' ', 1)
+                 -- Геометрический префильтр ДО geography: даёт Index Scan по
+                 -- buildings_geometry_idx вместо Seq Scan по 6,3 млн зданий.
+                 -- Градусы в Москве (55–56° с.ш.): 0.0006° ≈ 67 м по широте и
+                 -- 37 м по долготе, т.е. строго больше 30 м — префильтр ничего
+                 -- не отсекает из того, что проходит точную проверку (0.0004°
+                 -- дал бы 25 м по долготе и потерял бы соседей 25–30 м).
+                 AND n.geometry && ST_Expand(b.geometry, 0.0006)
+                 AND ST_DWithin(n.geometry, b.geometry, 0.0006)
+                 -- Точная проверка 30 м по geography — уже среди кандидатов индекса.
                  AND ST_DWithin(n.geometry::geography, b.geometry::geography, 30)
                ORDER BY n.geometry <-> b.geometry
                LIMIT 1
