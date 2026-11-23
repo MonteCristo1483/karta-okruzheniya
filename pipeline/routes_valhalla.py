@@ -224,6 +224,14 @@ def main() -> int:
             return 2
         district_id = int(argv[index + 1])
         del argv[index:index + 2]
+    errors_log: Path | None = None
+    if "--errors-log" in argv:
+        index = argv.index("--errors-log")
+        if index + 1 >= len(argv):
+            print("--errors-log требует путь к JSON", file=sys.stderr)
+            return 2
+        errors_log = Path(argv[index + 1])
+        del argv[index:index + 2]
     args = [a for a in argv if not a.startswith("--")]
     scope_all = "--all" in argv  # эталонные районы (калибровка) вместо Пресни
     if scope_all and district_id is not None:
@@ -353,6 +361,7 @@ def main() -> int:
         print(f"  уже готово (пропущено кандидатов): {skipped:,}")
 
     errors = 0
+    failed: list[list] = []
     best: dict[tuple[int, str], tuple] = {}
     t0 = time.time()
 
@@ -366,19 +375,22 @@ def main() -> int:
             time.sleep(0.5)
             result = request_route(a, b)
         if result is None:
-            return None
+            return (osm_id, category, None)
         line = f"LINESTRING({', '.join(f'{lon} {lat}' for lon, lat in result['shape'])})"
-        return (osm_id, category, result["distance_m"], result["minutes"], line)
+        return (osm_id, category, (result["distance_m"], result["minutes"], line))
 
     with ThreadPoolExecutor(max_workers=WORKERS) as pool:
         for done, row in enumerate(pool.map(worker, tasks, chunksize=32), 1):
-            if row is None:
+            osm_id, category, payload = row
+            if payload is None:
                 errors += 1
+                failed.append([osm_id, category])
             else:
-                key = (row[0], row[1])
+                key = (osm_id, category)
+                distance_m, minutes, line = payload
                 current = best.get(key)
-                if current is None or row[3] < current[3]:
-                    best[key] = row
+                if current is None or minutes < current[3]:
+                    best[key] = (osm_id, category, distance_m, minutes, line)
             if done % 2000 == 0:
                 print(f"  {done:,}/{len(tasks):,} ({time.time() - t0:.0f} с)")
 
@@ -398,6 +410,20 @@ def main() -> int:
         f"Готово: {len(best):,} маршрутов (лучших из кандидатов), "
         f"ошибок: {errors}, {time.time() - t0:.0f} с"
     )
+    if errors_log is not None:
+        errors_log.parent.mkdir(parents=True, exist_ok=True)
+        errors_log.write_text(
+            json.dumps(
+                {
+                    "stage": "routes",
+                    "district": district_id,
+                    "checked": len(tasks),
+                    "errors": failed,
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
     return 0 if errors == 0 else 1
 
 

@@ -112,6 +112,14 @@ def main() -> int:
         district_id = int(argv[index + 1])
         del argv[index:index + 2]
     resume = "--resume" in argv or district_id is not None
+    errors_log: Path | None = None
+    if "--errors-log" in argv:
+        index = argv.index("--errors-log")
+        if index + 1 >= len(argv):
+            print("--errors-log требует путь к JSON", file=sys.stderr)
+            return 2
+        errors_log = Path(argv[index + 1])
+        del argv[index:index + 2]
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     buildings_query = (
@@ -168,8 +176,21 @@ def main() -> int:
     )
     if errors:
         print("id с ошибками:", " ".join(map(str, errors[:20])))
-        return 1
-    return 0
+    if errors_log is not None:
+        errors_log.parent.mkdir(parents=True, exist_ok=True)
+        errors_log.write_text(
+            json.dumps(
+                {
+                    "stage": "iso",
+                    "district": district_id,
+                    "checked": len(todo),
+                    "errors": errors,
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+    return 1 if errors else 0
 
 
 if __name__ == "__main__":

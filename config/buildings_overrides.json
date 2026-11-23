@@ -1,0 +1,25 @@
+{
+  "v": 1,
+  "overrides": [
+    {
+      "osm_id": 31734519,
+      "is_home": true,
+      "reason": "Neva Towers, Башня 1: апартаменты (в OSM building=office, но building:flats=1424) — en.wikipedia.org/wiki/Neva_Towers"
+    },
+    {
+      "osm_id": 74897888,
+      "is_home": true,
+      "reason": "Город Столиц, башня Санкт-Петербург: апартаменты на 18–61 этажах (в OSM building=office) — en.wikipedia.org/wiki/City_of_Capitals"
+    },
+    {
+      "osm_id": 899067710,
+      "is_home": true,
+      "reason": "Город Столиц, башня Москва: апартаменты на 18–72 этажах (в OSM building=commercial) — en.wikipedia.org/wiki/City_of_Capitals"
+    },
+    {
+      "osm_id": 105858754,
+      "is_home": true,
+      "reason": "Башня Империя: 192 апартамента в смешанной башне (офисы/отель; в OSM building=commercial) — en.wikipedia.org/wiki/Imperia_Tower"
+    }
+  ]
+}
