@@ -8,6 +8,8 @@ CLI:
 Для каждого района: id, name, bbox и список файлов (здания, индекс, маршруты,
 изохроны, подложка) с размером и sha256. Манифест — единственный источник
 путей для фронтенда и деплоя шага 2b.
+index.json.gz общий для всех районов: в списке файлов он встречается один раз,
+повторы путей отбрасываются (дубль не должен попасть в деплой дважды).
 
 После записи манифест перечитывается и все sha256 проверяются заново.
 """
@@ -68,13 +70,11 @@ def entry(role: str, path: Path, **extra) -> dict:
     return item
 
 
-def shard_entries(role: str, directory: Path, district_id: str) -> list[dict]:
-    items = []
+def shard_entries(role: str, directory: Path, district_id: str, add) -> None:
     for shard in range(SHARDS):
         path = directory / district_id / f"{shard}.json.gz"
         if path.exists():
-            items.append(entry(role, path, shard=shard))
-    return items
+            add(role, path, shard=shard)
 
 
 def main() -> int:
@@ -87,6 +87,19 @@ def main() -> int:
         return 1
 
     districts = []
+    seen_files: set[str] = set()
+    duplicates = 0
+
+    def add(files: list[dict], role: str, path: Path, **extra) -> None:
+        """Добавить файл один раз: index.json.gz общий для всех районов."""
+        nonlocal duplicates
+        key = rel(path)
+        if key in seen_files:
+            duplicates += 1
+            return
+        seen_files.add(key)
+        files.append(entry(role, path, **extra))
+
     for district_dir in sorted(DISTRICTS.iterdir(), key=lambda p: p.name):
         summary_path = district_dir / "summary.json"
         district_path = district_dir / "district.geojson"
@@ -104,10 +117,14 @@ def main() -> int:
         ):
             path = district_dir / name
             if path.exists():
-                files.append(entry(role, path))
-        files.append(entry("index", INDEX))
-        files.extend(shard_entries("routes", ROUTES, district_id))
-        files.extend(shard_entries("isochrones", ISOCHRONES, district_id))
+                add(files, role, path)
+        add(files, "index", INDEX)
+
+        def add_district(role: str, path: Path, **extra) -> None:
+            add(files, role, path, **extra)
+
+        shard_entries("routes", ROUTES, district_id, add_district)
+        shard_entries("isochrones", ISOCHRONES, district_id, add_district)
 
         districts.append(
             {
@@ -154,6 +171,7 @@ def main() -> int:
             f"{len(district['files'])} файлов, bbox={district['bbox']}"
         )
     print(f"  проверено файлов: {checked}, ошибок: {failed}")
+    print(f"  дублей путей отброшено: {duplicates}")
     return 0 if failed == 0 else 1
 
 

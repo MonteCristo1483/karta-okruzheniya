@@ -12,6 +12,9 @@ config/scoring.json находит ближайший POI (по прямой —
 
 Запуск:
   pipeline/.venv/Scripts/python.exe pipeline/routes_valhalla.py
+  ... --district 1257786   — только жилые района; батч резюмируемый:
+                             готовые пары (дом, категория) не пересчитываются,
+                             а по завершении пишутся routes/<id>.json для веба.
 """
 
 from __future__ import annotations
@@ -29,6 +32,7 @@ import requests
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = ROOT / "config" / "scoring.json"
+ROUTES_DIR = ROOT / "web" / "public" / "data" / "routes"
 from db import DB_DSN
 VALHALLA = "http://localhost:8002/route"
 WORKERS = 8
@@ -167,9 +171,64 @@ def request_route(a: tuple[float, float], b: tuple[float, float]) -> dict | None
         return None
 
 
+def export_routes_files(cur, building_ids: list[int], out_dir: Path) -> tuple[int, int]:
+    """routes/<id>.json для веба — формат export_map_data (категории + breakdown)."""
+    per_building: dict[int, dict] = {}
+    cur.execute(
+        """
+        SELECT r.building_id, r.category, r.minutes, r.distance_m, ST_AsGeoJSON(r.geometry)
+        FROM routes r
+        WHERE r.building_id = ANY(%s)
+        ORDER BY r.building_id, r.category
+        """,
+        (building_ids,),
+    )
+    for building_id, category, minutes, distance_m, geom_json in cur.fetchall():
+        entry = per_building.setdefault(building_id, {"categories": {}})
+        entry["categories"][category] = {
+            "minutes": float(minutes),
+            "distance_m": distance_m,
+            "geometry": json.loads(geom_json),
+        }
+    cur.execute(
+        "SELECT building_id, breakdown FROM scores WHERE building_id = ANY(%s)",
+        (building_ids,),
+    )
+    breakdowns = dict(cur.fetchall())
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    written = unchanged = 0
+    for building_id, entry in per_building.items():
+        breakdown = breakdowns.get(building_id)
+        if breakdown is not None:
+            entry["breakdown"] = breakdown
+        text = json.dumps(entry, ensure_ascii=False, separators=(",", ":"))
+        path = out_dir / f"{building_id}.json"
+        # Файл с тем же содержимым (например, у дома на границе с Пресней)
+        # не перезаписываем: порядок ключей для веба не важен.
+        if path.exists() and json.loads(path.read_text(encoding="utf-8")) == entry:
+            unchanged += 1
+            continue
+        path.write_text(text, encoding="utf-8")
+        written += 1
+    return written, unchanged
+
+
 def main() -> int:
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    scope_all = "--all" in sys.argv  # эталонные районы (калибровка) вместо Пресни
+    argv = sys.argv[1:]
+    district_id: int | None = None
+    if "--district" in argv:
+        index = argv.index("--district")
+        if index + 1 >= len(argv):
+            print("--district требует osm_id района", file=sys.stderr)
+            return 2
+        district_id = int(argv[index + 1])
+        del argv[index:index + 2]
+    args = [a for a in argv if not a.startswith("--")]
+    scope_all = "--all" in argv  # эталонные районы (калибровка) вместо Пресни
+    if scope_all and district_id is not None:
+        print("--all и --district взаимоисключающие", file=sys.stderr)
+        return 2
     only = set(args)  # например: routes_valhalla.py transport — только эти категории
     cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     categories = {
@@ -198,15 +257,36 @@ def main() -> int:
     # ближайший вход в метро/школа за границей отбрасывается и маршрут
     # уходит в обход через весь район (найдено 19.11.2026: 2.6 км вместо
     # 150 м у Тверского бульвара и Красной Пресни).
-    buildings_sql = BUILDINGS_ALL if scope_all else """
-        SELECT osm_id, ST_Centroid(geometry) AS c FROM buildings_presnya WHERE is_home
-    """
-    buildings_params = [district_ids] if scope_all else []
-    poi_area_sql = """
+    if district_id is not None:
+        # Любой район: жилые дома района и POI в буфере 3 км (как в Пресне),
+        # чтобы вход в метро за границей района не терялся.
+        buildings_sql = (
+            "SELECT b.osm_id, ST_Centroid(b.geometry) AS c "
+            "FROM district_buildings(%s) b WHERE b.is_home"
+        )
+        buildings_params = [district_id]
+        poi_area_sql = (
+            "(SELECT ST_Buffer(geometry::geography, 3000)::geometry "
+            "FROM districts WHERE osm_id = %s)"
+        )
+        poi_area_params = [district_id]
+    elif scope_all:
+        buildings_sql = BUILDINGS_ALL
+        buildings_params = [district_ids]
+        poi_area_sql = """
         (SELECT ST_Union(ST_Buffer(geometry::geography, 2000)::geometry)
          FROM districts WHERE osm_id = ANY(%s))
-    """ if scope_all else "(SELECT ST_Buffer(geometry::geography, 3000)::geometry FROM presnensky)"
-    poi_area_params = [district_ids] if scope_all else []
+    """
+        poi_area_params = [district_ids]
+    else:
+        buildings_sql = """
+        SELECT osm_id, ST_Centroid(geometry) AS c FROM buildings_presnya WHERE is_home
+    """
+        buildings_params = []
+        poi_area_sql = (
+            "(SELECT ST_Buffer(geometry::geography, 3000)::geometry FROM presnensky)"
+        )
+        poi_area_params = []
 
     tasks: list[tuple[int, str, tuple[float, float], tuple[float, float]]] = []
     with psycopg.connect(DB_DSN) as conn, conn.cursor() as cur:
@@ -236,6 +316,18 @@ def main() -> int:
         buildings = [(r[0], (r[1], r[2])) for r in cur.fetchall()]
         centers = dict(buildings)
 
+        # Резюмируемость: пары (дом, категория), уже лежащие в routes,
+        # не пересчитываем — иначе повторный запуск после обрыва снова
+        # считал бы всё с нуля.
+        done: set[tuple[int, str]] = set()
+        if district_id is not None and buildings:
+            cur.execute(
+                "SELECT building_id, category FROM routes WHERE building_id = ANY(%s)",
+                ([b[0] for b in buildings],),
+            )
+            done = {(row[0], row[1]) for row in cur.fetchall()}
+
+        skipped = 0
         for category, cat_cfg in categories.items():
             subtypes = cat_cfg.get("subtypes")
             subtype_clause = "AND p.subtype = ANY(%s)" if subtypes else ""
@@ -251,9 +343,14 @@ def main() -> int:
                 ) p
             """, [cat_cfg["poi_types"], *([subtypes] if subtypes else []), CANDIDATES])
             for osm_id, _poi_id, plat, plon in cur.fetchall():
+                if (osm_id, category) in done:
+                    skipped += 1
+                    continue
                 tasks.append((osm_id, category, centers[osm_id], (plat, plon)))
 
     print(f"Зданий: {len(buildings):,}, кандидатов здание+категория: {len(tasks):,}")
+    if skipped:
+        print(f"  уже готово (пропущено кандидатов): {skipped:,}")
 
     errors = 0
     best: dict[tuple[int, str], tuple] = {}
@@ -286,8 +383,16 @@ def main() -> int:
                 print(f"  {done:,}/{len(tasks):,} ({time.time() - t0:.0f} с)")
 
     with psycopg.connect(DB_DSN) as conn, conn.cursor() as cur:
-        cur.executemany(UPSERT, list(best.values()))
-        conn.commit()
+        if best:
+            cur.executemany(UPSERT, list(best.values()))
+            conn.commit()
+        if district_id is not None:
+            written, unchanged = export_routes_files(
+                cur, [b[0] for b in buildings], ROUTES_DIR
+            )
+            print(
+                f"routes/<id>.json: записано {written:,}, без изменений {unchanged:,}"
+            )
 
     print(
         f"Готово: {len(best):,} маршрутов (лучших из кандидатов), "
