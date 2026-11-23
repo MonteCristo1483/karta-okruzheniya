@@ -47,9 +47,11 @@ def district_dirs() -> list[Path]:
     return sorted(dirs, key=lambda path: int(path.name))
 
 
-def collect_rows(dirs: list[Path]) -> tuple[list[tuple[int, float, float, str]], dict]:
+def collect_rows(dirs: list[Path]) -> tuple[list[tuple[int, float, float, str]], dict, int]:
     rows: list[tuple[int, float, float, str]] = []
     per_district = {}
+    seen: set[int] = set()
+    dropped = 0
     for district_dir in dirs:
         summary_path = district_dir / "summary.json"
         name = district_dir.name
@@ -59,14 +61,23 @@ def collect_rows(dirs: list[Path]) -> tuple[list[tuple[int, float, float, str]],
             (district_dir / "buildings.geojson").read_text(encoding="utf-8")
         )["features"]
         local = []
+        local_dropped = 0
         for feature in features:
             props = feature.get("properties") or {}
             if not props.get("is_home") or props.get("index") is None:
                 continue
+            building_id = int(props["id"])
+            # Дома на границе районов попадают в два district-артефакта:
+            # в индексе оставляем первое вхождение, остальные считаем дублями.
+            if building_id in seen:
+                dropped += 1
+                local_dropped += 1
+                continue
+            seen.add(building_id)
             lon, lat = representative_point(feature["geometry"])
             local.append(
                 (
-                    int(props["id"]),
+                    building_id,
                     round(lon, 6),
                     round(lat, 6),
                     props.get("address") or "",
@@ -76,10 +87,11 @@ def collect_rows(dirs: list[Path]) -> tuple[list[tuple[int, float, float, str]],
         per_district[district_dir.name] = {
             "name": name,
             "rows": len(local),
+            "dropped": local_dropped,
             "gzip_bytes": len(pack(local)),
         }
     rows.sort(key=lambda row: row[0])
-    return rows, per_district
+    return rows, per_district, dropped
 
 
 def pack(rows: list[tuple[int, float, float, str]]) -> bytes:
@@ -135,7 +147,7 @@ def main() -> int:
     dirs = district_dirs()
     if not dirs:
         raise SystemExit("Нет data/districts/*/buildings.geojson")
-    rows, per_district = collect_rows(dirs)
+    rows, per_district, dropped = collect_rows(dirs)
 
     blob = pack(rows)
     out = args.out.resolve()
@@ -147,14 +159,18 @@ def main() -> int:
     parse_ms = (time.perf_counter() - started) * 1000
     if len(decoded["ids"]) != len(rows):
         raise SystemExit("ОШИБКА: число id не совпадает после чтения")
+    if len(set(decoded["ids"])) != len(decoded["ids"]):
+        raise SystemExit("ОШИБКА: в индексе остались дубли id")
 
     extrapolated = len(blob) / max(1, len(rows)) * CITY_HOMES
     print(f"Индекс: {out.relative_to(ROOT)}")
-    print(f"  домов: {len(rows):,}")
+    print(f"  домов: {len(rows):,} (уникальных id: {len(set(decoded['ids'])):,})")
+    print(f"  дублей отброшено: {dropped:,}")
     for district_id, info in per_district.items():
+        suffix = f", дублей {info['dropped']}" if info["dropped"] else ""
         print(
             f"    {district_id} {info['name']}: {info['rows']:,} домов, "
-            f"{human(info['gzip_bytes'])} gzip"
+            f"{human(info['gzip_bytes'])} gzip{suffix}"
         )
     print(f"  размер: {human(len(blob))} ({len(blob):,} B) gzip")
     print(f"  на {CITY_HOMES:,} домов: {human(int(extrapolated))} "

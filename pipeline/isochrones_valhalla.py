@@ -16,6 +16,8 @@ routes/), поэтому 3 306 зданий не утяжеляют первую
 
 Запуск:
   pipeline/.venv/Scripts/python.exe pipeline/isochrones_valhalla.py
+  ... --district 1257786   — только жилые района; уже готовые файлы
+                             (все три контура) не пересчитываются.
   ... --resume   — не пересчитывать уже готовые файлы
 """
 
@@ -90,20 +92,43 @@ def request_isochrone(lat: float, lon: float) -> dict | None:
         return None
 
 
+def is_ready(path: Path) -> bool:
+    """Готовый файл содержит все три контура (пустой/битый — не готов)."""
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(payload, dict) and set(payload) == {str(m) for m in CONTOURS}
+
+
 def main() -> int:
-    resume = "--resume" in sys.argv
+    argv = sys.argv[1:]
+    district_id: int | None = None
+    if "--district" in argv:
+        index = argv.index("--district")
+        if index + 1 >= len(argv):
+            print("--district требует osm_id района", file=sys.stderr)
+            return 2
+        district_id = int(argv[index + 1])
+        del argv[index:index + 2]
+    resume = "--resume" in argv or district_id is not None
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
+    buildings_query = (
+        "SELECT osm_id, ST_Y(ST_Centroid(geometry)), ST_X(ST_Centroid(geometry)) "
+        "FROM district_buildings(%s) WHERE is_home ORDER BY osm_id"
+        if district_id is not None
+        else "SELECT osm_id, ST_Y(ST_Centroid(geometry)), ST_X(ST_Centroid(geometry)) "
+        "FROM buildings_presnya ORDER BY osm_id"
+    )
+    params = (district_id,) if district_id is not None else ()
     with psycopg.connect(DB_DSN) as conn, conn.cursor() as cur:
-        cur.execute(
-            "SELECT osm_id, ST_Y(ST_Centroid(geometry)), ST_X(ST_Centroid(geometry)) "
-            "FROM buildings_presnya ORDER BY osm_id"
-        )
+        cur.execute(buildings_query, list(params))
         buildings = cur.fetchall()
 
     todo = [
         b for b in buildings
-        if not (resume and (OUT_DIR / f"{b[0]}.json").exists())
+        if not (resume and is_ready(OUT_DIR / f"{b[0]}.json"))
     ]
     print(f"Зданий: {len(buildings):,}, к расчёту: {len(todo):,}")
 
