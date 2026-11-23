@@ -1,0 +1,797 @@
+{
+  "v": 1,
+  "index": {
+    "role": "index",
+    "path": "data/index.json.gz",
+    "bytes": 52008,
+    "sha256": "4c18f7f932b231cc719aa8e5c96b90fd6e5101ad4c595f81bf1b932ab1396f77"
+  },
+  "districts": [
+    {
+      "id": 1257484,
+      "name": "район Арбат",
+      "bbox": [
+        37.5720599,
+        55.7437518,
+        37.6122435,
+        55.7581108
+      ],
+      "files": [
+        {
+          "role": "buildings_geojson",
+          "path": "data/districts/1257484/buildings.geojson",
+          "bytes": 842084,
+          "sha256": "80e8108a60cfbc106dd3a02513cbd355800e5d211945a638fa468b2e48ee2fde"
+        },
+        {
+          "role": "buildings_pmtiles",
+          "path": "data/districts/1257484/buildings.pmtiles",
+          "bytes": 409613,
+          "sha256": "07d41e752ad055df8755a59324e558fe6f637ed511e9e5f86d24f8074e5ec9a0"
+        },
+        {
+          "role": "basemap_geojson",
+          "path": "data/districts/1257484/basemap.geojson",
+          "bytes": 133664,
+          "sha256": "e4055abe71ee629bbe87175d957d810137eac247fbef7916561897036c697365"
+        },
+        {
+          "role": "basemap_pmtiles",
+          "path": "data/districts/1257484/basemap.pmtiles",
+          "bytes": 126232,
+          "sha256": "bc52bc614ca511565560d8c098ecc7bbf22c93538f3df38332debc916e9bc5f3"
+        },
+        {
+          "role": "index",
+          "path": "data/index.json.gz",
+          "bytes": 52008,
+          "sha256": "4c18f7f932b231cc719aa8e5c96b90fd6e5101ad4c595f81bf1b932ab1396f77"
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1257484/0.json.gz",
+          "bytes": 37793,
+          "sha256": "6b8719e92e9741d0b21cd257c44731e97b92ea5013f7176a3456265d984b8d3a",
+          "shard": 0
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1257484/1.json.gz",
+          "bytes": 7217,
+          "sha256": "1684ebc4775580ca095c9918dcf56431ef3e6020f68e06026cb7cfd6be47d536",
+          "shard": 1
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1257484/2.json.gz",
+          "bytes": 36905,
+          "sha256": "4023776c56848dc2fdc1dc425ac4cefffa13b706c8a6af82b3d037245141e0c2",
+          "shard": 2
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1257484/3.json.gz",
+          "bytes": 7407,
+          "sha256": "14417fa252ba72e9ee04b0866e51278c6ad1eef6cbc261d264a30555c0937b3c",
+          "shard": 3
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1257484/4.json.gz",
+          "bytes": 35303,
+          "sha256": "1889b96f898ab1abbc7559dcebd10e4c172abef273d020d084d445df73a878a8",
+          "shard": 4
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1257484/5.json.gz",
+          "bytes": 5563,
+          "sha256": "6891fb0245b7eb1fcac417dcfc104d0d1893bffac727243a7adfd273c9f62bca",
+          "shard": 5
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1257484/6.json.gz",
+          "bytes": 38078,
+          "sha256": "76bc8e0960c746dae18486b830825bacbbd0a4d5cbf6ae9d449563d6729b4979",
+          "shard": 6
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1257484/7.json.gz",
+          "bytes": 4978,
+          "sha256": "7ab9796e860957172f81643106faa88b986d01ba5696529928c2c30126610486",
+          "shard": 7
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1257484/8.json.gz",
+          "bytes": 34067,
+          "sha256": "9a1cc547e5044ade2765fa88a756a70a8de868c77e7122ffc6c5a4785b9becab",
+          "shard": 8
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1257484/9.json.gz",
+          "bytes": 7756,
+          "sha256": "0a213aa1284d83d2a45968d42dde2fa5c2db8829924ed9bb44239f4bab1e017e",
+          "shard": 9
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1257484/10.json.gz",
+          "bytes": 38471,
+          "sha256": "985f10a6ddf3282ffbe1df64de90d4205d911182c78bbf2fb5b79eb318446c2e",
+          "shard": 10
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1257484/11.json.gz",
+          "bytes": 8478,
+          "sha256": "7879fd7a82d09a44cb2a2e583b6919668a3757cc861488979bd62cc1ab69dea3",
+          "shard": 11
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1257484/12.json.gz",
+          "bytes": 35938,
+          "sha256": "b42d35a9f78785c4139c9623b31c6d5919b65319ef271849defab9ec9262aab7",
+          "shard": 12
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1257484/13.json.gz",
+          "bytes": 3528,
+          "sha256": "63da06cacc62cd54371bd1a947d55a837fd514a8958b03b556d0cade36d8aadf",
+          "shard": 13
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1257484/14.json.gz",
+          "bytes": 35341,
+          "sha256": "e20c988d4bf6e28bac48e38c6f6f919729d57838f1e5b8e76035833e1a42d6c7",
+          "shard": 14
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1257484/15.json.gz",
+          "bytes": 6270,
+          "sha256": "9835721b973fb6d3db0d36a722717620407df50bb51503ad9c083d2ad23e7467",
+          "shard": 15
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1257484/0.json.gz",
+          "bytes": 16752,
+          "sha256": "8475d5ad94a1ee557625a3d9bd8f27a762fbca00df41e4f3f5a358a0bd68fadd",
+          "shard": 0
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1257484/1.json.gz",
+          "bytes": 2208,
+          "sha256": "bb9d730c7b65b8e9f4dbdf055b2982d120db9947eb60b37747075abbc8ae9f94",
+          "shard": 1
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1257484/2.json.gz",
+          "bytes": 15298,
+          "sha256": "e9710da02e9f991b7324a0b4be861f1ef5673d709ee06263fa853be1e818f967",
+          "shard": 2
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1257484/3.json.gz",
+          "bytes": 2730,
+          "sha256": "829f78afea44fd4a5c76ff2c74d9f2c3d0260f0d30ed8d42dbaae2093e5633b2",
+          "shard": 3
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1257484/4.json.gz",
+          "bytes": 15516,
+          "sha256": "adb21f8f7bda304bc6868299b3e096ab2f76f501805e48fffac248c1fdaedba0",
+          "shard": 4
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1257484/5.json.gz",
+          "bytes": 1817,
+          "sha256": "1565ecf7a58b91804d5973963f1d3f4b7493bebbeadf4ba89cce3479f1e9190f",
+          "shard": 5
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1257484/6.json.gz",
+          "bytes": 16991,
+          "sha256": "7c8b44ca3e92f7b80972fd4193503a9c0f8ddb374b4e82f239c76926f30aa128",
+          "shard": 6
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1257484/7.json.gz",
+          "bytes": 1726,
+          "sha256": "127380998217377ee790cf42f1e755a83e4b80d810b298f976b5a330398ce669",
+          "shard": 7
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1257484/8.json.gz",
+          "bytes": 14431,
+          "sha256": "f330b330c9110a4da1f45407ed030c36637bc1afcbfef37acd2c4c1cdab04a2b",
+          "shard": 8
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1257484/9.json.gz",
+          "bytes": 3119,
+          "sha256": "716e6892cedc6e6156cb58abe27964bade6cd361dd0786dd471e3d3ca009e32b",
+          "shard": 9
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1257484/10.json.gz",
+          "bytes": 16548,
+          "sha256": "abc69d43907b613235bb4ccd8b51596ef3599207b72630708775f570947923ca",
+          "shard": 10
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1257484/11.json.gz",
+          "bytes": 3011,
+          "sha256": "ae3a08f50a2d4770acd3d73f2c72ee9c8e3b244560c8e2bd25aa0fb6c290e990",
+          "shard": 11
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1257484/12.json.gz",
+          "bytes": 15922,
+          "sha256": "df6135e087d7068ddc25c27c90dc74f40fd4c03abeab15bc950b6c275bb65c7f",
+          "shard": 12
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1257484/13.json.gz",
+          "bytes": 1205,
+          "sha256": "0693b96dd3c847e748b88833111213a783b27cbecc055308e1adef2f92e13911",
+          "shard": 13
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1257484/14.json.gz",
+          "bytes": 15998,
+          "sha256": "7a85a2087e26fb1777fa6d8aaf66cad12a97f6fddc23cbc1e2cb044a371f217c",
+          "shard": 14
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1257484/15.json.gz",
+          "bytes": 1870,
+          "sha256": "dcb547802d090e72e9aafbd7f3e1d1682b3809a36c0b4b7f719b4a9b3416621d",
+          "shard": 15
+        }
+      ]
+    },
+    {
+      "id": 1257786,
+      "name": "Тверской район",
+      "bbox": [
+        37.5752326,
+        55.746766,
+        37.6349112,
+        55.7926366
+      ],
+      "files": [
+        {
+          "role": "buildings_geojson",
+          "path": "data/districts/1257786/buildings.geojson",
+          "bytes": 2861083,
+          "sha256": "3c3b5a3c09ac0a7807973fbc1eff45cc5c8394c69377ac22beb6d27f2f77b003"
+        },
+        {
+          "role": "buildings_pmtiles",
+          "path": "data/districts/1257786/buildings.pmtiles",
+          "bytes": 1388508,
+          "sha256": "ee491971e37f5491e041e67e2dfe06fa79e036847373fec1f9285c69f8dbf595"
+        },
+        {
+          "role": "basemap_geojson",
+          "path": "data/districts/1257786/basemap.geojson",
+          "bytes": 616197,
+          "sha256": "f35f33b5ce6537b31978abfa061cb8aee37cc18ca36c29e5a6dd9c8b1f9be242"
+        },
+        {
+          "role": "basemap_pmtiles",
+          "path": "data/districts/1257786/basemap.pmtiles",
+          "bytes": 540221,
+          "sha256": "01fa2885a2386c4ae5dfb6dbe28a3f4cb4de25e28cb07d33c845985d3cedbacb"
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1257786/0.json.gz",
+          "bytes": 88639,
+          "sha256": "2cb1eb029e0092349c1aad5bbddd281b49397a9bb45a48363cf711b004a91317",
+          "shard": 0
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1257786/1.json.gz",
+          "bytes": 53756,
+          "sha256": "8f2fd2f3f22b5c850c8b48cf9cd503dc989cc0d0a570626d6e53696cb07ea65a",
+          "shard": 1
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1257786/2.json.gz",
+          "bytes": 78777,
+          "sha256": "cad042f51e2217b9681bfd2542465fc96dfd07415aa1d0d7724466562dcb204a",
+          "shard": 2
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1257786/3.json.gz",
+          "bytes": 56336,
+          "sha256": "4f1086e82db2c6916edd8fc2828b1024e551b4b53a68b4c913586618a63d1dca",
+          "shard": 3
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1257786/4.json.gz",
+          "bytes": 79140,
+          "sha256": "91d9027e4770b44a5a62833cd7b239c0fd83ac6db7ba24269208b394a791f801",
+          "shard": 4
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1257786/5.json.gz",
+          "bytes": 61700,
+          "sha256": "a31acab5a42cb69b0fd41eda3f40925b5635e9ba99fd7c43a67a6d0436e79f2a",
+          "shard": 5
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1257786/6.json.gz",
+          "bytes": 78318,
+          "sha256": "167ce121516e9123f8fcda863ed30343b7bf57c84c067374c0982e608a7343c6",
+          "shard": 6
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1257786/7.json.gz",
+          "bytes": 64314,
+          "sha256": "c063133cad99f3ba1a75c6d0b99be48baabfef7536e9582ba5db31b92b191295",
+          "shard": 7
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1257786/8.json.gz",
+          "bytes": 80545,
+          "sha256": "a8bbe144ff762dc18825821ac54f69fb0de76faee098b8209cf93764fcf1eedc",
+          "shard": 8
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1257786/9.json.gz",
+          "bytes": 55369,
+          "sha256": "f56073f07631680922b402586fb890bdcf295c3f8ec6f6709eec7e98fde97f0f",
+          "shard": 9
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1257786/10.json.gz",
+          "bytes": 71877,
+          "sha256": "8eecc2ecf69f0ee7df966bc496c802fccefa64d5ef81e37de35f3f4ec0ac825b",
+          "shard": 10
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1257786/11.json.gz",
+          "bytes": 55672,
+          "sha256": "834ff2bbb5b76bc89d7400da533cf3ab7cf4b1ea56c2c8790968f576a1264918",
+          "shard": 11
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1257786/12.json.gz",
+          "bytes": 73096,
+          "sha256": "e294c6e254f5ad87cd90c6555563566655bee8d0595066dfad3537f472c360d0",
+          "shard": 12
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1257786/13.json.gz",
+          "bytes": 53009,
+          "sha256": "a15684edd5cf6cad5329b55c9dbc6c0a13f19a2b9b719bb8e56469be0412a3bd",
+          "shard": 13
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1257786/14.json.gz",
+          "bytes": 88967,
+          "sha256": "fcedd20bdcbd775cfc5e4f9ec7210969cbc31640ba2e031addae86676a4d03c8",
+          "shard": 14
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1257786/15.json.gz",
+          "bytes": 43128,
+          "sha256": "e0f94c5f645af80878ac80a8ee1c634fff0b650140eb53f316abba6b85145549",
+          "shard": 15
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1257786/0.json.gz",
+          "bytes": 31247,
+          "sha256": "b0a4b0c7ef762ed14d18f71ac9d884afeaca2b0977fb9317cf56a7a11c8f796d",
+          "shard": 0
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1257786/1.json.gz",
+          "bytes": 19349,
+          "sha256": "f663f885e8d44f3c04a306708073e56ebfceea62a8bb0d75d854ee1fe3ee8e8d",
+          "shard": 1
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1257786/2.json.gz",
+          "bytes": 29443,
+          "sha256": "63a0c801d849d3aee79343f50758c545c8f5f0aae908f44b2620e2306ae7c82b",
+          "shard": 2
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1257786/3.json.gz",
+          "bytes": 18638,
+          "sha256": "2b1b6555e73f5311887429ea6407a5ce6a8c576ac6f4ed86240caa8eedf19578",
+          "shard": 3
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1257786/4.json.gz",
+          "bytes": 28591,
+          "sha256": "b1325389172bdbaca53264ed8a37be8564e39b93b9abc65dce6d16def5f30b12",
+          "shard": 4
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1257786/5.json.gz",
+          "bytes": 19965,
+          "sha256": "dd92fe06770ee1e6c44e11bd0e976b03d17d8b4961592cc0ab9f80bc8fbbdd21",
+          "shard": 5
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1257786/6.json.gz",
+          "bytes": 27860,
+          "sha256": "65c37c45b82d273cdcf6ffdd4ef7deb923a7c2072ea96e6a4e34f4d0330fe7a1",
+          "shard": 6
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1257786/7.json.gz",
+          "bytes": 21517,
+          "sha256": "5ce30d9b14918cddc07ed62d616afd2104803869f94ea467dc74707f97b9a718",
+          "shard": 7
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1257786/8.json.gz",
+          "bytes": 29134,
+          "sha256": "f3092c8077c2721f43f6d8dfa30fdb38dbef4cb1566bffbab8bf64bde247efd6",
+          "shard": 8
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1257786/9.json.gz",
+          "bytes": 18610,
+          "sha256": "c3ddd64150ec4ff9716295177a94173767056e7dff2c54f53bc3353c7e5d9b0c",
+          "shard": 9
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1257786/10.json.gz",
+          "bytes": 25918,
+          "sha256": "9c985173671ccf209ae2dc5c60ae5a241d51cd0b191b80af9caa39532eb21c65",
+          "shard": 10
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1257786/11.json.gz",
+          "bytes": 19116,
+          "sha256": "7e6545557590af8bc405637164d4687cc1cafa8e50afc23375fdac78d2c4691c",
+          "shard": 11
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1257786/12.json.gz",
+          "bytes": 26308,
+          "sha256": "9e184bc7738833088d7a3d3499f43879bc935cc49acd462d43981d0fe4ebb8c4",
+          "shard": 12
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1257786/13.json.gz",
+          "bytes": 17629,
+          "sha256": "5b539bfd6324eb2df8cae20872f290bb422acebf1c117e633ce6328e4bb10cd9",
+          "shard": 13
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1257786/14.json.gz",
+          "bytes": 32237,
+          "sha256": "c6d0e211f77956f0942bf9453763b7a2023d867b3ff292beaf2cd1e6e7e898cd",
+          "shard": 14
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1257786/15.json.gz",
+          "bytes": 13834,
+          "sha256": "0c3fe20a841d8d76305a147870d9511b6b7cd4f0ba535019391e774bc2cfc3b2",
+          "shard": 15
+        }
+      ]
+    },
+    {
+      "id": 1275551,
+      "name": "Пресненский район",
+      "bbox": [
+        37.5139298,
+        55.7443963,
+        37.6097604,
+        55.7755208
+      ],
+      "files": [
+        {
+          "role": "buildings_geojson",
+          "path": "data/districts/1275551/buildings.geojson",
+          "bytes": 2904931,
+          "sha256": "0bb60be11e452f3e2a4b4fb16cb5e1b3a9fb18b6f4883c98c7071a71eebd2368"
+        },
+        {
+          "role": "buildings_pmtiles",
+          "path": "data/districts/1275551/buildings.pmtiles",
+          "bytes": 1500268,
+          "sha256": "71680d986bc1aba0ddd2a0440d1d5a01c2e222dad8d95bb9e3e6e62f9969a66c"
+        },
+        {
+          "role": "basemap_geojson",
+          "path": "data/districts/1275551/basemap.geojson",
+          "bytes": 453247,
+          "sha256": "44524b40cf6bd9e3c38de6fa24f54754615bd4d0559a5c05f8297ea827401a2b"
+        },
+        {
+          "role": "basemap_pmtiles",
+          "path": "data/districts/1275551/basemap.pmtiles",
+          "bytes": 441886,
+          "sha256": "63f7ff47f4c302b1d44bb3e64c0804ea91982570ccc839cca1a81d55e8bed5a1"
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1275551/0.json.gz",
+          "bytes": 122515,
+          "sha256": "4aa3e962b374305934048dd8e3f450b8024bbe6339fce99bdaa551f9342146ca",
+          "shard": 0
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1275551/1.json.gz",
+          "bytes": 24551,
+          "sha256": "111cf1d7ca7474666f77443d04dea6ed894014ba8b9b8f6b09c7be8ca581de17",
+          "shard": 1
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1275551/2.json.gz",
+          "bytes": 101648,
+          "sha256": "dd85eb911372908382f09614ba8f9bc292a0636e7f8a362a23a3f49df2c409d4",
+          "shard": 2
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1275551/3.json.gz",
+          "bytes": 25182,
+          "sha256": "c0c884f21003d8899ee8d3821bd6bb639e6298a9577c487b2c752437388e8385",
+          "shard": 3
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1275551/4.json.gz",
+          "bytes": 109394,
+          "sha256": "7c835c56ccfa659a4dabc317b5fa839f9d549892b2a3524d55eba31233f70652",
+          "shard": 4
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1275551/5.json.gz",
+          "bytes": 33040,
+          "sha256": "54d8e1799c3f49458516678d93bb0c4a50c9a2c0988a427e9cb56b30c589b5d1",
+          "shard": 5
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1275551/6.json.gz",
+          "bytes": 120685,
+          "sha256": "3fb956baa8784b2a84338e449cde011d50fc6a98eaa643efdb23eb4e46ac0d2d",
+          "shard": 6
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1275551/7.json.gz",
+          "bytes": 22414,
+          "sha256": "50fdf4b435cfdd727940b1a2025f3905fb2ce8419975ab2a24d2d05361ef8bd9",
+          "shard": 7
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1275551/8.json.gz",
+          "bytes": 108059,
+          "sha256": "2c016f4de27d82abfee793bc1cf3acb8dccac9ad56db12502a058a41c6530b3f",
+          "shard": 8
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1275551/9.json.gz",
+          "bytes": 28895,
+          "sha256": "b9d99730e3d95cbc52ce03958a84ce906a5dc06d60e1f3a23d13450524d856a5",
+          "shard": 9
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1275551/10.json.gz",
+          "bytes": 126582,
+          "sha256": "40b155e7969da0666c8dc5c0cbc8be2a40b2f0fe51789b9a7153893a1f0fe6e2",
+          "shard": 10
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1275551/11.json.gz",
+          "bytes": 28570,
+          "sha256": "cbf3019b275c8d0034ddda2c351892ddb42c1097295f632f5e43a73769a3b415",
+          "shard": 11
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1275551/12.json.gz",
+          "bytes": 116377,
+          "sha256": "d2f11051097e9cca76a55dabc3f63c1c4059646dec13ca050aeace279e296bb7",
+          "shard": 12
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1275551/13.json.gz",
+          "bytes": 18379,
+          "sha256": "28a51f2cc355bde3e53237a14eb6b15fe314286f7166a6f1442031f2d8e2ae08",
+          "shard": 13
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1275551/14.json.gz",
+          "bytes": 119248,
+          "sha256": "29e6084db0284c877d71293e599fccb287941afb87bd8a15abda2fe2a8b41d4b",
+          "shard": 14
+        },
+        {
+          "role": "routes",
+          "path": "data/routes/1275551/15.json.gz",
+          "bytes": 28716,
+          "sha256": "076f3333f9dea27fff49a67996994f49660754e12210a4c91e9f2e45183a88f1",
+          "shard": 15
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1275551/0.json.gz",
+          "bytes": 51751,
+          "sha256": "0d65497d0e1591a2b5ef760f385e9f644f094ac697a26504a82473819f1e4776",
+          "shard": 0
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1275551/1.json.gz",
+          "bytes": 10148,
+          "sha256": "e3aaec2f93ae20760c61a62597ce56e835a1c3c2a0c82e1b1065974c40efe9fe",
+          "shard": 1
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1275551/2.json.gz",
+          "bytes": 45287,
+          "sha256": "bc1ce59c9aac210c78e55df270db6d56b19f0a538b4537f5a51ac9f9b9b6eb1c",
+          "shard": 2
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1275551/3.json.gz",
+          "bytes": 10090,
+          "sha256": "6460c629bf56d15452bacdfad833b0b63f9f03549932691a7f05b2a366532613",
+          "shard": 3
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1275551/4.json.gz",
+          "bytes": 47133,
+          "sha256": "24997904f5a56643bf466966eb562995ebfe1bf5552351a736809b460cbd359e",
+          "shard": 4
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1275551/5.json.gz",
+          "bytes": 13167,
+          "sha256": "c8d97bc73a1e830c7ed6086413b94a30f01156962018a8d140c4029e96eb3039",
+          "shard": 5
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1275551/6.json.gz",
+          "bytes": 52180,
+          "sha256": "4fc69709466f4a5e451ff81ca47bd2ea3fca63f3d24dc6590d6a3e8bbef5453b",
+          "shard": 6
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1275551/7.json.gz",
+          "bytes": 8900,
+          "sha256": "41bc2fbd1138bd6d07d523ac3c14d159e657bd4d4c8419e5e94bbf140160078a",
+          "shard": 7
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1275551/8.json.gz",
+          "bytes": 45119,
+          "sha256": "ad0003d1e4b344f9b75d035b11003366fe2a0c73207596ce79e330061f983b02",
+          "shard": 8
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1275551/9.json.gz",
+          "bytes": 10156,
+          "sha256": "7d458e1c0e78b24233a4dcc55769a26d6a8f08ef4e23da2972262f262720922f",
+          "shard": 9
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1275551/10.json.gz",
+          "bytes": 53093,
+          "sha256": "8aec805e279a77601ee560b53fcb0987e9d247f066009832cbbe2300c2dd45df",
+          "shard": 10
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1275551/11.json.gz",
+          "bytes": 11823,
+          "sha256": "94480deb6f252bc28aa7ae5c2c9ce7cbf423e5b14cbbcfb5832bfebe196f61eb",
+          "shard": 11
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1275551/12.json.gz",
+          "bytes": 51949,
+          "sha256": "e50fbc1fe9346d1acdf84043e941e76e20a94bb42846352ff587b4351fd42cac",
+          "shard": 12
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1275551/13.json.gz",
+          "bytes": 7464,
+          "sha256": "f915c550124b2bbc6e0b477af8ab7f50bfa472988c03454bd4dc98f33a082a5c",
+          "shard": 13
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1275551/14.json.gz",
+          "bytes": 50437,
+          "sha256": "2ad812b32b85020771fbdc90295095329aa849c1c598aeb339c79d51eb7a97fd",
+          "shard": 14
+        },
+        {
+          "role": "isochrones",
+          "path": "data/isochrones/1275551/15.json.gz",
+          "bytes": 10185,
+          "sha256": "979324bd7a12e3d05831edc4c29b1e906e4cc56bd3b17ace0a8e35f377690336",
+          "shard": 15
+        }
+      ]
+    }
+  ]
+}
