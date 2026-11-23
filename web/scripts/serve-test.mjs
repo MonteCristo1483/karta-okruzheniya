@@ -3,7 +3,7 @@
 // подпапка → корень ветки gh-pages.
 // Использование: node scripts/serve-test.mjs <корень-где-лежит-подпапка> [порт]
 import { createServer } from "node:http";
-import { readFile } from "node:fs/promises";
+import { open, readFile, stat } from "node:fs/promises";
 import { join, normalize, extname } from "node:path";
 
 const root = process.argv[2] ?? ".";
@@ -30,13 +30,58 @@ createServer(async (req, res) => {
       res.writeHead(403).end("forbidden");
       return;
     }
-    const body = await readFile(file);
-    res.writeHead(200, {
+    const fileStat = await stat(file);
+    const headers = {
       "content-type": MIME[extname(file)] ?? "application/octet-stream",
-      "content-length": body.length,
+      "content-length": fileStat.size,
+      "accept-ranges": "bytes",
       "cache-control": "no-cache",
-    });
-    res.end(body);
+    };
+    const rangeHeader = req.headers.range;
+    if (rangeHeader) {
+      const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader);
+      if (!match || fileStat.size === 0) {
+        res.writeHead(416, { "content-range": `bytes */${fileStat.size}` }).end();
+        return;
+      }
+      let start = match[1] ? Number(match[1]) : 0;
+      let end = match[2] ? Number(match[2]) : fileStat.size - 1;
+      if (!match[1] && match[2]) {
+        const suffixLength = Number(match[2]);
+        start = Math.max(0, fileStat.size - suffixLength);
+        end = fileStat.size - 1;
+      }
+      if (
+        !Number.isSafeInteger(start) ||
+        !Number.isSafeInteger(end) ||
+        start >= fileStat.size ||
+        end < start
+      ) {
+        res.writeHead(416, { "content-range": `bytes */${fileStat.size}` }).end();
+        return;
+      }
+      end = Math.min(end, fileStat.size - 1);
+      const body = Buffer.alloc(end - start + 1);
+      const handle = await open(file, "r");
+      try {
+        await handle.read(body, 0, body.length, start);
+      } finally {
+        await handle.close();
+      }
+      res.writeHead(206, {
+        ...headers,
+        "content-length": body.length,
+        "content-range": `bytes ${start}-${end}/${fileStat.size}`,
+      });
+      res.end(body);
+      return;
+    }
+    res.writeHead(200, headers);
+    if (req.method === "HEAD") {
+      res.end();
+      return;
+    }
+    res.end(await readFile(file));
   } catch {
     res.writeHead(404).end("not found");
   }

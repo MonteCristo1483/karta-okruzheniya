@@ -1,9 +1,9 @@
 // Service Worker «Карта окружения».
-// Навигации (HTML) и данные (data/*.geojson, data/routes/*.json) —
+// Навигации (HTML) и данные (data/*) —
 // network-first: после деплоя пользователь сразу видит новую версию и
 // свежие данные, офлайн — из кэша. Хэшированные чанки —
 // stale-while-revalidate: открываются мгновенно и при сети, и из кэша.
-const CACHE_NAME = "karta-okruzheniya-v5";
+const CACHE_NAME = "karta-okruzheniya-v6";
 const BASE = "/karta-okruzheniya";
 
 // Стабильные файлы, кэшируемые при установке. JS/CSS-чанки hashed —
@@ -14,9 +14,6 @@ const PRECACHE = [
   BASE + "/manifest.json",
   BASE + "/icon.svg",
   BASE + "/maplibre-gl-worker.mjs",
-  BASE + "/data/presnya_buildings.geojson",
-  BASE + "/data/presnya_poi.geojson",
-  BASE + "/data/presnya_redzones.geojson",
 ];
 
 self.addEventListener("install", (event) => {

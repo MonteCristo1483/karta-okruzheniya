@@ -20,9 +20,11 @@ function normalize(value: string): string {
 export default function SearchBox({
   items,
   onSelect,
+  onSearch,
 }: {
   items: SearchItem[];
   onSelect: (id: number) => void;
+  onSearch: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -71,10 +73,14 @@ export default function SearchBox({
           <input
             value={query}
             onChange={(e) => {
+              onSearch();
               setQuery(e.target.value);
               setOpen(true);
             }}
-            onFocus={() => setOpen(true)}
+            onFocus={() => {
+              onSearch();
+              setOpen(true);
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && results[0]) {
                 e.preventDefault();
