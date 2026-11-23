@@ -1,97 +1,84 @@
 {
-  "generated_at": "2026-11-19",
+  "generated_at": "2026-11-23",
   "note": "Якоря регрессии. Независимые источники: входы метро (data.mos.ru/624) и стройка (data.mos.ru/2941). Магистраль — пока OSM (medium). Машиночитаемого реестра промзон на портале нет: industrial в факты не включён.",
   "facts": [
     {
-      "building_id": 264185702,
-      "address": null,
+      "building_id": 1601640236,
+      "address": "Шелепихинское шоссе, 6А с2",
       "factor": "transport",
       "type": "bonus",
       "expect": "positive",
-      "distance_m": 6.4,
+      "distance_m": 22.4,
       "tolerance_m": 0,
       "check_distance": false,
       "source": "data.mos.ru/624",
       "confidence": "high",
-      "retrieved_at": "2026-11-19"
+      "retrieved_at": "2026-11-23"
     },
     {
-      "building_id": 11886059,
-      "address": "Баррикадная улица, 21/34",
+      "building_id": 930872334,
+      "address": "Баррикадная улица, 2/1 с3",
       "factor": "transport",
       "type": "bonus",
       "expect": "positive",
-      "distance_m": 121.1,
+      "distance_m": 145.9,
       "tolerance_m": 0,
       "check_distance": false,
       "source": "data.mos.ru/624",
       "confidence": "high",
-      "retrieved_at": "2026-11-19"
+      "retrieved_at": "2026-11-23"
     },
     {
-      "building_id": 11460475,
-      "address": "улица Красная Пресня, 6/2 с2",
+      "building_id": 65445566,
+      "address": "2-й Красногвардейский проезд, 2",
       "factor": "transport",
       "type": "bonus",
       "expect": "positive",
-      "distance_m": 186.8,
+      "distance_m": 222.5,
       "tolerance_m": 0,
       "check_distance": false,
       "source": "data.mos.ru/624",
       "confidence": "high",
-      "retrieved_at": "2026-11-19"
+      "retrieved_at": "2026-11-23"
     },
     {
-      "building_id": 105834774,
-      "address": "Садовая-Кудринская улица, 9 с6",
+      "building_id": 75524826,
+      "address": "Шмитовский проезд, 46",
       "factor": "transport",
       "type": "bonus",
       "expect": "positive",
-      "distance_m": 264.5,
+      "distance_m": 273.1,
       "tolerance_m": 0,
       "check_distance": false,
       "source": "data.mos.ru/624",
       "confidence": "high",
-      "retrieved_at": "2026-11-19"
+      "retrieved_at": "2026-11-23"
     },
     {
-      "building_id": 310680700,
-      "address": null,
+      "building_id": 1836585586,
+      "address": "улица Ермакова Роща, 7А с3",
       "factor": "transport",
       "type": "bonus",
       "expect": "positive",
-      "distance_m": 311.6,
+      "distance_m": 315.6,
       "tolerance_m": 0,
       "check_distance": false,
       "source": "data.mos.ru/624",
       "confidence": "high",
-      "retrieved_at": "2026-11-19"
+      "retrieved_at": "2026-11-23"
     },
     {
-      "building_id": 105834802,
-      "address": "Садовая-Кудринская улица, 11 с4",
+      "building_id": 111006124,
+      "address": "улица Антонова-Овсеенко, 5 к6 с2",
       "factor": "transport",
       "type": "bonus",
       "expect": "positive",
-      "distance_m": 355.6,
+      "distance_m": 353.3,
       "tolerance_m": 0,
       "check_distance": false,
       "source": "data.mos.ru/624",
       "confidence": "high",
-      "retrieved_at": "2026-11-19"
-    },
-    {
-      "building_id": 170277108,
-      "address": null,
-      "factor": "transport",
-      "type": "bonus",
-      "expect": "zero",
-      "distance_m": 1358.8,
-      "tolerance_m": 0,
-      "check_distance": false,
-      "source": "data.mos.ru/624",
-      "confidence": "high",
-      "retrieved_at": "2026-11-19"
+      "retrieved_at": "2026-11-23"
     },
     {
       "building_id": 170274666,
@@ -104,7 +91,7 @@
       "check_distance": false,
       "source": "data.mos.ru/624",
       "confidence": "high",
-      "retrieved_at": "2026-11-19"
+      "retrieved_at": "2026-11-23"
     },
     {
       "building_id": 159163232,
@@ -117,85 +104,85 @@
       "check_distance": false,
       "source": "data.mos.ru/624",
       "confidence": "high",
-      "retrieved_at": "2026-11-19"
+      "retrieved_at": "2026-11-23"
     },
     {
-      "building_id": 170274280,
-      "address": null,
-      "factor": "transport",
-      "type": "bonus",
-      "expect": "zero",
-      "distance_m": 1219.7,
-      "tolerance_m": 0,
-      "check_distance": false,
-      "source": "data.mos.ru/624",
-      "confidence": "high",
-      "retrieved_at": "2026-11-19"
-    },
-    {
-      "building_id": 170273734,
-      "address": null,
-      "factor": "transport",
-      "type": "bonus",
-      "expect": "zero",
-      "distance_m": 1213.8,
-      "tolerance_m": 0,
-      "check_distance": false,
-      "source": "data.mos.ru/624",
-      "confidence": "high",
-      "retrieved_at": "2026-11-19"
-    },
-    {
-      "building_id": 92707866,
-      "address": "Столярный переулок, 3 к13",
+      "building_id": 1179935590,
+      "address": "улица Анатолия Живова, 8 с5",
       "factor": "road",
       "type": "penalty",
       "expect": "positive",
-      "distance_m": 190.0,
+      "distance_m": 190.5,
       "tolerance_m": 5.0,
       "check_distance": true,
       "source": "osm/linear",
       "confidence": "medium",
-      "retrieved_at": "2026-11-19"
+      "retrieved_at": "2026-11-23"
     },
     {
-      "building_id": 104913612,
-      "address": "Большая Никитская улица, 54 с2",
+      "building_id": 11255393,
+      "address": "Большой Предтеченский переулок, 6",
       "factor": "road",
       "type": "penalty",
       "expect": "positive",
-      "distance_m": 194.9,
+      "distance_m": 192.7,
       "tolerance_m": 5.0,
       "check_distance": true,
       "source": "osm/linear",
       "confidence": "medium",
-      "retrieved_at": "2026-11-19"
+      "retrieved_at": "2026-11-23"
     },
     {
-      "building_id": 577668574,
-      "address": null,
+      "building_id": 75524818,
+      "address": "Шелепихинское шоссе, 7 к2",
+      "factor": "road",
+      "type": "penalty",
+      "expect": "positive",
+      "distance_m": 197.7,
+      "tolerance_m": 5.0,
+      "check_distance": true,
+      "source": "osm/linear",
+      "confidence": "medium",
+      "retrieved_at": "2026-11-23"
+    },
+    {
+      "building_id": 511815420,
+      "address": "Леонтьевский переулок, 10 с2А",
       "factor": "road",
       "type": "penalty",
       "expect": "zero",
-      "distance_m": 200.7,
+      "distance_m": 200.9,
       "tolerance_m": 5.0,
       "check_distance": true,
       "source": "osm/linear",
       "confidence": "medium",
-      "retrieved_at": "2026-11-19"
+      "retrieved_at": "2026-11-23"
     },
     {
-      "building_id": 577668656,
-      "address": null,
+      "building_id": 151556612,
+      "address": "Большой Трёхгорный переулок, 6",
       "factor": "road",
       "type": "penalty",
       "expect": "zero",
-      "distance_m": 204.7,
+      "distance_m": 203.8,
       "tolerance_m": 5.0,
       "check_distance": true,
       "source": "osm/linear",
       "confidence": "medium",
-      "retrieved_at": "2026-11-19"
+      "retrieved_at": "2026-11-23"
+    },
+    {
+      "building_id": 77877768,
+      "address": "Рочдельская улица, 26/28 с4",
+      "factor": "road",
+      "type": "penalty",
+      "expect": "zero",
+      "distance_m": 208.0,
+      "tolerance_m": 5.0,
+      "check_distance": true,
+      "source": "osm/linear",
+      "confidence": "medium",
+      "retrieved_at": "2026-11-23"
     },
     {
       "building_id": 477513380,
@@ -208,33 +195,46 @@
       "check_distance": true,
       "source": "data.mos.ru/2941 + osm/zones",
       "confidence": "high",
-      "retrieved_at": "2026-11-19"
+      "retrieved_at": "2026-11-23"
     },
     {
-      "building_id": 68639942,
-      "address": "Большой Козихинский переулок, 5 с3",
+      "building_id": 2531553952,
+      "address": "2-я Звенигородская улица, 13 с22",
       "factor": "construction",
       "type": "penalty",
       "expect": "positive",
-      "distance_m": 74.9,
+      "distance_m": 67.0,
       "tolerance_m": 5.0,
       "check_distance": true,
       "source": "data.mos.ru/2941 + osm/zones",
       "confidence": "high",
-      "retrieved_at": "2026-11-19"
+      "retrieved_at": "2026-11-23"
     },
     {
-      "building_id": 62274242,
-      "address": "Малая Грузинская улица, 33",
+      "building_id": 104222096,
+      "address": "Спиридоньевский переулок, 8",
       "factor": "construction",
       "type": "penalty",
       "expect": "positive",
-      "distance_m": 85.5,
+      "distance_m": 244.5,
       "tolerance_m": 5.0,
       "check_distance": true,
       "source": "data.mos.ru/2941 + osm/zones",
       "confidence": "high",
-      "retrieved_at": "2026-11-19"
+      "retrieved_at": "2026-11-23"
+    },
+    {
+      "building_id": 505738202,
+      "address": "Большая Никитская улица, 14/2 с11",
+      "factor": "construction",
+      "type": "penalty",
+      "expect": "positive",
+      "distance_m": 56.7,
+      "tolerance_m": 5.0,
+      "check_distance": true,
+      "source": "data.mos.ru/2941 + osm/zones",
+      "confidence": "high",
+      "retrieved_at": "2026-11-23"
     }
   ]
 }
