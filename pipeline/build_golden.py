@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Сборка golden set фактов (Эталон-2, шаг 2).
 
-Выбирает дома стратифицированно и записывает проверяемые факты в
-`data/golden/facts.json`:
+Выбирает жилые дома (`is_home`) стратифицированно и записывает проверяемые
+факты в `data/golden/facts.json`:
 
   * транспорт «есть» — рядом официальный вход метро (data.mos.ru, набор 624);
   * транспорт «нет» — официального входа нет в радиусе 1.2 км;
@@ -40,6 +40,15 @@ TRANSPORT_FAR_M = 1200.0
 CONSTRUCTION_CONFIRM_M = 150.0
 ROAD_RADIUS = float(CONFIG["penalties"]["road"]["radius_m"])
 ROAD_BAND_M = 10.0
+# Целевая раскладка по факторам. Жилых домов, у которых нет официального
+# входа в радиусе 1.2 км, в районе меньше пяти (см. print в main), поэтому
+# недостающие факты добираются порогом магистрали и стройкой: их допуски
+# не меняются, а сумма остаётся 18.
+TOTAL_FACTS = 18
+NEAR_FACTS = 6
+FAR_FACTS = 5
+ROAD_FACTS = 4
+CONSTRUCTION_FACTS = 3
 
 
 def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -112,6 +121,7 @@ def load_buildings() -> list[dict]:
                    s.breakdown
             FROM buildings_presnya b
             JOIN scores s ON s.building_id = b.osm_id
+            WHERE b.is_home
         """)
         rows = []
         for osm_id, street, house, lat, lon, breakdown in cur.fetchall():
@@ -171,7 +181,8 @@ def main() -> int:
          and (transport_entry(b) or {}).get("bonus", 0) > 0],
         key=lambda b: b["official_m"],
     )
-    for building in spread(near, 6):
+    near_chosen = spread(near, NEAR_FACTS)
+    for building in near_chosen:
         add(building, "transport", "bonus", "positive", building["official_m"],
             "data.mos.ru/624", "high", False, 0)
 
@@ -181,9 +192,20 @@ def main() -> int:
          and (transport_entry(b) or {}).get("bonus", 0) == 0],
         key=lambda b: -b["official_m"],
     )
-    for building in spread(far, 5):
+    far_chosen = spread(far, FAR_FACTS)
+    print(f"Жилых домов под транспорт «нет»: {len(far_chosen)} из {FAR_FACTS} "
+          f"(кандидатов {len(far)})")
+    for building in far_chosen:
         add(building, "transport", "bonus", "zero", building["official_m"],
             "data.mos.ru/624", "high", False, 0)
+
+    road_facts = ROAD_FACTS
+    construction_facts = CONSTRUCTION_FACTS
+    missing = TOTAL_FACTS - (
+        len(near_chosen) + len(far_chosen) + road_facts + construction_facts)
+    if missing > 0:
+        road_facts += (missing + 1) // 2
+        construction_facts += missing // 2
 
     boundary = sorted(
         [b for b in buildings
@@ -192,7 +214,7 @@ def main() -> int:
          <= ROAD_BAND_M],
         key=lambda b: (penalty_entry(b, "road") or {})["distance_m"],
     )
-    for building in spread(boundary, 4):
+    for building in spread(boundary, road_facts):
         entry = penalty_entry(building, "road") or {}
         distance = float(entry["distance_m"])
         expect = "zero" if distance >= ROAD_RADIUS else "positive"
@@ -209,13 +231,13 @@ def main() -> int:
         [b for b in zones if b["official_construction_m"] <= CONSTRUCTION_CONFIRM_M],
         key=lambda b: b["official_construction_m"],
     )
-    chosen = spread(confirmed, 3)
-    if len(chosen) < 3:
+    chosen = spread(confirmed, construction_facts)
+    if len(chosen) < construction_facts:
         rest = sorted(
             [b for b in zones if b not in confirmed],
             key=lambda b: b["building_id"],
         )
-        chosen += spread(rest, 3 - len(chosen))
+        chosen += spread(rest, construction_facts - len(chosen))
     for building in chosen:
         entry = penalty_entry(building, "construction") or {}
         official_m = building.get("official_construction_m")
@@ -227,6 +249,12 @@ def main() -> int:
             "high" if confirmed_fact else "medium",
             True, 5.0,
         )
+
+    if len(facts) != TOTAL_FACTS:
+        print(f"Получено {len(facts)} фактов вместо {TOTAL_FACTS}: "
+              f"не хватает жилых домов под факторы. Допуски не ослабляем.",
+              file=sys.stderr)
+        return 1
 
     payload = {
         "generated_at": today,

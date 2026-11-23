@@ -8,7 +8,11 @@ on:
   workflow_dispatch:
     inputs:
       data_ref:
-        description: "Git branch containing data.zip"
+        description: "Git branch containing data.zip (fallback if the release is missing)"
+        required: false
+        default: "data"
+      data_tag:
+        description: "GitHub Release tag with the data.zip asset"
         required: false
         default: "data"
 
@@ -35,10 +39,25 @@ jobs:
       - name: Download data snapshot
         env:
           DATA_REF: ${{ inputs.data_ref || 'data' }}
+          DATA_TAG: ${{ inputs.data_tag || 'data' }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git fetch origin "$DATA_REF" --depth=1
           mkdir -p /tmp/data
-          git show "origin/$DATA_REF:data.zip" > /tmp/data/data.zip
+          if gh release view "$DATA_TAG" >/dev/null 2>&1; then
+            echo "Release '$DATA_TAG' найден — берём ассет data.zip"
+            gh release download "$DATA_TAG" --pattern data.zip \
+              --dir /tmp/data --clobber || {
+              echo "::error::не удалось скачать data.zip из Release '$DATA_TAG'"; exit 1; }
+          else
+            echo "::warning::Release '$DATA_TAG' нет — запасной путь: ветка '$DATA_REF'"
+            git fetch origin "$DATA_REF" --depth=1
+            git show "origin/$DATA_REF:data.zip" > /tmp/data/data.zip || {
+              echo "::error::data.zip нет ни в Release '$DATA_TAG', ни в ветке '$DATA_REF'"; exit 1; }
+          fi
+          test -s /tmp/data/data.zip || {
+            echo "::error::data.zip пустой — проверьте Release '$DATA_TAG' и ветку '$DATA_REF'"; exit 1; }
+          ls -l /tmp/data/data.zip
+          sha256sum /tmp/data/data.zip
           mkdir -p web/public/data
           if unzip -Z1 /tmp/data/data.zip | grep -q '^data/'; then
             unzip -q /tmp/data/data.zip -d web/public
