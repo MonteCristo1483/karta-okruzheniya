@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 import time
 import urllib.request
@@ -38,10 +39,18 @@ from pathlib import Path
 
 import osmium
 from shapely import set_precision
-from shapely.geometry import LineString, MultiLineString, Polygon, box, mapping
+from shapely.geometry import (
+    LineString,
+    MultiLineString,
+    Polygon,
+    box,
+    mapping,
+    shape as shapely_shape,
+)
 from shapely.geometry.base import BaseGeometry
 
 # Пресня + буфер: стартовый вид карты (pitch 60) целиком попадает в рамку.
+ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_BBOX = (37.47, 55.72, 37.59, 55.815)
 # Захватываем узлы с запасом, чтобы линии на краю рамки не рвались.
 NODE_MARGIN = 0.08
@@ -49,6 +58,8 @@ PRECISION = 0.00002  # ~2 м — на z16 это меньше пикселя
 ROAD_SIMPLIFY = 0.00004  # ~4 м — убирает дрожание GPS-точек OSM
 AREA_SIMPLIFY = 0.00005
 MIN_AREA = 1e-6  # ~0,7 га: мельче на обзорном масштабе не видно
+DOCKER_IMAGE = "karta-tippecanoe:2.79.0"
+LAYER_ORDER = {"landuse": 0, "green": 1, "water": 2, "waterway": 3, "river": 4, "road": 5}
 ROAD_CLASSES = {
     "motorway": "major",
     "motorway_link": "major",
@@ -78,11 +89,29 @@ def parse_args() -> argparse.Namespace:
     here = Path(__file__).resolve().parent.parent
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--pbf", type=Path, default=here / "data" / "raw" / "moscow.osm.pbf")
-    p.add_argument("--out", type=Path, default=here / "web" / "public" / "data" / "basemap.geojson")
+    p.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        help="geojson для режима одной рамки "
+        "(по умолчанию web/public/data/basemap.geojson)",
+    )
     p.add_argument(
         "--bbox",
-        default=",".join(str(v) for v in DEFAULT_BBOX),
-        help="min_lon,min_lat,max_lon,max_lat",
+        default=None,
+        help="min_lon,min_lat,max_lon,max_lat; без флага — Пресня "
+        "или bbox всех районов из data/districts при --pmtiles",
+    )
+    p.add_argument(
+        "--pmtiles",
+        action="store_true",
+        help="собрать PMTiles для bbox районов из data/districts/<id>/district.geojson",
+    )
+    p.add_argument(
+        "--districts-dir",
+        type=Path,
+        default=here / "data" / "districts",
+        help="каталог районов для --pmtiles",
     )
     p.add_argument(
         "--river-json",
@@ -276,13 +305,19 @@ def river_features(path: Path, clip_box: BaseGeometry) -> list[dict]:
 
 def main() -> int:
     args = parse_args()
-    min_lon, min_lat, max_lon, max_lat = (float(x) for x in args.bbox.split(","))
+    if args.pmtiles:
+        return build_pmtiles(args)
+
+    min_lon, min_lat, max_lon, max_lat = (
+        float(x) for x in (args.bbox or ",".join(str(v) for v in DEFAULT_BBOX)).split(",")
+    )
     clip_box = box(min_lon, min_lat, max_lon, max_lat)
 
+    out = args.out or (ROOT / "web" / "public" / "data" / "basemap.geojson")
     if not args.pbf.exists():
         print(f"Нет файла {args.pbf}", file=sys.stderr)
         return 1
-    args.out.parent.mkdir(parents=True, exist_ok=True)
+    out.parent.mkdir(parents=True, exist_ok=True)
 
     print(f"Проход 1/2: узлы в рамке {args.bbox} (+{NODE_MARGIN})…", flush=True)
     t0 = time.time()
@@ -303,16 +338,198 @@ def main() -> int:
     rivers = river_features(args.river_json, clip_box)
     print(f"  линий реки: {len(rivers)}", flush=True)
     ways.features.extend(rivers)
+    ways.features.sort(key=lambda f: LAYER_ORDER.get(f["properties"]["layer"], 9))
 
-    # Стабильный порядок: земля → зелень → вода → река → дороги.
-    order = {"landuse": 0, "green": 1, "water": 2, "waterway": 3, "river": 4, "road": 5}
-    ways.features.sort(key=lambda f: order.get(f["properties"]["layer"], 9))
+    write_geojson(out, ways.features)
+    size = out.stat().st_size
+    print(f"Готово: {out} — {size / 1024 / 1024:.2f} МБ", flush=True)
+    return 0
 
-    payload = {"type": "FeatureCollection", "features": ways.features}
-    text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-    args.out.write_text(text, encoding="utf-8")
-    size = args.out.stat().st_size
-    print(f"Готово: {args.out} — {size / 1024 / 1024:.2f} МБ", flush=True)
+
+# --------------------------------------------------------------------------- #
+# PMTiles по районам (V2-S2a)
+# --------------------------------------------------------------------------- #
+
+def _walk_coords(node, xs: list[float], ys: list[float]) -> None:
+    if node and isinstance(node[0], (int, float)):
+        xs.append(float(node[0]))
+        ys.append(float(node[1]))
+        return
+    for child in node:
+        _walk_coords(child, xs, ys)
+
+
+def geometry_bbox(geometry: dict) -> tuple[float, float, float, float]:
+    xs: list[float] = []
+    ys: list[float] = []
+    _walk_coords(geometry.get("coordinates") or [], xs, ys)
+    if not xs:
+        raise ValueError("empty geometry")
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def district_boxes(directory: Path) -> list[dict]:
+    boxes = []
+    for district_dir in sorted(directory.iterdir()):
+        path = district_dir / "district.geojson"
+        if not district_dir.is_dir() or not path.exists():
+            continue
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        feature = payload["features"][0]
+        bbox = geometry_bbox(feature["geometry"])
+        name = (feature.get("properties") or {}).get("name") or district_dir.name
+        summary = district_dir / "summary.json"
+        if summary.exists():
+            name = json.loads(summary.read_text(encoding="utf-8"))["district"]["name"]
+        boxes.append(
+            {"id": district_dir.name, "name": name, "bbox": bbox, "dir": district_dir}
+        )
+    return boxes
+
+
+def write_geojson(path: Path, features: list[dict]) -> None:
+    text = json.dumps(
+        {"type": "FeatureCollection", "features": features},
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    path.write_text(text, encoding="utf-8")
+
+
+def write_basemap_ndjson(features: list[dict], path: Path) -> None:
+    with path.open("w", encoding="utf-8", newline="\n") as fh:
+        for feature in features:
+            props = feature["properties"]
+            line = {
+                "type": "Feature",
+                "tippecanoe": {"layer": props["layer"]},
+                "properties": props,
+                "geometry": feature["geometry"],
+            }
+            fh.write(json.dumps(line, ensure_ascii=False, separators=(",", ":")))
+            fh.write("\n")
+
+
+def run_tippecanoe_basemap(ndjson: Path, out: Path) -> None:
+    rel_in = ndjson.relative_to(ROOT).as_posix()
+    rel_out = out.relative_to(ROOT).as_posix()
+    cmd = [
+        "docker", "run", "--rm",
+        "-v", f"{ROOT}:/work",
+        "-w", "/work",
+        DOCKER_IMAGE,
+        "--force",
+        "-o", f"/work/{rel_out}",
+        "-Z6", "-z16", "-d13",
+        "--drop-densest-as-needed",
+        "--no-tile-stats",
+        f"/work/{rel_in}",
+    ]
+    proc = subprocess.run(
+        cmd, capture_output=True, text=True, encoding="utf-8", errors="replace"
+    )
+    if proc.returncode != 0:
+        sys.stderr.write(proc.stdout[-4000:])
+        sys.stderr.write(proc.stderr[-4000:])
+        raise RuntimeError(f"tippecanoe failed with code {proc.returncode}")
+
+
+def clip_features(features: list[dict], clip_box: BaseGeometry) -> list[dict]:
+    clipped = []
+    for feature in features:
+        try:
+            geom = shapely_shape(feature["geometry"]).intersection(clip_box)
+            if geom.is_empty:
+                continue
+            geom = set_precision(geom, PRECISION)
+        except Exception:
+            continue
+        props = dict(feature["properties"])
+        for part in _parts(geom):
+            clipped.append(
+                {"type": "Feature", "properties": props, "geometry": mapping(part)}
+            )
+    return clipped
+
+
+def human(size: int) -> str:
+    return f"{size / 1024:.0f} KiB" if size < 1 << 20 else f"{size / (1 << 20):.2f} MiB"
+
+
+def build_pmtiles(args: argparse.Namespace) -> int:
+    boxes = district_boxes(args.districts_dir.resolve())
+    if not boxes:
+        raise SystemExit(f"Нет районов в {args.districts_dir}")
+    union = (
+        min(item["bbox"][0] for item in boxes),
+        min(item["bbox"][1] for item in boxes),
+        max(item["bbox"][2] for item in boxes),
+        max(item["bbox"][3] for item in boxes),
+    )
+    min_lon, min_lat, max_lon, max_lat = union
+    clip_box = box(min_lon, min_lat, max_lon, max_lat)
+    if not args.pbf.exists():
+        print(f"Нет файла {args.pbf}", file=sys.stderr)
+        return 1
+
+    print(f"PMTiles для {len(boxes)} районов, общая рамка "
+          f"{min_lon:.4f},{min_lat:.4f},{max_lon:.4f},{max_lat:.4f}", flush=True)
+    print(f"Проход 1/2: узлы (+{NODE_MARGIN})…", flush=True)
+    t0 = time.time()
+    nodes = NodeCollector(
+        (min_lon - NODE_MARGIN, min_lat - NODE_MARGIN,
+         max_lon + NODE_MARGIN, max_lat + NODE_MARGIN)
+    )
+    nodes.apply_file(str(args.pbf))
+    print(f"  узлов: {len(nodes.coords):,} за {time.time() - t0:.0f} с", flush=True)
+
+    print("Проход 2/2: улицы, вода, зелень…", flush=True)
+    t0 = time.time()
+    ways = WayCollector(nodes.coords, clip_box)
+    ways.apply_file(str(args.pbf))
+    print(f"  объектов: {len(ways.features):,} за {time.time() - t0:.0f} с", flush=True)
+
+    print("Река: осевая линия Москвы-реки…", flush=True)
+    try:
+        rivers = river_features(args.river_json, clip_box)
+    except Exception as exc:  # сеть недоступна — подложка без реки, не блокируем
+        print(f"  предупреждение: река не загружена ({exc})", flush=True)
+        rivers = []
+    print(f"  линий реки: {len(rivers)}", flush=True)
+    ways.features.extend(rivers)
+
+    total_geojson = total_pmtiles = 0
+    rows = []
+    for item in boxes:
+        bbox = item["bbox"]
+        features = clip_features(ways.features, box(*bbox))
+        features.sort(key=lambda f: LAYER_ORDER.get(f["properties"]["layer"], 9))
+        out_dir = item["dir"]
+        geojson_path = out_dir / "basemap.geojson"
+        pmtiles_path = out_dir / "basemap.pmtiles"
+        write_geojson(geojson_path, features)
+        staged = out_dir / ".basemap.ndjson"
+        try:
+            write_basemap_ndjson(features, staged)
+            run_tippecanoe_basemap(staged, pmtiles_path)
+        finally:
+            staged.unlink(missing_ok=True)
+        gj = geojson_path.stat().st_size
+        pm = pmtiles_path.stat().st_size
+        total_geojson += gj
+        total_pmtiles += pm
+        rows.append((item["id"], item["name"], len(features), gj, pm))
+        print(
+            f"  {item['id']} {item['name']}: {len(features):,} объектов, "
+            f"geojson {human(gj)}, pmtiles {human(pm)} "
+            f"({pm / gj * 100:.0f}%)",
+            flush=True,
+        )
+
+    print(f"Итого: geojson {human(total_geojson)}, pmtiles {human(total_pmtiles)} "
+          f"({total_pmtiles / max(1, total_geojson) * 100:.0f}%)")
+    avg = total_pmtiles / len(rows)
+    print(f"Экстраполяция на 125 районов: {human(int(avg * 125))} (среднее x 125)")
     return 0
 
 
