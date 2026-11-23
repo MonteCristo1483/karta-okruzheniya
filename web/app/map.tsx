@@ -89,6 +89,11 @@ const MAP_THEMES = {
     roofHigh: "#c9e0d6",
     roofVhigh: "#add8c3",
     roofDim: "#d8dfea",
+    // Нежилые здания: холодный стальной контекст в гамме подложки (на z >= 15.5 приглушён к land).
+    otherOverview: "#a4b5c9",
+    other: "#aebfd2",
+    roofOtherOverview: "#b5c5d8",
+    roofOther: "#bac9dc",
     selected: "#38b874",
     // Крыша выбранного дома — цвет его ступени (на 5% светлее), не мятная.
     selectedRoof: "#dfd7b8",
@@ -146,6 +151,11 @@ const MAP_THEMES = {
     roofHigh: "#44716e",
     roofVhigh: "#4a8066",
     roofDim: "#2a3340",
+    // Нежилые здания в тёмной теме: спокойный тёмно-сланцевый контекст без окон.
+    otherOverview: "#2c3646",
+    other: "#26303e",
+    roofOtherOverview: "#354254",
+    roofOther: "#2f3b4c",
     selected: "#5ec98f",
     selectedRoof: "#586a84",
     // Тёмная тема: благородный сланцевый фасад выбранного дома (ярче обычных домов и dim).
@@ -229,73 +239,80 @@ const BUILDING_SHADOW_LAYERS = [
 // null = данных мало, фолбэк на старый step 5/7.
 type ColorStops = { t1: number; t2: number; t3: number; t4: number; mid: number };
 
+const DEFAULT_COLOR_STOPS: ColorStops = {
+  t1: 6.1,
+  t2: 6.8,
+  t3: 7.4,
+  t4: 7.9,
+  mid: 7.1,
+};
+
+const NON_HOME_DIM_MIN_ZOOM = 15.5;
+
+const isNonHomeBuildingExpr = () => [
+  "any",
+  ["==", ["get", "is_home"], false],
+  ["!", ["has", "index"]],
+];
+
 const stepColorsExpr = (p: Palette, s: ColorStops | null, lighten = 0) => {
+  const stops = s ?? DEFAULT_COLOR_STOPS;
   const tone = (c: string) => (lighten > 0 ? mixHex(c, "#ffffff", lighten) : c);
-  return s
-    ? [
-        "step",
-        ["coalesce", ["get", "index"], s.mid],
-        tone(p.vlow),
-        s.t1,
-        tone(p.low),
-        s.t2,
-        tone(p.mid),
-        s.t3,
-        tone(p.high),
-        s.t4,
-        tone(p.vhigh),
-      ]
-    : ["step", ["coalesce", ["get", "index"], 5], tone(p.low), 5, tone(p.mid), 7, tone(p.high)];
+  return [
+    "step",
+    ["coalesce", ["get", "index"], stops.mid],
+    tone(p.vlow),
+    stops.t1,
+    tone(p.low),
+    stops.t2,
+    tone(p.mid),
+    stops.t3,
+    tone(p.high),
+    stops.t4,
+    tone(p.vhigh),
+  ];
 };
 
 const selectedStepColorsExpr = (p: Palette, s: ColorStops | null, lighten = 0) => {
+  const stops = s ?? DEFAULT_COLOR_STOPS;
   const tone = (c: string) => (lighten > 0 ? mixHex(c, "#ffffff", lighten) : c);
-  return s
-    ? [
-        "step",
-        ["coalesce", ["get", "index"], s.mid],
-        tone(p.selectedVlow),
-        s.t1,
-        tone(p.selectedLow),
-        s.t2,
-        tone(p.selectedMid),
-        s.t3,
-        tone(p.selectedHigh),
-        s.t4,
-        tone(p.selectedVhigh),
-      ]
-    : [
-        "step",
-        ["coalesce", ["get", "index"], 5],
-        tone(p.selectedLow),
-        5,
-        tone(p.selectedMid),
-        7,
-        tone(p.selectedHigh),
-      ];
+  return [
+    "step",
+    ["coalesce", ["get", "index"], stops.mid],
+    tone(p.selectedVlow),
+    stops.t1,
+    tone(p.selectedLow),
+    stops.t2,
+    tone(p.selectedMid),
+    stops.t3,
+    tone(p.selectedHigh),
+    stops.t4,
+    tone(p.selectedVhigh),
+  ];
 };
 
-const roofStepColorsExpr = (p: Palette, s: ColorStops | null) =>
-  s
-    ? [
-        "step",
-        ["coalesce", ["get", "index"], s.mid],
-        p.roofVlow,
-        s.t1,
-        p.roofLow,
-        s.t2,
-        p.roofMid,
-        s.t3,
-        p.roofHigh,
-        s.t4,
-        p.roofVhigh,
-      ]
-    : ["step", ["coalesce", ["get", "index"], 5], p.roofLow, 5, p.roofMid, 7, p.roofHigh];
+const roofStepColorsExpr = (p: Palette, s: ColorStops | null) => {
+  const stops = s ?? DEFAULT_COLOR_STOPS;
+  return [
+    "step",
+    ["coalesce", ["get", "index"], stops.mid],
+    p.roofVlow,
+    stops.t1,
+    p.roofLow,
+    stops.t2,
+    p.roofMid,
+    stops.t3,
+    p.roofHigh,
+    stops.t4,
+    p.roofVhigh,
+  ];
+};
 
-const buildingColorExpr = (
+const buildingColorAtZoomExpr = (
   p: Palette,
   s: ColorStops | null,
-  selectedColor: string | null = null,
+  selectedColor: string | null,
+  otherColor: string,
 ) => {
   const stepExpr = stepColorsExpr(p, s, 0);
   const selectedStepExpr = selectedStepColorsExpr(p, s, 0);
@@ -303,26 +320,52 @@ const buildingColorExpr = (
     "case",
     ["to-boolean", ["feature-state", "selected"]],
     selectedColor ?? selectedStepExpr,
-    ["to-boolean", ["feature-state", "inactive"]],
-    p.dim,
+    isNonHomeBuildingExpr(),
+    otherColor,
     stepExpr,
-  ] as never;
+  ];
 };
 
-// Крыши обычных домов — почти нейтральные светлые (light) или тон ступени (dark);
-// у выбранного дома — яркий цвет его ступени (на 5% светлее), без мятной плиты.
-const buildingRoofColorExpr = (p: Palette, s: ColorStops | null) => {
+const buildingColorExpr = (
+  p: Palette,
+  s: ColorStops | null,
+  selectedColor: string | null = null,
+) =>
+  [
+    "step",
+    ["zoom"],
+    buildingColorAtZoomExpr(p, s, selectedColor, p.otherOverview),
+    NON_HOME_DIM_MIN_ZOOM,
+    buildingColorAtZoomExpr(p, s, selectedColor, p.other),
+  ] as never;
+
+// Крыши жилых домов — 5 ступеней V4b2a; нежилых — холодный нейтральный тон
+// (с дополнительным приглушением на z >= 15.5); у выбранного — яркая ступень.
+const buildingRoofColorAtZoomExpr = (
+  p: Palette,
+  s: ColorStops | null,
+  roofOtherColor: string,
+) => {
   const roofStepExpr = roofStepColorsExpr(p, s);
   const selectedRoofStepExpr = selectedStepColorsExpr(p, s, 0.05);
   return [
     "case",
     ["to-boolean", ["feature-state", "selected"]],
     selectedRoofStepExpr,
-    ["to-boolean", ["feature-state", "inactive"]],
-    p.roofDim,
+    isNonHomeBuildingExpr(),
+    roofOtherColor,
     roofStepExpr,
-  ] as never;
+  ];
 };
+
+const buildingRoofColorExpr = (p: Palette, s: ColorStops | null) =>
+  [
+    "step",
+    ["zoom"],
+    buildingRoofColorAtZoomExpr(p, s, p.roofOtherOverview),
+    NON_HOME_DIM_MIN_ZOOM,
+    buildingRoofColorAtZoomExpr(p, s, p.roofOther),
+  ] as never;
 
 // Сплошной полигон крыши, слегка расширенный наружу (~1.5 px на текущем зуме):
 // рисуется на 5 см ниже основной крыши дома (buildings-selected-roof), поэтому
@@ -648,17 +691,13 @@ function resolveSelectedBodyColor(
 ): string {
   const p = MAP_THEMES[theme];
   if (theme === "dark") return p.selectedBody;
+  const stops = s ?? DEFAULT_COLOR_STOPS;
   const idx =
-    typeof indexVal === "number" && Number.isFinite(indexVal) ? indexVal : (s?.mid ?? 5);
-  if (!s) {
-    if (idx < 5) return p.selectedLow;
-    if (idx < 7) return p.selectedMid;
-    return p.selectedHigh;
-  }
-  if (idx < s.t1) return p.selectedVlow;
-  if (idx < s.t2) return p.selectedLow;
-  if (idx < s.t3) return p.selectedMid;
-  if (idx < s.t4) return p.selectedHigh;
+    typeof indexVal === "number" && Number.isFinite(indexVal) ? indexVal : stops.mid;
+  if (idx < stops.t1) return p.selectedVlow;
+  if (idx < stops.t2) return p.selectedLow;
+  if (idx < stops.t3) return p.selectedMid;
+  if (idx < stops.t4) return p.selectedHigh;
   return p.selectedVhigh;
 }
 
@@ -1093,7 +1132,13 @@ const FACADE_SELECTED_STEPS = [
 ] as const;
 type FacadeStep = (typeof FACADE_STEPS)[number];
 type FacadeSelectedStep = (typeof FACADE_SELECTED_STEPS)[number];
-type FacadeVariant = FacadeStep | "dim" | "selected" | FacadeSelectedStep;
+type FacadeVariant =
+  | FacadeStep
+  | "dim"
+  | "other"
+  | "other-overview"
+  | "selected"
+  | FacadeSelectedStep;
 type FacadeLod = "flat" | "subtle" | "coarse" | "fine";
 
 function facadeLodForZoom(zoom: number): FacadeLod {
@@ -1144,9 +1189,10 @@ function makeFacadeImage(
   lod: FacadeLod,
 ): ImageData {
   const isSelected = variant === "selected" || variant.startsWith("selected-");
-  // Обычные дома в светлой теме на всех зумах и любые дома при zoom < 15.4 ("flat") —
-  // чистая плоская база цвета ступени без швов, рамок и окон.
-  const isFlatBase = lod === "flat" || (theme === "light" && !isSelected);
+  const isNonHome = variant === "other" || variant === "other-overview";
+  // Обычные дома в светлой теме на всех зумах, нежилые здания в обеих темах
+  // и любые дома при zoom < 15.4 ("flat") — чистая плоская база без швов и окон.
+  const isFlatBase = lod === "flat" || isNonHome || (theme === "light" && !isSelected);
   const size = isFlatBase ? FACADE_FLAT_SIZE : FACADE_SIZE;
   const canvas = document.createElement("canvas");
   canvas.width = size;
@@ -1423,22 +1469,24 @@ const selectedFacadePatternExpr = (
   lod: FacadeLod,
 ) => {
   if (theme === "dark") return facadeImageName("dark", "selected", lod) as never;
+  const stops = s ?? DEFAULT_COLOR_STOPS;
   return [
     "step",
-    ["coalesce", ["get", "index"], s?.mid ?? 5],
+    ["coalesce", ["get", "index"], stops.mid],
     facadeImageName("light", "selected-vlow", lod),
-    s?.t1 ?? 5,
+    stops.t1,
     facadeImageName("light", "selected-low", lod),
-    s?.t2 ?? 7,
+    stops.t2,
     facadeImageName("light", "selected-mid", lod),
-    s?.t3 ?? 9,
+    stops.t3,
     facadeImageName("light", "selected-high", lod),
-    s?.t4 ?? 11,
+    stops.t4,
     facadeImageName("light", "selected-vhigh", lod),
   ] as never;
 };
 
-// Тот же step, что и у цвета: индексы → ступени.
+// Тот же step, что и у цвета: индексы → ступени для жилых, нейтральный
+// контекстный вариант (без окон) — для нежилых.
 // fill-extrusion-pattern в MapLibre не поддерживает feature-state, поэтому
 // состояние выбора передаём явно через activeSelectedId.
 const facadePatternExpr = (
@@ -1446,28 +1494,37 @@ const facadePatternExpr = (
   s: ColorStops | null,
   lod: FacadeLod,
   activeSelectedId: number | null = null,
+  dimNonHome = false,
 ) => {
+  const stops = s ?? DEFAULT_COLOR_STOPS;
+  const otherVariant: FacadeVariant = dimNonHome ? "other" : "other-overview";
   const stepExpr = [
     "step",
-    ["coalesce", ["get", "index"], s?.mid ?? 5],
+    ["coalesce", ["get", "index"], stops.mid],
     facadeImageName(theme, "vlow", lod),
-    s?.t1 ?? 5,
+    stops.t1,
     facadeImageName(theme, "low", lod),
-    s?.t2 ?? 7,
+    stops.t2,
     facadeImageName(theme, "mid", lod),
-    s?.t3 ?? 9,
+    stops.t3,
     facadeImageName(theme, "high", lod),
-    s?.t4 ?? 11,
+    stops.t4,
     facadeImageName(theme, "vhigh", lod),
   ];
+  const homeOrOtherExpr = [
+    "case",
+    isNonHomeBuildingExpr(),
+    facadeImageName(theme, otherVariant, lod),
+    stepExpr,
+  ];
   if (activeSelectedId === null) {
-    return stepExpr as never;
+    return homeOrOtherExpr as never;
   }
   return [
     "case",
     ["==", ["coalesce", ["to-number", ["get", "id"]], ["id"]], activeSelectedId],
     selectedFacadePatternExpr(theme, s, lod),
-    facadeImageName(theme, "dim", lod),
+    homeOrOtherExpr,
   ] as never;
 };
 
@@ -2075,6 +2132,10 @@ export default function Map() {
   const [searchItems, setSearchItems] = useState<SearchItem[]>([]);
   const [deepLinkError, setDeepLinkError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [nonHomeNotice, setNonHomeNotice] = useState<{
+    point: [number, number];
+    status: "idle" | "loading" | "error" | "far";
+  } | null>(null);
   const [theme, setTheme] = useState<Theme>("light"); // стабильно для SSR/гидрации
   const [mounted, setMounted] = useState(false);
   const [fatalError, setFatalError] = useState<string | null>(null);
@@ -2083,6 +2144,7 @@ export default function Map() {
   const deselectRef = useRef<(() => void) | null>(null);
   const selectRef = useRef<((id: number) => void) | null>(null);
   const loadSearchIndexRef = useRef<(() => Promise<void>) | null>(null);
+  const findNearestHomeRef = useRef<((point: [number, number]) => Promise<void>) | null>(null);
   const applyVisibilityRef = useRef<((v: Visibility) => void) | null>(null);
   const applyThemeRef = useRef<((t: Theme) => void) | null>(null);
   const selectedRef = useRef<SelectedBuilding | null>(null);
@@ -2219,10 +2281,12 @@ export default function Map() {
       let metaById: Record<number, BuildingMeta> = {};
       let allIds: number[] = [];
       let buildingCenters: Record<number, [number, number]> = {};
-      let colorStops: ColorStops | null = null;
-      let indexPromise: Promise<void> | null = null;
+      const colorStops: ColorStops = DEFAULT_COLOR_STOPS;
+      let searchIndexData: CompactSearchIndex | null = null;
+      let indexPromise: Promise<CompactSearchIndex> | null = null;
 
-      const loadSearchIndex = (): Promise<void> => {
+      const ensureSearchIndex = (): Promise<CompactSearchIndex> => {
+        if (searchIndexData) return Promise.resolve(searchIndexData);
         if (indexPromise) return indexPromise;
         indexPromise = (async () => {
           const index = await fetchGzipJson<CompactSearchIndex>(INDEX_URL);
@@ -2241,6 +2305,7 @@ export default function Map() {
             throw new Error("Компактный индекс пуст или повреждён");
           }
 
+          searchIndexData = index;
           buildingMeta = index.ids.map((id, i) => {
             const meta: BuildingMeta = {
               id,
@@ -2267,13 +2332,21 @@ export default function Map() {
                 })),
             );
           }
+          return index;
         })().catch((error) => {
           indexPromise = null;
-          console.error("Индекс поиска не загрузился:", error);
-          showNotice("Не удалось загрузить поиск. Попробуйте ещё раз.");
+          throw error;
         });
         return indexPromise;
       };
+
+      const loadSearchIndex = (): Promise<void> =>
+        ensureSearchIndex()
+          .then(() => undefined)
+          .catch((error) => {
+            console.error("Индекс поиска не загрузился:", error);
+            showNotice("Не удалось загрузить поиск. Попробуйте ещё раз.");
+          });
       loadSearchIndexRef.current = loadSearchIndex;
 
       try {
@@ -3105,6 +3178,8 @@ export default function Map() {
             }
           }
           add("dim", p.dim, lod);
+          add("other", p.other, lod);
+          add("other-overview", p.otherOverview, lod);
           add("selected", p.selectedBody, lod);
         }
       };
@@ -3338,19 +3413,23 @@ export default function Map() {
       // а подменяем набор картинок.
       let selectedId: number | null = null;
       let currentFacadeLod: FacadeLod | null = null;
+      let currentNonHomeDim: boolean | null = null;
       let selectedBodyRevealPending = false;
       const syncFacades = (t: Theme) => {
         if (!map || !map.getLayer("buildings")) return;
         refreshSelectedRoofEdge();
-        const lod = facadeLodForZoom(map.getZoom());
+        const zoom = map.getZoom();
+        const lod = facadeLodForZoom(zoom);
+        const dimNonHome = zoom >= NON_HOME_DIM_MIN_ZOOM;
         syncSelectedWindowTheme(t);
-        if (lod === currentFacadeLod) return;
+        if (lod === currentFacadeLod && dimNonHome === currentNonHomeDim) return;
         currentFacadeLod = lod;
+        currentNonHomeDim = dimNonHome;
         addFacadeImages(t);
         map.setPaintProperty(
           "buildings",
           "fill-extrusion-pattern",
-          facadePatternExpr(t, colorStops, lod, selectedId),
+          facadePatternExpr(t, colorStops, lod, selectedId, dimNonHome),
         );
         map.setLayoutProperty("buildings-roof", "visibility", "visible");
         if (
@@ -3435,6 +3514,7 @@ export default function Map() {
         addFacadeImages(t);
         syncSelectedWindowTheme(t);
         currentFacadeLod = null;
+        currentNonHomeDim = null;
         syncFacades(t);
         for (const s of BUILDING_SHADOW_LAYERS) {
           if (map.getLayer(s.id)) {
@@ -3542,6 +3622,7 @@ export default function Map() {
       const applySelection = (activateSelected = true) => {
         if (!map || !map.getSource("buildings")) return;
         currentFacadeLod = null;
+        currentNonHomeDim = null;
         syncFacades(themeRef.current);
         // Векторному источнику нужен sourceLayer и для feature-state.
         const stateSource = tileMode
@@ -3918,6 +3999,7 @@ export default function Map() {
         routesRef.current = null;
         applySelection();
         updateSelected(null);
+        setNonHomeNotice(null);
         setGlow(null);
         setSelectedBody([]);
         setSelectedBodyLayerVisible(true);
@@ -4049,6 +4131,7 @@ export default function Map() {
       const selectById = (
         id: number,
         clickedFeature?: maplibregl.GeoJSONFeature,
+        clickedPoint?: [number, number],
       ) => {
         const existingMeta = metaById[id];
         const feature = clickedFeature ?? findBuildingFeature(id);
@@ -4093,11 +4176,18 @@ export default function Map() {
           rawIsHome === "true";
         if (!isHome) {
           if (selectedId !== null) deselect();
-          showNotice(
-            "Нежилое здание. Индекс окружения считается только для жилых домов",
-          );
+          const point = clickedPoint ?? center;
+          if (point) {
+            setNotice(null);
+            setNonHomeNotice({ point, status: "idle" });
+          } else {
+            showNotice(
+              "Нежилое здание. Индекс окружения считается только для жилых домов",
+            );
+          }
           return;
         }
+        setNonHomeNotice(null);
         if (!center) {
           setDeepLinkError("Не удалось определить положение здания.");
           return;
@@ -4161,6 +4251,43 @@ export default function Map() {
         flyToBuilding(center, id, token);
       };
       selectRef.current = selectById;
+      findNearestHomeRef.current = async (point: [number, number]) => {
+        let index = searchIndexData;
+        if (!index) {
+          setNonHomeNotice((curr) =>
+            curr ? { ...curr, status: "loading" } : null,
+          );
+          try {
+            index = await ensureSearchIndex();
+          } catch (error) {
+            console.error("Индекс для поиска ближайшего дома не загрузился:", error);
+            if (!cancelled) {
+              setNonHomeNotice((curr) =>
+                curr ? { ...curr, status: "error" } : null,
+              );
+            }
+            return;
+          }
+        }
+        if (cancelled) return;
+        let bestId: number | null = null;
+        let bestDist = Infinity;
+        for (let i = 0; i < index.ids.length; i++) {
+          const d = haversineM([index.lon[i], index.lat[i]], point);
+          if (d < bestDist) {
+            bestDist = d;
+            bestId = index.ids[i];
+          }
+        }
+        if (bestId === null || bestDist > 200) {
+          setNonHomeNotice((curr) =>
+            curr ? { ...curr, status: "far" } : null,
+          );
+          return;
+        }
+        setNonHomeNotice(null);
+        selectById(bestId);
+      };
 
       map.on("load", () => {
         refreshBasemapDecorations();
@@ -4223,7 +4350,7 @@ export default function Map() {
           return;
         }
 
-        selectById(id, feats[0]);
+        selectById(id, feats[0], [e.lngLat.lng, e.lngLat.lat]);
       });
 
       map.on("mousemove", (e) => {
@@ -4281,6 +4408,35 @@ export default function Map() {
               </svg>
             </button>
           </div>
+        </div>
+      )}
+      {nonHomeNotice && (
+        <div
+          className="absolute bottom-6 left-1/2 z-20 w-[min(92vw,420px)] -translate-x-1/2 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800 shadow-xl dark:bg-amber-950/85 dark:text-amber-200"
+          role="status"
+        >
+          <div>
+            Нежилое здание. Индекс окружения считается только для жилых домов
+          </div>
+          {nonHomeNotice.status === "far" ? (
+            <div className="mt-2 text-xs font-semibold text-amber-900 dark:text-amber-100">
+              Рядом нет жилых домов
+            </div>
+          ) : (
+            <button
+              type="button"
+              disabled={
+                nonHomeNotice.status === "loading" ||
+                nonHomeNotice.status === "error"
+              }
+              onClick={() => void findNearestHomeRef.current?.(nonHomeNotice.point)}
+              className="mt-2.5 inline-flex items-center justify-center rounded-xl bg-amber-800 px-3.5 py-1.5 text-xs font-semibold text-amber-50 shadow-sm transition hover:bg-amber-900 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-amber-200 dark:text-amber-950 dark:hover:bg-amber-100"
+            >
+              {nonHomeNotice.status === "loading"
+                ? "ищу…"
+                : "Ближайший жилой дом"}
+            </button>
+          )}
         </div>
       )}
       {notice && (
