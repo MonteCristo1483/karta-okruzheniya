@@ -258,6 +258,10 @@ const BUILDING_GROW_MAX_ZOOM = 15;
 const BUILDING_SHADOW_MIN_ZOOM = 16;
 // Декоративные деревья — только с z15 (на z13–15 это лишние круги).
 const TREE_MIN_ZOOM = 15;
+// Подписи улиц/воды/парков — с z12.6 (см. rebuildLabels). Ниже этого зума
+// декорации подложки не видны, значит их кандидатов можно не собирать:
+// именно сбор (querySourceFeatures по всей подложке) ронял обзор z10–11.
+const DECOR_MIN_ZOOM = 12.6;
 
 const buildingExtrusionHeightExpr = () =>
   [
@@ -1628,10 +1632,13 @@ function basemapLayers(p: Palette): maplibregl.LayerSpecification[] {
       paint: { "background-color": p.land },
     },
     {
+      // BM-LOW: на обзоре (z10–11) плоские серые зоны почти не читаются, а
+      // полигонов тысячи — рисуем landuse с z12, как раньше.
       id: "bm-landuse",
       type: "fill",
       source: "basemap",
       "source-layer": "landuse",
+      minzoom: 12,
       filter: BM_LAYER("landuse"),
       paint: { "fill-color": p.landUse, "fill-opacity": 0.75 },
     },
@@ -1682,7 +1689,9 @@ function basemapLayers(p: Palette): maplibregl.LayerSpecification[] {
       paint: {
         "fill-color": p.water,
         "fill-outline-color": p.waterLine,
-        "fill-antialias": true,
+        // BM-LOW: антиалиасинг кромки на обзоре не виден — ниже z13
+        // выключен, с z13 как раньше.
+        "fill-antialias": ["step", ["zoom"], false, 13, true],
       },
     },
     {
@@ -1696,7 +1705,9 @@ function basemapLayers(p: Palette): maplibregl.LayerSpecification[] {
       paint: {
         "line-color": p.water,
         "line-width": ["interpolate", ["linear"], ["zoom"], 12, 6, 14, 24, 15, 48, 16, 96, 17, 190],
-        "line-blur": 1.5,
+        // BM-LOW: ниже z13 река тонкая, сглаживание кромки не видно — blur 0,
+        // с z13 прежние 1.5.
+        "line-blur": ["step", ["zoom"], 0, 13, 1.5],
       },
     },
     {
@@ -3523,7 +3534,7 @@ export default function Map() {
         labelMarkers = [];
         const p = MAP_THEMES[themeRef.current];
         const zoom = map.getZoom();
-        if (zoom < 12.6) return;
+        if (zoom < DECOR_MIN_ZOOM) return;
         const size = zoom >= 16 ? 13.5 : zoom >= 14.2 ? 12.5 : 11.5;
         const width = map.getContainer().clientWidth;
         const height = map.getContainer().clientHeight;
@@ -3618,6 +3629,18 @@ export default function Map() {
         requestAnimationFrame(() => {
           basemapRefreshPending = false;
           if (cancelled || !map) return;
+          // BM-LOW: ниже DECOR_MIN_ZOOM подписи и деревья не рисуются вовсе,
+          // а сбор кандидатов — самое дорогое в кадре: querySourceFeatures по
+          // всей подложке на обзоре отдаёт ~85 тыс. фич и ~20 МБ geometry-JSON,
+          // и это повторяется на каждый moveend/idle/загрузку тайла. Пропускаем.
+          if (map.getZoom() < DECOR_MIN_ZOOM) {
+            labelCandidates = [];
+            (map.getSource("trees") as maplibregl.GeoJSONSource | null)?.setData({
+              type: "FeatureCollection",
+              features: [],
+            } as never);
+            return;
+          }
           const seen = new Set<string>();
           const features: GFeature<BasemapProps>[] = [];
           for (const sourceLayer of [
