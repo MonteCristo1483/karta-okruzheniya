@@ -21,7 +21,7 @@ ASCII-папки.
     water    — полигоны воды (пруды, озёра)
     river    — осевая линия Москвы-реки (рисуется широкой лентой)
     waterway — линии рек/ручьёв/каналов
-    road     — улицы: major / minor
+    road     — улицы: class major / minor + roadclass (исходный highway)
 
 Подписи улиц рисует веб-карта из свойств name (DOM-подписи, без глифов),
 поэтому шрифтовые PBF и внешние глиф-серверы не нужны.
@@ -147,30 +147,35 @@ def name_of(tags: dict[str, str]) -> str | None:
     return name or None
 
 
-def classify(tags: dict[str, str]) -> tuple[str, str, str | None] | None:
-    """Возвращает (layer, class, name) или None, если объект не нужен."""
+def classify(tags: dict[str, str]) -> tuple[str, str, str | None, str | None] | None:
+    """Возвращает (layer, class, name, roadclass) или None, если объект не нужен.
+
+    roadclass — исходное значение highway (motorway, primary, residential…),
+    чтобы стиль мог показывать на обзоре только магистрали. class
+    (major/minor) остаётся как есть — стиль использует его как fallback.
+    """
     name = name_of(tags)
     highway = tags.get("highway")
     if highway in ROAD_CLASSES:
-        return ("road", ROAD_CLASSES[highway], name)
+        return ("road", ROAD_CLASSES[highway], name, highway)
     waterway = tags.get("waterway")
     if waterway in WATERWAY_KINDS:
         # riverbank — это полигон, его обработаем ниже.
         if waterway == "riverbank":
-            return ("water", "water", name)
-        return ("waterway", "waterway", name)
+            return ("water", "water", name, None)
+        return ("waterway", "waterway", name, None)
     if tags.get("natural") == "water" or tags.get("landuse") == "reservoir":
-        return ("water", "water", name)
+        return ("water", "water", name, None)
     leisure = tags.get("leisure")
     if leisure in GREEN_LEISURE:
-        return ("green", "park", name)
+        return ("green", "park", name, None)
     landuse = tags.get("landuse")
     if landuse in GREEN_LANDUSE:
-        return ("green", "wood" if landuse == "forest" else "park", name)
+        return ("green", "wood" if landuse == "forest" else "park", name, None)
     if tags.get("natural") in GREEN_NATURAL:
-        return ("green", "wood", name)
+        return ("green", "wood", name, None)
     if landuse in LANDUSE_KINDS:
-        return ("landuse", landuse, name)
+        return ("landuse", landuse, name, None)
     return None
 
 
@@ -191,7 +196,7 @@ class WayCollector(osmium.SimpleHandler):
         kind = classify(tags)
         if kind is None:
             return
-        layer, cls, name = kind
+        layer, cls, name, roadclass = kind
         pts: list[tuple[float, float]] = []
         missing = 0
         for n in w.nodes:
@@ -227,13 +232,15 @@ class WayCollector(osmium.SimpleHandler):
         except Exception:
             return
         props = {"layer": layer, "class": cls}
+        if roadclass:
+            props["roadclass"] = roadclass
         if name:
             props["name"] = name
         for part in _parts(geom):
             self.features.append(
                 {"type": "Feature", "properties": props, "geometry": mapping(part)}
             )
-        key = f"{layer}/{cls}"
+        key = f"{layer}/{cls}/{roadclass}" if roadclass else f"{layer}/{cls}"
         self.stats[key] = self.stats.get(key, 0) + 1
 
 
