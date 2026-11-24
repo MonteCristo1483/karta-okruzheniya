@@ -222,7 +222,7 @@ const MAP_LIGHT: Record<Theme, ThemeLight> = {
   },
 };
 
-// Мягкая многослойная тень под домами (3 слоя со сдвигом [3,3]..[6,6], z >= 14):
+// Мягкая многослойная тень под домами (3 слоя со сдвигом [3,3]..[6,6], z >= 16):
 // убирает эффект «парящих» коробок без z-fighting и двойных кромок.
 const BUILDING_SHADOW_LAYERS = [
   { id: "buildings-shadow-1", translate: [3, 3] as [number, number], opacity: { light: 0.1, dark: 0.16 } },
@@ -248,8 +248,16 @@ const DEFAULT_COLOR_STOPS: ColorStops = {
 };
 
 const NON_HOME_DIM_MIN_ZOOM = 15.5;
-const BUILDING_MIN_ZOOM = 14;
-const BUILDING_GROW_MAX_ZOOM = 14.6;
+// Дома видны с z13 плоскими: тайлы z13 уже приходят вместе с подложкой,
+// поэтому полоса роста 13→15 начинается раньше, чем подъезжает z14.
+// Раньше слои включались на z14 до прихода тайлов — было видно
+// «пусто → заминка → сразу полная высота». Механизм роста не менялся.
+const BUILDING_MIN_ZOOM = 13;
+const BUILDING_GROW_MAX_ZOOM = 15;
+// Тени (3 плоских fill по всем домам) — только крупный план, z16+.
+const BUILDING_SHADOW_MIN_ZOOM = 16;
+// Декоративные деревья — только с z15 (на z13–15 это лишние круги).
+const TREE_MIN_ZOOM = 15;
 
 const buildingExtrusionHeightExpr = () =>
   [
@@ -1622,7 +1630,7 @@ function basemapLayers(p: Palette): maplibregl.LayerSpecification[] {
       id: "bm-trees",
       type: "circle",
       source: "trees",
-      minzoom: 14,
+      minzoom: TREE_MIN_ZOOM,
       paint: {
         "circle-pitch-alignment": "map",
         "circle-pitch-scale": "map",
@@ -2284,6 +2292,9 @@ export default function Map() {
   const [fatalError, setFatalError] = useState<string | null>(null);
   // Splash: "show" → "fade" (карта готова или 2 с) → "gone".
   const [splash, setSplash] = useState<"show" | "fade" | "gone">("show");
+  // Perf-1: оверлей диагностики включается только `?perf=1` (см. эффект ниже).
+  const [perfEnabled, setPerfEnabled] = useState(false);
+  const perfRef = useRef<HTMLDivElement | null>(null);
   const deselectRef = useRef<(() => void) | null>(null);
   const selectRef = useRef<((id: number) => void) | null>(null);
   const loadSearchIndexRef = useRef<(() => Promise<void>) | null>(null);
@@ -2394,6 +2405,91 @@ export default function Map() {
     }
     applyThemeRef.current?.(theme);
   }, [theme, mounted]);
+
+  // ── Перф-оверлей (?perf=1) ─────────────────────────────────────────────
+  // Диагностика клиента: FPS по rAF, p95 кадра, число загруженных тайлов и
+  // трафик PMTiles из PerformanceResourceTiming. В обычном режиме выключен
+  // и на прод-вид не влияет: DOM создаётся только при `?perf=1`.
+  useEffect(() => {
+    setPerfEnabled(
+      new URLSearchParams(window.location.search).get("perf") === "1",
+    );
+  }, []);
+
+  useEffect(() => {
+    if (!perfEnabled) return;
+    const el = perfRef.current;
+    if (!el) return;
+
+    // Окно кадров ~4 с: FPS = 1000/среднее, p95 — 95-й процентиль длительности.
+    const frameTimes: number[] = [];
+    let lastFrame = performance.now();
+    let rafId = 0;
+    const onFrame = (now: number) => {
+      const dt = now - lastFrame;
+      lastFrame = now;
+      if (dt > 0 && dt < 1000) {
+        frameTimes.push(dt);
+        if (frameTimes.length > 240) frameTimes.shift();
+      }
+      rafId = requestAnimationFrame(onFrame);
+    };
+    rafId = requestAnimationFrame(onFrame);
+
+    // Загруженные тайлы: уникальные z/x/y из sourcedata для PMTiles-источников
+    // (кэш и повторные события не удваивают счётчик).
+    const tiles = new Set<string>();
+    const onSourceData = (event: maplibregl.MapSourceDataEvent) => {
+      if (event.sourceId !== "basemap" && event.sourceId !== "buildings") return;
+      const canonical = (
+        event.tile as
+          | { tileID?: { canonical?: { z: number; x: number; y: number } } }
+          | undefined
+      )?.tileID?.canonical;
+      if (!canonical || !event.sourceId) return;
+      tiles.add(`${event.sourceId}/${canonical.z}/${canonical.x}/${canonical.y}`);
+    };
+    let attached: maplibregl.Map | null = null;
+    const attach = () => {
+      const map = (window as unknown as { __map?: maplibregl.Map }).__map;
+      if (!map || attached) return;
+      attached = map;
+      map.on("sourcedata", onSourceData);
+    };
+    attach();
+
+    const render = () => {
+      attach();
+      const map = (window as unknown as { __map?: maplibregl.Map }).__map;
+      const sorted = frameTimes.slice().sort((a, b) => a - b);
+      const avg =
+        frameTimes.reduce((sum, value) => sum + value, 0) /
+        Math.max(1, frameTimes.length);
+      const p95 = sorted.length
+        ? sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))]
+        : 0;
+      let bytes = 0;
+      for (const entry of performance.getEntriesByType(
+        "resource",
+      ) as PerformanceResourceTiming[]) {
+        if (entry.name.includes(".pmtiles")) bytes += entry.transferSize || 0;
+      }
+      el.textContent = [
+        `FPS ${frameTimes.length ? Math.round(1000 / avg) : "—"}`,
+        `p95 ${p95 ? p95.toFixed(1) : "—"} мс`,
+        `тайлы ${tiles.size}`,
+        `PMTiles ${(bytes / 1048576).toFixed(2)} МБ`,
+        `z ${(map?.getZoom() ?? 0).toFixed(2)}`,
+      ].join(" · ");
+    };
+    render();
+    const timer = window.setInterval(render, 500);
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      window.clearInterval(timer);
+      attached?.off("sourcedata", onSourceData);
+    };
+  }, [perfEnabled]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -2875,12 +2971,12 @@ export default function Map() {
               },
             },
             // Мягкая многослойная тень под домами: 3 плоских fill со сдвигом
-            // [3,3]..[6,6], opacity 0.05..0.10 (light), без обводки и только z >= 14.
+            // [3,3]..[6,6], opacity 0.05..0.10 (light), без обводки и только z >= 16.
             ...BUILDING_SHADOW_LAYERS.map((s) => ({
               id: s.id,
               type: "fill" as const,
               source: "buildings",
-              minzoom: 14,
+              minzoom: BUILDING_SHADOW_MIN_ZOOM,
               ...buildingSourceLayer,
               paint: {
                 "fill-color": palette.shadow,
@@ -2895,7 +2991,7 @@ export default function Map() {
               id: "outline-halo",
               type: "line",
               source: "buildings",
-              minzoom: 14,
+              minzoom: BUILDING_MIN_ZOOM,
               ...buildingSourceLayer,
               layout: { "line-cap": "round", "line-join": "round" },
               paint: {
@@ -2915,7 +3011,7 @@ export default function Map() {
               id: "outline-core",
               type: "line",
               source: "buildings",
-              minzoom: 14,
+              minzoom: BUILDING_MIN_ZOOM,
               ...buildingSourceLayer,
               layout: { "line-cap": "round", "line-join": "round" },
               paint: {
@@ -2968,7 +3064,7 @@ export default function Map() {
               id: "buildings",
               type: "fill-extrusion",
               source: "buildings",
-              minzoom: 14,
+              minzoom: BUILDING_MIN_ZOOM,
               ...buildingSourceLayer,
               paint: {
                 // fill-extrusion-color поддерживает feature-state,
@@ -2989,7 +3085,7 @@ export default function Map() {
               id: "buildings-selected-body",
               type: "fill-extrusion",
               source: "selectedBuilding",
-              minzoom: 14,
+              minzoom: BUILDING_MIN_ZOOM,
               paint: {
                 "fill-extrusion-color":
                   themeRef.current === "dark"
@@ -3006,7 +3102,7 @@ export default function Map() {
               id: "buildings-roof",
               type: "fill-extrusion",
               source: "buildings",
-              minzoom: 14,
+              minzoom: BUILDING_MIN_ZOOM,
               ...buildingSourceLayer,
               paint: {
                 "fill-extrusion-color": buildingRoofColorExpr(palette, colorStops),
@@ -3022,7 +3118,7 @@ export default function Map() {
               id: "buildings-selected-roof-edge",
               type: "fill-extrusion",
               source: "selectedRoofEdge",
-              minzoom: 14,
+              minzoom: BUILDING_MIN_ZOOM,
               paint: {
                 "fill-extrusion-color": palette.outlineCore,
                 "fill-extrusion-base": ["coalesce", ["get", "height"], 9] as never,
@@ -3037,7 +3133,7 @@ export default function Map() {
               id: "buildings-selected-roof",
               type: "fill-extrusion",
               source: "selectedBuilding",
-              minzoom: 14,
+              minzoom: BUILDING_MIN_ZOOM,
               paint: {
                 "fill-extrusion-color": selectedStepColorsExpr(palette, colorStops, 0.05) as never,
                 "fill-extrusion-base": ["coalesce", ["get", "height"], 9] as never,
@@ -3119,6 +3215,16 @@ export default function Map() {
         pitch: 55,
         bearing: -25,
         maxPitch: 58,
+        // Perf-1: тайлы появляются сразу, без 300-мс «всплытия» по одному
+        // (на 20 тайлах это читалось как «карта дёргается кусками»).
+        // 0 не дало заметного мерцания — оставляем его.
+        fadeDuration: 0,
+        // Потолок тайлового кэша (память). MapLibre берёт
+        // min(512, тайлы_во_вьюпорте × maxTileCacheZoomLevels), т.е. 512 —
+        // это верхняя граница: на большом экране/DPR кэш не разрастётся,
+        // на телефоне при нехватке памяти — 256. Повторное движение по тому
+        // же месту не грузит тайлы заново (проверено сетевым логом).
+        maxTileCacheSize: 512,
         attributionControl: false,
         });
       } catch (e) {
@@ -3267,7 +3373,7 @@ export default function Map() {
           }
           labelCandidates = buildLabelCandidates(features);
           (map.getSource("trees") as maplibregl.GeoJSONSource | null)?.setData(
-            (map.getZoom() >= BUILDING_MIN_ZOOM
+            (map.getZoom() >= TREE_MIN_ZOOM
               ? buildTreePoints(features)
               : { type: "FeatureCollection", features: [] }) as never,
           );
@@ -4725,6 +4831,14 @@ export default function Map() {
       <div ref={containerRef} className="map-gradient map-grade h-full w-full" />
       <div className="map-haze pointer-events-none absolute inset-x-0 top-0" aria-hidden />
       <div className="map-vignette pointer-events-none absolute inset-0" aria-hidden />
+      {perfEnabled && (
+        <div
+          ref={perfRef}
+          data-perf-overlay="1"
+          className="pointer-events-none absolute left-2 top-2 z-30 max-w-[92vw] rounded-md bg-black/70 px-2 py-1 font-mono text-[10px] leading-tight text-white"
+          aria-hidden
+        />
+      )}
       <LayersPanel
         visibility={visible}
         onToggle={(key) =>
