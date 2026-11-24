@@ -298,27 +298,34 @@ def pmtiles_stats(path: Path) -> dict:
         raise RuntimeError("not a PMTiles v3 file")
     (root_off, root_len, _meta_off, _meta_len,
      leaf_off, leaf_len, _data_off, _data_len) = struct.unpack_from("<8Q", raw, 8)
-    _addressed, _entries, _contents = struct.unpack_from("<3Q", raw, 72)
+    # Заголовок — источник истины по числу тайлов. Директории (root/leaf)
+    # разбираем только ради per_zoom; на больших городах (листья + несколько
+    # gzip-членов) разбор может не сойтись, и это не должно ронять отчёт.
+    addressed, _entries, _contents = struct.unpack_from("<3Q", raw, 72)
     internal = raw[97]
     min_zoom, max_zoom = raw[100], raw[101]
 
-    entries = _read_directory(raw[root_off:root_off + root_len], internal)
-    leaf_entries = _read_directory(raw[leaf_off:leaf_off + leaf_len], internal) \
-        if leaf_len else []
-    for tile_id, run_length, length, offset in entries:
-        if run_length == 0:  # pointer into the leaf directory
-            blob = raw[leaf_off + offset:leaf_off + offset + length]
-            leaf_entries.extend(_read_directory(blob, internal))
-    all_entries = [e for e in entries + leaf_entries if e[1] != 0]
-
     per_zoom: dict[int, list[int]] = {}
-    for tile_id, run_length, length, _offset in all_entries:
-        per_zoom.setdefault(zoom_of(tile_id), []).extend([length] * run_length)
+    try:
+        entries = _read_directory(raw[root_off:root_off + root_len], internal)
+        leaf_entries = _read_directory(raw[leaf_off:leaf_off + leaf_len], internal) \
+            if leaf_len else []
+        for tile_id, run_length, length, offset in entries:
+            if run_length == 0:  # pointer into the leaf directory
+                blob = raw[leaf_off + offset:leaf_off + offset + length]
+                leaf_entries.extend(_read_directory(blob, internal))
+        all_entries = [e for e in entries + leaf_entries if e[1] != 0]
+        for tile_id, run_length, length, _offset in all_entries:
+            per_zoom.setdefault(zoom_of(tile_id), []).extend([length] * run_length)
+    except (OSError, EOFError, IndexError, struct.error):
+        per_zoom = {}
 
+    parsed = sum(len(v) for v in per_zoom.values())
     return {
         "min_zoom": min_zoom,
         "max_zoom": max_zoom,
-        "tiles": sum(len(v) for v in per_zoom.values()),
+        "tiles": parsed or addressed,
+        "addressed_tiles": addressed,
         "per_zoom": {
             z: {"count": len(v), "bytes": sum(v), "max": max(v)}
             for z, v in sorted(per_zoom.items())
