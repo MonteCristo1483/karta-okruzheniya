@@ -2103,6 +2103,16 @@ const POI_MAX_DISTRICTS = 16;
 // Для выбранного дома хватает его района и ближайших соседей.
 const POI_NEAR_DISTRICTS = 4;
 const POI_LABEL_MIN_ZOOM = 14;
+// Красные зоны — та же политика, что у POI: файлы районов грузятся только для
+// видимого кадра (132 файла на старте — это 35 801 линия по всему городу).
+const REDZONE_SOURCE = "redzones";
+const REDZONE_MIN_ZOOM = 11;
+const REDZONE_MAX_DISTRICTS = 16;
+// Плотность по зуму: ниже 13 — только магистрали первого порядка и ж/д.
+const REDZONE_DETAIL_ZOOM = 13;
+// Blur размытия включается с 15: ниже — простая линия (на обзоре он
+// превращал каждый отрезок в дорогую заблюренную геометрию).
+const REDZONE_BLUR_MIN_ZOOM = 15;
 // Порядок слоёв = порядок отрисовки: метро важнее всего на обзоре.
 const POI_LAYER_DEFS: {
   id: string;
@@ -2478,6 +2488,7 @@ export default function Map() {
         `FPS ${frameTimes.length ? Math.round(1000 / avg) : "—"}`,
         `p95 ${p95 ? p95.toFixed(1) : "—"} мс`,
         `тайлы ${tiles.size}`,
+        `зоны ${(window as unknown as { __perfRedzones?: number }).__perfRedzones ?? 0}`,
         `PMTiles ${(bytes / 1048576).toFixed(2)} МБ`,
         `z ${(map?.getZoom() ?? 0).toFixed(2)}`,
       ].join(" · ");
@@ -2497,6 +2508,7 @@ export default function Map() {
     let cancelled = false;
     let map: maplibregl.Map | null = null;
     let poiRefreshTimer: number | null = null;
+    let redzoneRefreshTimer: number | null = null;
 
     const init = async () => {
       const fetchJson = async (url: string): Promise<unknown> => {
@@ -2514,7 +2526,6 @@ export default function Map() {
       };
 
       let poi!: GCollection<PoiProps>;
-      let redzones!: GCollection<RedzoneProps>;
       const tileMode = true;
       let districts: DistrictEntry[] = [];
       let buildingMeta: BuildingMeta[] = [];
@@ -2608,18 +2619,8 @@ export default function Map() {
           throw new Error("Манифест районов пуст или повреждён");
         }
         districts = manifest.districts;
-        // POI больше не тянем всем городом: файлы грузятся по видимым районам
-        // ПОСЛЕ создания карты (ensure/refreshPoi ниже). Красные зоны — как были.
-        const districtRedzones = await Promise.all(
-          districts.map(async (district) => {
-            const data = await fetchJson(`data/districts/${district.id}/redzones.geojson`);
-            return data as GCollection<RedzoneProps>;
-          }),
-        );
-        redzones = {
-          type: "FeatureCollection",
-          features: districtRedzones.flatMap((data) => data.features),
-        };
+        // POI и красные зоны не тянем всем городом: файлы грузятся по видимым
+        // районам ПОСЛЕ создания карты (ensure/refreshPoi и refreshRedzones).
       } catch (e) {
         console.error("Не удалось загрузить данные карты:", e);
         setFatalError(
@@ -2685,8 +2686,10 @@ export default function Map() {
         return e > w && n > s ? (e - w) * (n - s) : 0;
       };
 
-      const visiblePoiDistrictIds = (): number[] => {
-        if (!map || map.getZoom() < POI_MIN_ZOOM) return [];
+      // Районы, пересекающиеся с кадром (+ запас 12%), по убыванию площади
+      // пересечения — так приоритет получают те, что реально видны.
+      const districtIdsInViewport = (minZoom: number, max: number): number[] => {
+        if (!map || map.getZoom() < minZoom) return [];
         const bounds = map.getBounds();
         const padX = (bounds.getEast() - bounds.getWest()) * 0.12;
         const padY = (bounds.getNorth() - bounds.getSouth()) * 0.12;
@@ -2703,9 +2706,12 @@ export default function Map() {
           }))
           .filter((entry) => entry.area > 0)
           .sort((a, b) => b.area - a.area)
-          .slice(0, POI_MAX_DISTRICTS)
+          .slice(0, max)
           .map((entry) => entry.district.id);
       };
+
+      const visiblePoiDistrictIds = (): number[] =>
+        districtIdsInViewport(POI_MIN_ZOOM, POI_MAX_DISTRICTS);
 
       const applyPoiSource = () => {
         const source = map?.getSource(POI_SOURCE) as maplibregl.GeoJSONSource | null;
@@ -2760,7 +2766,162 @@ export default function Map() {
         if (!cancelled) rebuildOverlays(selectedRef.current, visibleRef.current);
       };
 
-      const redzoneFeatures = redzones.features;
+      // ── Красные зоны (redzones.geojson) ────────────────────────────────
+      // Как и POI: кэш по районам в памяти, в источник попадают только
+      // видимые районы (≤ REDZONE_MAX_DISTRICTS за обновление). Все 132 файла
+      // на старте давали 35 801 линию по городу и роняли FPS до 9.
+      const redzoneByDistrict: Record<number, GFeature<RedzoneProps>[]> = {};
+      const redzoneRequests: Record<number, Promise<GFeature<RedzoneProps>[]>> = {};
+      let redzoneSourceIds: number[] = [];
+      let redzoneSourceApplied = false;
+      let redzoneLoadSeq = 0;
+
+      const loadDistrictRedzones = (
+        id: number,
+      ): Promise<GFeature<RedzoneProps>[]> => {
+        const cached = redzoneByDistrict[id];
+        if (cached) return Promise.resolve(cached);
+        const pending = redzoneRequests[id];
+        if (pending) return pending;
+        const request = fetchJson(`data/districts/${id}/redzones.geojson`)
+          .then((data) => {
+            const features = (data as GCollection<RedzoneProps>).features ?? [];
+            redzoneByDistrict[id] = features;
+            return features;
+          })
+          .catch((error) => {
+            console.error(`Красные зоны района ${id} не загрузились:`, error);
+            redzoneByDistrict[id] = [];
+            return [] as GFeature<RedzoneProps>[];
+          })
+          .finally(() => {
+            delete redzoneRequests[id];
+          });
+        redzoneRequests[id] = request;
+        return request;
+      };
+
+      const loadedRedzoneFeatures = (): GFeature<RedzoneProps>[] =>
+        Object.values(redzoneByDistrict).flat();
+
+      const applyRedzoneSource = () => {
+        const source = map?.getSource(REDZONE_SOURCE) as
+          | maplibregl.GeoJSONSource
+          | null;
+        if (!source) return;
+        const features = redzoneSourceIds.flatMap(
+          (id) => redzoneByDistrict[id] ?? [],
+        );
+        source.setData({ type: "FeatureCollection", features } as never);
+        redzoneSourceApplied = true;
+        // ?perf=1: сколько объектов красных зон лежит в источнике сейчас.
+        (window as unknown as { __perfRedzones?: number }).__perfRedzones =
+          features.length;
+      };
+
+      // Плотность по зуму: до 11 зон нет, 11–12 — только магистрали первого
+      // порядка (class trunk) и ж/д, с 13 — все классы.
+      let redzoneBand: 0 | 1 | 2 | null = null;
+      let redzoneVisibilityKey = "";
+      const redzoneBandForZoom = (zoom: number): 0 | 1 | 2 =>
+        zoom < REDZONE_MIN_ZOOM ? 0 : zoom < REDZONE_DETAIL_ZOOM ? 1 : 2;
+
+      const syncRedzoneVisibility = () => {
+        if (!map || !map.getLayer("redzones-glow")) return;
+        const band = redzoneBandForZoom(map.getZoom());
+        const show = visibleRef.current.redzones && band > 0;
+        const key = `${show ? 1 : 0}${show && band === 2 ? 1 : 0}`;
+        // На каждый moveend не дёргаем стиль: 8 одинаковых setLayoutProperty
+        // = лишний пересчёт и лишний кадр.
+        if (key === redzoneVisibilityKey) return;
+        redzoneVisibilityKey = key;
+        const lineVis = show ? "visible" : "none";
+        map.setLayoutProperty("redzones-glow", "visibility", lineVis);
+        map.setLayoutProperty("redzones-road", "visibility", lineVis);
+        map.setLayoutProperty("redzones-rail", "visibility", lineVis);
+        map.setLayoutProperty(
+          "redzones-fill",
+          "visibility",
+          show && band === 2 ? "visible" : "none",
+        );
+      };
+
+      const syncRedzoneDensity = () => {
+        if (!map || !map.getLayer("redzones-glow")) return;
+        const band = redzoneBandForZoom(map.getZoom());
+        if (band !== redzoneBand) {
+          redzoneBand = band;
+          const major = [
+            "any",
+            ["==", ["get", "kind"], "railway"],
+            ["==", ["get", "class"], "trunk"],
+          ];
+          map.setFilter(
+            "redzones-glow",
+            (band === 1 ? major : null) as never,
+          );
+          map.setFilter(
+            "redzones-road",
+            (band === 1
+              ? [
+                  "all",
+                  ["!=", ["get", "kind"], "railway"],
+                  ["==", ["get", "class"], "trunk"],
+                ]
+              : ["!=", ["get", "kind"], "railway"]) as never,
+          );
+          map.setFilter(
+            "redzones-rail",
+            ["==", ["get", "kind"], "railway"] as never,
+          );
+          map.setFilter(
+            "redzones-fill",
+            ["==", ["geometry-type"], "Polygon"] as never,
+          );
+        }
+        syncRedzoneVisibility();
+      };
+
+      const refreshRedzonesForViewport = async () => {
+        if (!map) return;
+        syncRedzoneDensity();
+        const ids = districtIdsInViewport(
+          REDZONE_MIN_ZOOM,
+          REDZONE_MAX_DISTRICTS,
+        );
+        const seq = ++redzoneLoadSeq;
+        if (!ids.length) {
+          if (!redzoneSourceIds.length) return;
+          redzoneSourceIds = [];
+          applyRedzoneSource();
+          return;
+        }
+        const unchanged =
+          ids.length === redzoneSourceIds.length &&
+          ids.every((id, index) => id === redzoneSourceIds[index]);
+        // Повторное движение по уже загруженным районам — без запросов.
+        if (unchanged && redzoneSourceApplied && ids.every((id) => redzoneByDistrict[id])) {
+          return;
+        }
+        await Promise.all(ids.map(loadDistrictRedzones));
+        if (seq !== redzoneLoadSeq || !map) return;
+        redzoneSourceIds = ids;
+        applyRedzoneSource();
+      };
+
+      // Выбранный дом мог оказаться у края кадра: его район догружаем, чтобы
+      // красные пины «ближайший минус» нашли свою зону.
+      const ensureRedzonesForDistrict = async (districtId: number) => {
+        if (redzoneByDistrict[districtId] && redzoneSourceIds.includes(districtId)) {
+          return;
+        }
+        await loadDistrictRedzones(districtId);
+        if (cancelled || !map) return;
+        if (!redzoneSourceIds.includes(districtId)) {
+          redzoneSourceIds = [...redzoneSourceIds, districtId];
+          applyRedzoneSource();
+        }
+      };
 
       let labelCandidates: LabelCandidate[] = [];
 
@@ -2857,7 +3018,10 @@ export default function Map() {
               // addProtocol ждёт абсолютный URL, страница живёт в подпапке.
               url: `pmtiles://${new URL(BUILDINGS_URL, window.location.href).href}`,
             },
-            redzones: { type: "geojson", data: redzones },
+            redzones: {
+              type: "geojson",
+              data: { type: "FeatureCollection", features: [] },
+            },
             routes: { type: "geojson", data: routesData },
             isochrone: {
               type: "geojson",
@@ -2875,7 +3039,24 @@ export default function Map() {
               paint: {
                 "line-color": palette.redzone,
                 "line-width": ["interpolate", ["linear"], ["zoom"], 14, 9, 17.5, 24],
-                "line-blur": ["interpolate", ["linear"], ["zoom"], 14, 7, 17.5, 18],
+                // Blur — только с z15 (REDZONE_BLUR_MIN_ZOOM): ниже простая
+                // линия. Узкая ветка 14.99→15 убирает резкий «прыжок», а на
+                // z≥15 кривая ровно та же, что была (паритет на z16.6).
+                "line-blur": [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  0,
+                  0,
+                  REDZONE_BLUR_MIN_ZOOM - 0.01,
+                  0,
+                  // 10.142857 = старое значение кривой (14→7 … 17.5→18) в z15:
+                  // так на z≥15 линия blur совпадает с прежней (паритет z16.6).
+                  REDZONE_BLUR_MIN_ZOOM,
+                  10.142857,
+                  17.5,
+                  18,
+                ],
                 "line-opacity": [
                   "interpolate",
                   ["linear"],
@@ -3448,6 +3629,20 @@ export default function Map() {
       map.on("zoomend", schedulePoiRefresh);
       void refreshPoiForViewport();
 
+      // Загрузка красных зон видимых районов — на тех же событиях, что POI.
+      const scheduleRedzoneRefresh = () => {
+        if (redzoneRefreshTimer !== null) window.clearTimeout(redzoneRefreshTimer);
+        redzoneRefreshTimer = window.setTimeout(() => {
+          redzoneRefreshTimer = null;
+          void refreshRedzonesForViewport();
+        }, 160);
+      };
+      map.on("moveend", scheduleRedzoneRefresh);
+      // zoomend тоже пересчитывает плотность: refreshRedzonesForViewport
+      // начинается с syncRedzoneDensity.
+      map.on("zoomend", scheduleRedzoneRefresh);
+      void refreshRedzonesForViewport();
+
       // Заставка: убираем, когда карта отрисована (idle) или через 2 с —
       // что раньше.
       const hideSplash = () => setSplash((s) => (s === "show" ? "fade" : s));
@@ -3490,13 +3685,16 @@ export default function Map() {
         } as never);
 
         if (sel?.breakdown && selCenter) {
+          // Ищем по всем загруженным районам: район дома догружается в
+          // ensureRedzonesForDistrict, соседние — по мере движения.
+          const redzonePool = loadedRedzoneFeatures();
           for (const [key, entry] of Object.entries(sel.breakdown.penalties)) {
             if (!entry || entry.penalty >= RED_FLAG_PENALTY) continue;
             const kind = PENALTY_TO_KIND[key];
             if (!kind) continue;
             let bestPt: Position | null = null;
             let bestDist = Infinity;
-            for (const rz of redzoneFeatures) {
+            for (const rz of redzonePool) {
               if (rz.properties.kind !== kind) continue;
               const np = nearestPosition(rz.geometry, selCenter);
               if (np && np.dist < bestDist) {
@@ -3550,11 +3748,8 @@ export default function Map() {
       applyVisibilityRef.current = (v: Visibility) => {
         if (!map) return;
         if (map.getLayer("redzones-road")) {
-          const rz = v.redzones ? "visible" : "none";
-          map.setLayoutProperty("redzones-glow", "visibility", rz);
-          map.setLayoutProperty("redzones-road", "visibility", rz);
-          map.setLayoutProperty("redzones-rail", "visibility", rz);
-          map.setLayoutProperty("redzones-fill", "visibility", rz);
+          // Видимость красных зон = флаг слоя И плотность по зуму.
+          syncRedzoneDensity();
         }
         if (map.getLayer("routes-line")) {
           const rt = v.routes ? "visible" : "none";
@@ -4650,6 +4845,10 @@ export default function Map() {
         districtByBuildingRef.current[id] = district.id;
         // POI района дома — в кэш, чтобы ближайшие и маршруты были сразу.
         void ensurePoiNear(center);
+        // Красные зоны района дома — для пинов «ближайший минус».
+        void ensureRedzonesForDistrict(district.id).then(() => {
+          if (selectedId === id) rebuildOverlays(selectedRef.current, visibleRef.current);
+        });
 
         const token = cancelSelectedCapture();
         selectionMovePending = true;
@@ -4730,6 +4929,8 @@ export default function Map() {
         rebuildLabels();
         // Источник POI до готовности стиля мог не принять данные.
         void refreshPoiForViewport();
+        // Красные зоны: то же самое — источник пересобираем после загрузки стиля.
+        void refreshRedzonesForViewport();
         // Публичная ссылка «Отправить клиенту»: ?building=<osm_id>
         const param = new URLSearchParams(window.location.search).get("building");
         if (param !== null) {
@@ -4820,6 +5021,10 @@ export default function Map() {
       if (poiRefreshTimer !== null) {
         window.clearTimeout(poiRefreshTimer);
         poiRefreshTimer = null;
+      }
+      if (redzoneRefreshTimer !== null) {
+        window.clearTimeout(redzoneRefreshTimer);
+        redzoneRefreshTimer = null;
       }
       map?.remove();
       map = null;
