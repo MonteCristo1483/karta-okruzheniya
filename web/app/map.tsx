@@ -258,6 +258,10 @@ const BUILDING_GROW_MAX_ZOOM = 15;
 const BUILDING_SHADOW_MIN_ZOOM = 16;
 // Декоративные деревья — только с z15 (на z13–15 это лишние круги).
 const TREE_MIN_ZOOM = 15;
+// Подписи улиц/воды/парков — с z12.6 (см. rebuildLabels). Ниже этого зума
+// декорации подложки не видны, значит их кандидатов можно не собирать:
+// именно сбор (querySourceFeatures по всей подложке) ронял обзор z10–11.
+const DECOR_MIN_ZOOM = 12.6;
 
 const buildingExtrusionHeightExpr = () =>
   [
@@ -3530,7 +3534,7 @@ export default function Map() {
         labelMarkers = [];
         const p = MAP_THEMES[themeRef.current];
         const zoom = map.getZoom();
-        if (zoom < 12.6) return;
+        if (zoom < DECOR_MIN_ZOOM) return;
         const size = zoom >= 16 ? 13.5 : zoom >= 14.2 ? 12.5 : 11.5;
         const width = map.getContainer().clientWidth;
         const height = map.getContainer().clientHeight;
@@ -3625,6 +3629,18 @@ export default function Map() {
         requestAnimationFrame(() => {
           basemapRefreshPending = false;
           if (cancelled || !map) return;
+          // BM-LOW: ниже DECOR_MIN_ZOOM подписи и деревья не рисуются вовсе,
+          // а сбор кандидатов — самое дорогое в кадре: querySourceFeatures по
+          // всей подложке на обзоре отдаёт ~85 тыс. фич и ~20 МБ geometry-JSON,
+          // и это повторяется на каждый moveend/idle/загрузку тайла. Пропускаем.
+          if (map.getZoom() < DECOR_MIN_ZOOM) {
+            labelCandidates = [];
+            (map.getSource("trees") as maplibregl.GeoJSONSource | null)?.setData({
+              type: "FeatureCollection",
+              features: [],
+            } as never);
+            return;
+          }
           const seen = new Set<string>();
           const features: GFeature<BasemapProps>[] = [];
           for (const sourceLayer of [
