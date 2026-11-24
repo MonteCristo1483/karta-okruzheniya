@@ -421,7 +421,14 @@ def run_tippecanoe_basemap(ndjson: Path, out: Path) -> None:
         "--force",
         "-o", f"/work/{rel_out}",
         "-Z6", "-z16", "-d13",
-        "--drop-densest-as-needed",
+        # LOD-A: прореживание в tippecanoe не трогает линии/полигоны без
+        # -al/-ap, а --drop-densest-as-needed на плотном центре не дотягивает
+        # до лимита. -an (--drop-smallest-as-needed) режет самые мелкие
+        # объекты только в тайлах, которые реально больше лимита; -r1 —
+        # чтобы не включилось фоновое прореживание по -r и улицы не редели
+        # на z13-z16.
+        "--drop-smallest-as-needed", "-al", "-ap", "-r1",
+        "--maximum-tile-bytes", "300000",
         "--no-tile-stats",
         f"/work/{rel_in}",
     ]
