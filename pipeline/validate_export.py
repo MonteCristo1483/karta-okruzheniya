@@ -43,7 +43,7 @@ DEFAULT_DATA_DIR = ROOT / "web" / "public" / "data"
 CONFIG_PATH = ROOT / "config" / "scoring.json"
 
 # Пресня с запасом: выгрузка не должна вылезать за Москву.
-MOSCOW_BBOX = (55.4, 37.2, 55.95, 37.9)
+MOSCOW_BBOX = (55.14, 36.80, 56.03, 37.98)  # вся Москва с ТиНАО (2026)
 CURRENT_YEAR = 2026
 NUMBER_ONLY_ADDRESS = re.compile(r"^\d+([/\-]\d+)?$")
 MAX_ISSUES_PER_CODE = 200
@@ -124,7 +124,7 @@ def iter_positions(geometry: dict):
 
 
 def check_geometry(geometry: dict | None, report: Report, label: str,
-                   building_id: int | None = None) -> None:
+                   building_id: int | None = None, margin: float = 0.0) -> None:
     if not isinstance(geometry, dict):
         report.add("critical", "bad_geometry", f"{label}: нет geometry", building_id)
         return
@@ -134,6 +134,11 @@ def check_geometry(geometry: dict | None, report: Report, label: str,
                    building_id)
         return
     lat_min, lon_min, lat_max, lon_max = MOSCOW_BBOX
+    # Линейные объекты (магистрали, ж/д) берутся целиком, поэтому у границы
+    # города законно выходят за bbox на несколько километров — им разрешаем
+    # margin, остальным 0 (иначе поедет проверка на битые координаты).
+    lat_min, lon_min = lat_min - margin, lon_min - margin
+    lat_max, lon_max = lat_max + margin, lon_max + margin
     for lon, lat, *_ in iter_positions(geometry):
         if not (math.isfinite(lon) and math.isfinite(lat)):
             report.add("critical", "bad_geometry", f"{label}: NaN/Inf в координатах",
@@ -384,7 +389,7 @@ def check_redzones(features: list[dict], cfg: dict, report: Report) -> None:
             if cls not in pen_cfg["classes"]:
                 report.add("warning", "unknown_road_class",
                            f"класс дороги {cls!r} не в весах конфига")
-        check_geometry(feature.get("geometry"), report, f"зона {kind}")
+        check_geometry(feature.get("geometry"), report, f"зона {kind}", margin=0.1)
 
 
 def check_routes(data_dir: Path, cfg: dict, report: Report) -> None:
@@ -494,11 +499,11 @@ def validate_district_export(data_dir: Path, cfg: dict, report: Report) -> Repor
     all_poi: list[dict] = []
     all_redzones: list[dict] = []
     home_ids: set[int] = set()
+    # С V2-S3b per-district PMTiles не собираются: здания и подложка — один
+    # городской файл в корне data/ (проверяется ниже). Обязателен только
+    # buildings.geojson района.
     required_roles = {
         "buildings_geojson",
-        "buildings_pmtiles",
-        "basemap_geojson",
-        "basemap_pmtiles",
     }
     sample_hashes: set[Path] = set()
 
@@ -778,6 +783,14 @@ def format_report(report: Report, details: int = 5) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Windows-консоль по умолчанию cp1251 и не печатает ×/→ — переключаемся
+    # на UTF-8 с заменой непечатаемых символов, чтобы отчёт не падал.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass  # подменённый поток (тесты) или уже закрытый
+
     parser = argparse.ArgumentParser(description="Валидация выгрузки веб-карты")
     parser.add_argument("data_dir", nargs="?", default=str(DEFAULT_DATA_DIR),
                         help="папка с *.geojson (по умолчанию web/public/data)")
