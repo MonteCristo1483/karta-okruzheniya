@@ -21,9 +21,29 @@ const MIME = {
   ".txt": "text/plain; charset=utf-8",
 };
 
+// GitHub Pages на неизвестный путь отдаёт 404.html, ближайший вверх по дереву
+// (на проде — из корня опубликованной ветки, т.е. <root>/<basePath>/404.html).
+// Без этого старые ссылки /r/<id>/ в e2e проверять нечем.
+async function readNotFoundPage(urlPath) {
+  let dir = urlPath.endsWith("/") ? urlPath : urlPath.replace(/\/[^/]*$/, "/");
+  for (;;) {
+    const candidate = normalize(join(root, dir, "404.html"));
+    if (candidate.startsWith(normalize(root))) {
+      try {
+        return await readFile(candidate);
+      } catch {
+        // 404.html на этом уровне нет — поднимаемся выше
+      }
+    }
+    if (dir === "" || dir === "/") return null;
+    dir = dir.replace(/\/[^/]+\/$/, "/");
+  }
+}
+
 createServer(async (req, res) => {
+  const urlPath = decodeURIComponent(new URL(req.url, "http://x").pathname);
   try {
-    let path = decodeURIComponent(new URL(req.url, "http://x").pathname);
+    let path = urlPath;
     if (path.endsWith("/")) path += "index.html";
     const file = normalize(join(root, path));
     if (!file.startsWith(normalize(root))) {
@@ -83,6 +103,16 @@ createServer(async (req, res) => {
     }
     res.end(await readFile(file));
   } catch {
+    const page = await readNotFoundPage(urlPath);
+    if (page) {
+      res.writeHead(404, {
+        "content-type": "text/html; charset=utf-8",
+        "content-length": page.length,
+        "cache-control": "no-cache",
+      });
+      res.end(page);
+      return;
+    }
     res.writeHead(404).end("not found");
   }
 }).listen(port, () => console.log(`serving ${root} on http://localhost:${port}`));
