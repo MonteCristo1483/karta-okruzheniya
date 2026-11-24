@@ -88,6 +88,7 @@ def main() -> int:
 
     districts = []
     seen_files: set[str] = set()
+    seen_districts: set[int] = set()
     duplicates = 0
 
     def add(files: list[dict], role: str, path: Path, **extra) -> None:
@@ -105,8 +106,17 @@ def main() -> int:
         district_path = district_dir / "district.geojson"
         if not district_dir.is_dir() or not summary_path.exists() or not district_path.exists():
             continue
+        # Рабочие копии (data/districts/<id>_fix от build_district.py --out)
+        # не должны попадать в манифест как отдельные районы.
+        if not district_dir.name.isdigit():
+            duplicates += 1
+            continue
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
         district_id = str(summary["district"]["osm_id"])
+        if district_id in seen_districts:
+            duplicates += 1
+            continue
+        seen_districts.add(district_id)
 
         files: list[dict] = []
         for role, name in (

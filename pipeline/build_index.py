@@ -39,11 +39,19 @@ from build_tiles import representative_point  # noqa: E402
 
 
 def district_dirs() -> list[Path]:
-    dirs = [
-        path
-        for path in DISTRICTS.iterdir()
-        if path.is_dir() and (path / "buildings.geojson").exists()
-    ]
+    # Только каталоги-районы: имя = osm_id. Рабочие копии вроде
+    # data/districts/1275551_fix (build_district.py --out) в индекс не входят.
+    dirs = []
+    skipped = []
+    for path in DISTRICTS.iterdir():
+        if not path.is_dir() or not (path / "buildings.geojson").exists():
+            continue
+        if not path.name.isdigit():
+            skipped.append(path.name)
+            continue
+        dirs.append(path)
+    if skipped:
+        print(f"Пропущены каталоги не-районов: {', '.join(sorted(skipped))}")
     return sorted(dirs, key=lambda path: int(path.name))
 
 

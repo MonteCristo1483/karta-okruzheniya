@@ -404,7 +404,8 @@ def stage_tiles(force: bool) -> list[dict]:
     if not buildings_out.exists() or force:
         features: dict[int, dict] = {}
         for summary_path in sorted(DISTRICTS_DIR.glob("*/summary.json")):
-            d_id = summary_path.parent.name
+            if not summary_path.parent.name.isdigit():
+                continue  # рабочие копии вроде 1275551_fix — не районы
             path = summary_path.parent / "buildings.geojson"
             if not path.exists():
                 continue

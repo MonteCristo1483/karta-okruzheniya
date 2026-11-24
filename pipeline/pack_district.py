@@ -51,6 +51,8 @@ def resolve_district(value: str) -> Path:
     """Каталог data/districts/<osm_id> по osm_id или имени района."""
     candidates = []
     for summary_path in sorted(DISTRICTS.glob("*/summary.json")):
+        if not summary_path.parent.name.isdigit():
+            continue  # рабочие копии (data/districts/<id>_fix) — не районы
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
         district = summary.get("district") or {}
         candidates.append((summary_path.parent, int(district.get("osm_id", 0)),
