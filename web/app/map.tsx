@@ -1628,10 +1628,13 @@ function basemapLayers(p: Palette): maplibregl.LayerSpecification[] {
       paint: { "background-color": p.land },
     },
     {
+      // BM-LOW: на обзоре (z10–11) плоские серые зоны почти не читаются, а
+      // полигонов тысячи — рисуем landuse с z12, как раньше.
       id: "bm-landuse",
       type: "fill",
       source: "basemap",
       "source-layer": "landuse",
+      minzoom: 12,
       filter: BM_LAYER("landuse"),
       paint: { "fill-color": p.landUse, "fill-opacity": 0.75 },
     },
@@ -1682,7 +1685,9 @@ function basemapLayers(p: Palette): maplibregl.LayerSpecification[] {
       paint: {
         "fill-color": p.water,
         "fill-outline-color": p.waterLine,
-        "fill-antialias": true,
+        // BM-LOW: антиалиасинг кромки на обзоре не виден — ниже z13
+        // выключен, с z13 как раньше.
+        "fill-antialias": ["step", ["zoom"], false, 13, true],
       },
     },
     {
@@ -1696,7 +1701,9 @@ function basemapLayers(p: Palette): maplibregl.LayerSpecification[] {
       paint: {
         "line-color": p.water,
         "line-width": ["interpolate", ["linear"], ["zoom"], 12, 6, 14, 24, 15, 48, 16, 96, 17, 190],
-        "line-blur": 1.5,
+        // BM-LOW: ниже z13 река тонкая, сглаживание кромки не видно — blur 0,
+        // с z13 прежние 1.5.
+        "line-blur": ["step", ["zoom"], 0, 13, 1.5],
       },
     },
     {
