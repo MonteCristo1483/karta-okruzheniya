@@ -1,3 +1,0 @@
-User-agent: *
-Allow: /
-Sitemap: https://montecristo1483.github.io/karta-okruzheniya/sitemap.xml
