@@ -398,8 +398,10 @@ def stage_tiles(force: bool) -> list[dict]:
 
     errors: list[dict] = []
     CITY_DIR.mkdir(parents=True, exist_ok=True)
-    buildings_out = CITY_DIR / "buildings.pmtiles"
-    basemap_out = CITY_DIR / "basemap.pmtiles"
+    # Городские тайлы лежат в корне data/ (data/buildings.pmtiles,
+    # data/basemap.pmtiles) — так их ждут validate_export и Deploy.
+    buildings_out = ROOT / "data" / "buildings.pmtiles"
+    basemap_out = ROOT / "data" / "basemap.pmtiles"
 
     if not buildings_out.exists() or force:
         features: dict[int, dict] = {}
@@ -478,6 +480,14 @@ def stage_tiles(force: bool) -> list[dict]:
 # --------------------------------------------------------------------------- #
 
 def main(argv: list[str] | None = None) -> int:
+    # Windows-консоль по умолчанию cp1251 и не печатает ×/→ — переключаемся
+    # на UTF-8 с заменой непечатаемых символов, чтобы отчёт не падал.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass  # подменённый поток (тесты) или уже закрытый
+
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--stage", default="all", choices=(*STAGES, "all"))
     parser.add_argument("--districts", default="all", help="all или osm_id через запятую")
