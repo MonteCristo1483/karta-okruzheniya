@@ -1974,16 +1974,7 @@ function poiColor(type: string, p: Palette): string {
   return type === "subway_entrance" || type === "rail_platform" ? p.poiMetro : p.poiGreen;
 }
 
-// POI type -> ключ слоя-чекбокса / ключа бонуса в breakdown
-const POI_TO_LAYER: Record<string, keyof Visibility> = {
-  school: "schools",
-  kindergarten: "kindergartens",
-  park: "parks",
-  subway_entrance: "metro",
-  rail_platform: "metro",
-  shop: "shops",
-};
-
+// POI type -> ключ бонуса в breakdown
 const POI_TO_BONUS: Record<string, string> = {
   school: "schools",
   kindergarten: "kindergartens",
@@ -2036,51 +2027,148 @@ const POI_TO_ICON: Record<string, IconKey> = {
   shop: "shop",
 };
 
-function makePoiPinEl(
-  icon: IconKey,
-  color: string,
-  label: string | null,
-  pill: string,
-): HTMLDivElement {
-  const NS = "http://www.w3.org/2000/svg";
-  const el = document.createElement("div");
-  el.className = "flex items-center gap-1";
-  el.style.zIndex = "2";
-  const svg = document.createElementNS(NS, "svg");
-  svg.setAttribute("width", "24");
-  svg.setAttribute("height", "24");
-  svg.setAttribute("viewBox", "0 0 24 24");
-  const pin = document.createElementNS(NS, "path");
-  pin.setAttribute(
-    "d",
-    "M12 1.5C7.3 1.5 3.5 5.3 3.5 10c0 5.6 8.5 12.6 8.5 12.6S20.5 15.6 20.5 10c0-4.7-3.8-8.5-8.5-8.5z",
-  );
-  pin.setAttribute("fill", color);
-  pin.setAttribute("stroke", "#ffffff");
-  pin.setAttribute("stroke-width", "1.4");
-  const hole = document.createElementNS(NS, "circle");
-  hole.setAttribute("cx", "12");
-  hole.setAttribute("cy", "10");
-  hole.setAttribute("r", "5.2");
-  hole.setAttribute("fill", "#ffffff");
-  const iconPath = document.createElementNS(NS, "path");
-  iconPath.setAttribute("d", ICON_PATHS[icon]);
+// POI рисуются symbol-слоями: иконки регистрируем картинками через addImage,
+// подписи — тоже картинками (в проекте принципиально нет глиф-PBF, см. ниже).
+// Отдельного sprite-сервера нет, поэтому капля и пилюля рисуются на canvas.
+const PIN_PATH =
+  "M12 1.5C7.3 1.5 3.5 5.3 3.5 10c0 5.6 8.5 12.6 8.5 12.6S20.5 15.6 20.5 10c0-4.7-3.8-8.5-8.5-8.5z";
+const POI_PIXEL_RATIO = 2;
+const POI_SOURCE = "poi";
+const POI_LABEL_SOURCE = "poiLabels";
+const POI_LABEL_LAYER = "poi-labels";
+// Правило продукта (P1): на обзоре — ничего, дальше категории по зуму.
+const POI_MIN_ZOOM = 11;
+const POI_MAX_DISTRICTS = 4;
+const POI_LABEL_MIN_ZOOM = 14;
+// Порядок слоёв = порядок отрисовки: метро важнее всего на обзоре.
+const POI_LAYER_DEFS: {
+  id: string;
+  types: string[];
+  flag: keyof Visibility;
+  minzoom: number;
+}[] = [
+  { id: "poi-metro", types: ["subway_entrance", "rail_platform"], flag: "metro", minzoom: 11 },
+  { id: "poi-parks", types: ["park"], flag: "parks", minzoom: 12 },
+  { id: "poi-schools", types: ["school"], flag: "schools", minzoom: 13 },
+  { id: "poi-kindergartens", types: ["kindergarten"], flag: "kindergartens", minzoom: 13 },
+  { id: "poi-shops", types: ["shop"], flag: "shops", minzoom: 15 },
+];
+
+const poiIconName = (theme: Theme, icon: IconKey) => `poi-${theme}-${icon}`;
+const poiLabelImageName = (theme: Theme, text: string) => `poi-label-${theme}-${text}`;
+
+// Капля 24×24 CSS px: тот же путь, что был в SVG-маркере (паритет внешнего вида).
+function makePoiIconImage(type: string, theme: Theme): ImageData {
+  const p = MAP_THEMES[theme];
+  const color = poiColor(type, p);
+  const icon = POI_TO_ICON[type] ?? "shop";
+  const canvas = document.createElement("canvas");
+  canvas.width = 24 * POI_PIXEL_RATIO;
+  canvas.height = 24 * POI_PIXEL_RATIO;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("canvas 2d недоступен");
+  ctx.scale(POI_PIXEL_RATIO, POI_PIXEL_RATIO);
+  const pin = new Path2D(PIN_PATH);
+  ctx.fillStyle = color;
+  ctx.fill(pin);
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 1.4;
+  ctx.stroke(pin);
+  ctx.beginPath();
+  ctx.arc(12, 10, 5.2, 0, Math.PI * 2);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
   // Иконка рисуется в 24×24 — сжимаем в белый круг капли.
-  iconPath.setAttribute("transform", "translate(12 10) scale(0.4) translate(-12 -12)");
-  iconPath.setAttribute("fill", "none");
-  iconPath.setAttribute("stroke", color);
-  iconPath.setAttribute("stroke-width", "2");
-  iconPath.setAttribute("stroke-linecap", "round");
-  iconPath.setAttribute("stroke-linejoin", "round");
-  svg.append(pin, hole, iconPath);
-  el.append(svg);
-  if (label) {
-    const span = document.createElement("span");
-    span.className = `rounded-full px-2 py-0.5 text-[11px] shadow ${pill}`;
-    span.textContent = label;
-    el.append(span);
+  ctx.save();
+  ctx.translate(12, 10);
+  ctx.scale(0.4, 0.4);
+  ctx.translate(-12, -12);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.stroke(new Path2D(ICON_PATHS[icon]));
+  ctx.restore();
+  return ctx.getImageData(0, 0, canvas.width, canvas.height);
+}
+
+// Пилюля подписи («Школа · 7 мин»). Рисунок вместо text-field: в стиле нет
+// глиф-сервера (PBF-шрифты не грузим), а имена POI слишком длинные для
+// постоянных подписей на z15–16.6 — паритет с прежней DOM-пилюлей важнее.
+function makePoiLabelImage(theme: Theme, text: string): ImageData {
+  const dark = theme === "dark";
+  const font =
+    "600 11px ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
+  const measure = document.createElement("canvas").getContext("2d");
+  if (!measure) throw new Error("canvas 2d недоступен");
+  measure.font = font;
+  const textWidth = Math.ceil(measure.measureText(text).width);
+  const width = textWidth + 16; // px-2 с двух сторон
+  const height = 17; // 11px текст + py-0.5
+  const canvas = document.createElement("canvas");
+  canvas.width = width * POI_PIXEL_RATIO;
+  canvas.height = height * POI_PIXEL_RATIO;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("canvas 2d недоступен");
+  ctx.scale(POI_PIXEL_RATIO, POI_PIXEL_RATIO);
+  ctx.shadowColor = "rgba(15, 23, 42, 0.18)";
+  ctx.shadowBlur = 2;
+  ctx.shadowOffsetY = 1;
+  ctx.fillStyle = dark ? "rgba(30, 41, 59, 0.92)" : "rgba(255, 255, 255, 0.92)";
+  ctx.beginPath();
+  ctx.roundRect(0, 0, width, height, height / 2);
+  ctx.fill();
+  ctx.shadowColor = "transparent";
+  ctx.fillStyle = dark ? "#e2e8f0" : "#334155";
+  ctx.font = font;
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, 8, height / 2 + 0.5);
+  return ctx.getImageData(0, 0, canvas.width, canvas.height);
+}
+
+// icon-image по типу POI одной темой: набор картинок фиксирован (6 типов).
+function poiIconExpression(theme: Theme): unknown {
+  const expression: unknown[] = ["match", ["get", "type"]];
+  for (const [type, icon] of Object.entries(POI_TO_ICON)) {
+    expression.push(type, poiIconName(theme, icon));
   }
-  return el;
+  expression.push(poiIconName(theme, "shop"));
+  return expression;
+}
+
+// Слои POI: по одному на категорию — так проще фильтры по зуму и чекбоксы.
+// icon-allow-overlap выключен до z14: ниже тысячи наложенных капель не нужны.
+function poiLayers(theme: Theme): maplibregl.LayerSpecification[] {
+  const iconLayer = (def: (typeof POI_LAYER_DEFS)[number]) =>
+    ({
+      id: def.id,
+      type: "symbol",
+      source: POI_SOURCE,
+      minzoom: def.minzoom,
+      filter: ["match", ["get", "type"], def.types, true, false],
+      layout: {
+        "icon-image": poiIconExpression(theme),
+        "icon-anchor": "bottom",
+        "icon-allow-overlap": ["step", ["zoom"], false, POI_LABEL_MIN_ZOOM, true],
+        "icon-padding": 2,
+      },
+    }) as unknown as maplibregl.LayerSpecification;
+  return [
+    ...POI_LAYER_DEFS.map(iconLayer),
+    {
+      id: POI_LABEL_LAYER,
+      type: "symbol",
+      source: POI_LABEL_SOURCE,
+      minzoom: POI_LABEL_MIN_ZOOM,
+      layout: {
+        "icon-image": ["get", "icon"],
+        "icon-anchor": "bottom-left",
+        "icon-offset": [16, -3],
+        "icon-allow-overlap": true,
+        "icon-ignore-placement": true,
+      },
+    } as unknown as maplibregl.LayerSpecification,
+  ];
 }
 
 function makeRedPinEl(text: string, pill: string, iconColor: string): HTMLDivElement {
@@ -2257,6 +2345,7 @@ export default function Map() {
     const container = containerRef.current;
     let cancelled = false;
     let map: maplibregl.Map | null = null;
+    let poiRefreshTimer: number | null = null;
 
     const init = async () => {
       const fetchJson = async (url: string): Promise<unknown> => {
@@ -2368,25 +2457,17 @@ export default function Map() {
           throw new Error("Манифест районов пуст или повреждён");
         }
         districts = manifest.districts;
-        const districtLayers = await Promise.all(
+        // POI больше не тянем всем городом: файлы грузятся по видимым районам
+        // ПОСЛЕ создания карты (ensure/refreshPoi ниже). Красные зоны — как были.
+        const districtRedzones = await Promise.all(
           districts.map(async (district) => {
-            const [districtPoi, districtRedzones] = await Promise.all([
-              fetchJson(`data/districts/${district.id}/poi.geojson`),
-              fetchJson(`data/districts/${district.id}/redzones.geojson`),
-            ]);
-            return {
-              poi: districtPoi as GCollection<PoiProps>,
-              redzones: districtRedzones as GCollection<RedzoneProps>,
-            };
+            const data = await fetchJson(`data/districts/${district.id}/redzones.geojson`);
+            return data as GCollection<RedzoneProps>;
           }),
         );
-        poi = {
-          type: "FeatureCollection",
-          features: districtLayers.flatMap((data) => data.poi.features),
-        };
         redzones = {
           type: "FeatureCollection",
-          features: districtLayers.flatMap((data) => data.redzones.features),
+          features: districtRedzones.flatMap((data) => data.features),
         };
       } catch (e) {
         console.error("Не удалось загрузить данные карты:", e);
@@ -2405,23 +2486,141 @@ export default function Map() {
 
       const palette = MAP_THEMES[themeRef.current];
 
-      const poiCenters = poi.features
-        .map((f) => ({ f, center: geometryCenter(f.geometry) }))
-        .filter(
-          (x): x is { f: GFeature<PoiProps>; center: [number, number] } =>
-            x.center !== null,
-      );
+      // POI — только видимые районы, кэш в памяти. В источник попадают
+      // загруженные видимые (+ запас 12%) районы, не больше POI_MAX_DISTRICTS:
+      // на старте это 1–4 файла вместо 132.
+      const poiByDistrict: Record<number, GFeature<PoiProps>[]> = {};
+      const poiRequests: Record<number, Promise<GFeature<PoiProps>[]>> = {};
+      const poiPoints: { f: GFeature<PoiProps>; center: [number, number] }[] = [];
+      let poiSourceIds: number[] = [];
+      let poiSourceApplied = false;
+      let poiLoadSeq = 0;
+
+      const loadDistrictPoi = (id: number): Promise<GFeature<PoiProps>[]> => {
+        const cached = poiByDistrict[id];
+        if (cached) return Promise.resolve(cached);
+        const pending = poiRequests[id];
+        if (pending) return pending;
+        const request = fetchJson(`data/districts/${id}/poi.geojson`)
+          .then((data) => {
+            const features = (data as GCollection<PoiProps>).features ?? [];
+            poiByDistrict[id] = features;
+            for (const f of features) {
+              const center = geometryCenter(f.geometry);
+              if (center) poiPoints.push({ f, center });
+            }
+            return features;
+          })
+          .catch((error) => {
+            console.error(`POI района ${id} не загрузились:`, error);
+            poiByDistrict[id] = [];
+            return [] as GFeature<PoiProps>[];
+          })
+          .finally(() => {
+            delete poiRequests[id];
+          });
+        poiRequests[id] = request;
+        return request;
+      };
+
+      const bboxIntersectionArea = (
+        a: readonly number[],
+        b: readonly number[],
+      ): number => {
+        const w = Math.max(a[0], b[0]);
+        const s = Math.max(a[1], b[1]);
+        const e = Math.min(a[2], b[2]);
+        const n = Math.min(a[3], b[3]);
+        return e > w && n > s ? (e - w) * (n - s) : 0;
+      };
+
+      const visiblePoiDistrictIds = (): number[] => {
+        if (!map || map.getZoom() < POI_MIN_ZOOM) return [];
+        const bounds = map.getBounds();
+        const padX = (bounds.getEast() - bounds.getWest()) * 0.12;
+        const padY = (bounds.getNorth() - bounds.getSouth()) * 0.12;
+        const view = [
+          bounds.getWest() - padX,
+          bounds.getSouth() - padY,
+          bounds.getEast() + padX,
+          bounds.getNorth() + padY,
+        ];
+        return districts
+          .map((district) => ({
+            district,
+            area: bboxIntersectionArea(district.bbox, view),
+          }))
+          .filter((entry) => entry.area > 0)
+          .sort((a, b) => b.area - a.area)
+          .slice(0, POI_MAX_DISTRICTS)
+          .map((entry) => entry.district.id);
+      };
+
+      const applyPoiSource = () => {
+        const source = map?.getSource(POI_SOURCE) as maplibregl.GeoJSONSource | null;
+        if (!source) return;
+        source.setData({
+          type: "FeatureCollection",
+          features: poiSourceIds.flatMap((id) => poiByDistrict[id] ?? []),
+        } as never);
+        poiSourceApplied = true;
+      };
+
+      const refreshPoiForViewport = async () => {
+        if (!map) return;
+        const ids = visiblePoiDistrictIds();
+        const seq = ++poiLoadSeq;
+        if (!ids.length) {
+          if (!poiSourceIds.length) return;
+          poiSourceIds = [];
+          applyPoiSource();
+          rebuildOverlays(selectedRef.current, visibleRef.current);
+          return;
+        }
+        const unchanged =
+          ids.length === poiSourceIds.length &&
+          ids.every((id, index) => id === poiSourceIds[index]);
+        if (unchanged && poiSourceApplied && ids.every((id) => poiByDistrict[id])) return;
+        await Promise.all(ids.map(loadDistrictPoi));
+        if (seq !== poiLoadSeq || !map) return;
+        poiSourceIds = ids;
+        applyPoiSource();
+        // Подписи и маршруты ближайших POI зависят от загруженных данных.
+        rebuildOverlays(selectedRef.current, visibleRef.current);
+      };
+
+      // Выбранный дом мог оказаться у края кадра: его район (и соседей)
+      // догружаем в кэш, чтобы «ближайший POI» не потерялся на границе.
+      const ensurePoiNear = async (center: [number, number]) => {
+        const pad = 0.018;
+        const ids = districts
+          .filter(
+            ({ bbox }) =>
+              center[0] >= bbox[0] - pad &&
+              center[0] <= bbox[2] + pad &&
+              center[1] >= bbox[1] - pad &&
+              center[1] <= bbox[3] + pad,
+          )
+          .slice(0, POI_MAX_DISTRICTS)
+          .map((district) => district.id)
+          .filter((id) => !poiByDistrict[id]);
+        if (!ids.length) return;
+        await Promise.all(ids.map(loadDistrictPoi));
+        if (!cancelled) rebuildOverlays(selectedRef.current, visibleRef.current);
+      };
+
       const redzoneFeatures = redzones.features;
 
       let labelCandidates: LabelCandidate[] = [];
 
+      // Ближайший POI ищем по загруженным районам (кэш растёт по мере движения).
       const nearestPoi = (
         bonusKey: string,
         from: [number, number],
       ): { f: GFeature<PoiProps>; center: [number, number] } | null => {
         let best: { f: GFeature<PoiProps>; center: [number, number] } | null = null;
         let bestDist = Infinity;
-        for (const { f, center } of poiCenters) {
+        for (const { f, center } of poiPoints) {
           if (POI_TO_BONUS[f.properties.type] !== bonusKey) continue;
           const d = haversineM(center, from);
           if (d < bestDist) {
@@ -2437,8 +2636,30 @@ export default function Map() {
         features: [],
       };
 
-      let poiMarkers: maplibregl.Marker[] = [];
       let redPins: maplibregl.Marker[] = [];
+
+      // Иконки/подписи POI — canvas-картинки, регистрируются в map.addImage.
+      // Синхронно (canvas 2d), поэтому можно и по событию styleimagemissing.
+      const registerPoiImages = (t: Theme) => {
+        if (!map || !map.isStyleLoaded()) return;
+        for (const type of Object.keys(POI_TO_ICON)) {
+          const name = poiIconName(t, POI_TO_ICON[type]);
+          if (map.hasImage(name)) continue;
+          map.addImage(name, makePoiIconImage(type, t), {
+            pixelRatio: POI_PIXEL_RATIO,
+          });
+        }
+      };
+      const ensurePoiLabelImage = (t: Theme, text: string): string => {
+        const name = poiLabelImageName(t, text);
+        if (map?.hasImage(name)) return name;
+        if (map?.isStyleLoaded()) {
+          map.addImage(name, makePoiLabelImage(t, text), {
+            pixelRatio: POI_PIXEL_RATIO,
+          });
+        }
+        return name;
+      };
 
       // Векторный источник требует явного слоя tippecanoe; geojson — нет.
       const buildingSourceLayer = tileMode ? { "source-layer": "buildings" } : {};
@@ -2465,6 +2686,9 @@ export default function Map() {
             },
             trees: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
             glow: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
+            // POI видимых районов и пилюли-подписи ближайших к выбранному дому.
+            poi: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
+            poiLabels: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
               // Отдельная геометрия выбранного дома и тонкого контура его крыши (~1.5 px).
               selectedBuilding: {
                 type: "geojson",
@@ -2836,6 +3060,8 @@ export default function Map() {
                 "line-opacity": 0.95,
               },
             },
+            // POI — symbol-слои поверх зданий: иконки категорий и подписи.
+            ...poiLayers(themeRef.current),
           ],
         },
         // Демонстрационный ракурс «диорама»: плотный квартал, парк и река.
@@ -3027,6 +3253,43 @@ export default function Map() {
       });
       (window as unknown as { __map?: maplibregl.Map }).__map = map;
 
+      // Если картинка POI понадобилась раньше регистрации (стиль грузится
+      // параллельно) — дорисовываем её синхронно по имени.
+      map.on("styleimagemissing", (e) => {
+        if (!map) return;
+        if (map.hasImage(e.id)) return;
+        const iconMatch = /^poi-(light|dark)-(.+)$/.exec(e.id);
+        if (iconMatch) {
+          const type = Object.keys(POI_TO_ICON).find(
+            (key) => POI_TO_ICON[key] === (iconMatch[2] as IconKey),
+          );
+          if (type) {
+            map.addImage(e.id, makePoiIconImage(type, iconMatch[1] as Theme), {
+              pixelRatio: POI_PIXEL_RATIO,
+            });
+          }
+          return;
+        }
+        const labelMatch = /^poi-label-(light|dark)-([\s\S]+)$/.exec(e.id);
+        if (labelMatch) {
+          map.addImage(e.id, makePoiLabelImage(labelMatch[1] as Theme, labelMatch[2]), {
+            pixelRatio: POI_PIXEL_RATIO,
+          });
+        }
+      });
+
+      // POI видимых районов: старт и дебаунс после движения.
+      const schedulePoiRefresh = () => {
+        if (poiRefreshTimer !== null) window.clearTimeout(poiRefreshTimer);
+        poiRefreshTimer = window.setTimeout(() => {
+          poiRefreshTimer = null;
+          void refreshPoiForViewport();
+        }, 160);
+      };
+      map.on("moveend", schedulePoiRefresh);
+      map.on("zoomend", schedulePoiRefresh);
+      void refreshPoiForViewport();
+
       // Заставка: убираем, когда карта отрисована (idle) или через 2 с —
       // что раньше.
       const hideSplash = () => setSplash((s) => (s === "show" ? "fade" : s));
@@ -3036,45 +3299,37 @@ export default function Map() {
       const rebuildOverlays = (sel: SelectedBuilding | null, vis: Visibility) => {
         if (!map) return;
         const theme = MAP_THEMES[themeRef.current];
-        poiMarkers.forEach((m) => m.remove());
-        poiMarkers = [];
+        const themeName = themeRef.current;
         redPins.forEach((m) => m.remove());
         redPins = [];
 
         const selCenter = sel ? (buildingCenters[sel.id] ?? null) : null;
-        const nearestByCat: Record<string, GFeature<PoiProps> | null> = {};
-        if (selCenter) {
-          for (const cat of BONUS_KEYS) {
-            nearestByCat[cat] = nearestPoi(cat, selCenter)?.f ?? null;
-          }
-        }
 
-        for (const { f, center } of poiCenters) {
-          const layerKey = POI_TO_LAYER[f.properties.type];
-          if (!layerKey || !vis[layerKey]) continue;
-          const bonusKey = POI_TO_BONUS[f.properties.type];
-          let label: string | null = null;
-          if (sel && selCenter && nearestByCat[bonusKey] === f) {
-            const entry = sel.breakdown?.bonuses[bonusKey];
-            const minutes = routesRef.current?.[bonusKey]?.minutes ?? entry?.minutes;
-            if (minutes != null) {
-              label = `${POI_LABELS[f.properties.type] ?? f.properties.type} · ${Math.round(minutes)} мин`;
-            }
+        // Подписи POI — не DOM, а пилюли-картинки symbol-слоя: только у
+        // ближайшего к выбранному дому POI в каждой видимой категории.
+        const labelFeatures: Feature[] = [];
+        if (sel && selCenter) {
+          for (const cat of BONUS_KEYS) {
+            const layerKey = BONUS_TO_LAYER[cat];
+            if (layerKey && !vis[layerKey]) continue;
+            const target = nearestPoi(cat, selCenter);
+            if (!target) continue;
+            const entry = sel.breakdown?.bonuses[cat];
+            const minutes = routesRef.current?.[cat]?.minutes ?? entry?.minutes;
+            if (minutes == null) continue;
+            const type = target.f.properties.type;
+            const text = `${POI_LABELS[type] ?? type} · ${Math.round(minutes)} мин`;
+            labelFeatures.push({
+              type: "Feature",
+              properties: { icon: ensurePoiLabelImage(themeName, text) },
+              geometry: { type: "Point", coordinates: target.center },
+            });
           }
-          poiMarkers.push(
-            new maplibregl.Marker({
-              element: makePoiPinEl(
-                POI_TO_ICON[f.properties.type] ?? "shop",
-                poiColor(f.properties.type, theme),
-                label,
-                theme.pill,
-              ),
-              anchor: "bottom",
-            })
-              .setLngLat(center)
-              .addTo(map),
-          );
         }
+        (map.getSource(POI_LABEL_SOURCE) as maplibregl.GeoJSONSource | null)?.setData({
+          type: "FeatureCollection",
+          features: labelFeatures,
+        } as never);
 
         if (sel?.breakdown && selCenter) {
           for (const [key, entry] of Object.entries(sel.breakdown.penalties)) {
@@ -3148,6 +3403,11 @@ export default function Map() {
           map.setLayoutProperty("routes-glow", "visibility", rt);
           map.setLayoutProperty("routes-line", "visibility", rt);
           map.setLayoutProperty("routes-dots", "visibility", rt);
+        }
+        for (const def of POI_LAYER_DEFS) {
+          if (map.getLayer(def.id)) {
+            map.setLayoutProperty(def.id, "visibility", v[def.flag] ? "visible" : "none");
+          }
         }
         rebuildOverlays(selectedRef.current, v);
       };
@@ -3512,6 +3772,13 @@ export default function Map() {
         // Активную тему готовим заранее: pattern включается на zoomend уже в
         // готовом атласе, иначе первый кадр может пропустить слой.
         addFacadeImages(t);
+        // POI: у темы свой цвет капель — обновляем картинки и icon-image.
+        registerPoiImages(t);
+        for (const def of POI_LAYER_DEFS) {
+          if (map.getLayer(def.id)) {
+            map.setLayoutProperty(def.id, "icon-image", poiIconExpression(t) as never);
+          }
+        }
         syncSelectedWindowTheme(t);
         currentFacadeLod = null;
         currentNonHomeDim = null;
@@ -4217,6 +4484,8 @@ export default function Map() {
           return;
         }
         districtByBuildingRef.current[id] = district.id;
+        // POI района дома — в кэш, чтобы ближайшие и маршруты были сразу.
+        void ensurePoiNear(center);
 
         const token = cancelSelectedCapture();
         selectionMovePending = true;
@@ -4295,6 +4564,8 @@ export default function Map() {
         applyVisibilityRef.current?.(visibleRef.current);
         setIsoSourceRef.current?.(isoGeomRef.current);
         rebuildLabels();
+        // Источник POI до готовности стиля мог не принять данные.
+        void refreshPoiForViewport();
         // Публичная ссылка «Отправить клиенту»: ?building=<osm_id>
         const param = new URLSearchParams(window.location.search).get("building");
         if (param !== null) {
@@ -4333,8 +4604,22 @@ export default function Map() {
         return layers;
       };
 
+      const poiHitLayers = () =>
+        [...POI_LAYER_DEFS.map((def) => def.id), POI_LABEL_LAYER].filter((id) =>
+          map?.getLayer(id),
+        );
+
       map.on("click", (e) => {
         if (!map || !map.getLayer("buildings")) return;
+        // Клик по капле или пилюле POI не проваливается в дом под ней — как
+        // раньше, когда DOM-маркер перехватывал событие.
+        const poiLayers = poiHitLayers();
+        if (
+          poiLayers.length &&
+          map.queryRenderedFeatures(e.point, { layers: poiLayers }).length
+        ) {
+          return;
+        }
         const feats = map.queryRenderedFeatures(e.point, { layers: buildingHitLayers() });
         const rawId = feats.length ? (feats[0].id ?? feats[0].properties?.id) : null;
         // В тайлах id может прийти строкой — приводим к числу (brief B2).
@@ -4356,7 +4641,11 @@ export default function Map() {
       map.on("mousemove", (e) => {
         if (!map || !map.getLayer("buildings")) return;
         const feats = map.queryRenderedFeatures(e.point, { layers: buildingHitLayers() });
-        map.getCanvas().style.cursor = feats.length ? "pointer" : "";
+        const poiLayers = poiHitLayers();
+        const poi =
+          poiLayers.length > 0 &&
+          map.queryRenderedFeatures(e.point, { layers: poiLayers }).length > 0;
+        map.getCanvas().style.cursor = feats.length || poi ? "pointer" : "";
       });
     };
 
@@ -4364,6 +4653,10 @@ export default function Map() {
 
     return () => {
       cancelled = true;
+      if (poiRefreshTimer !== null) {
+        window.clearTimeout(poiRefreshTimer);
+        poiRefreshTimer = null;
+      }
       map?.remove();
       map = null;
     };
