@@ -2038,7 +2038,11 @@ const POI_LABEL_SOURCE = "poiLabels";
 const POI_LABEL_LAYER = "poi-labels";
 // Правило продукта (P1): на обзоре — ничего, дальше категории по зуму.
 const POI_MIN_ZOOM = 11;
-const POI_MAX_DISTRICTS = 4;
+// Кап на кадр: на обзоре z11–13 в кадр попадает ~10 районов, поэтому 16 —
+// с запасом. Больше не грузим: 132 файла на один moveend недопустимы.
+const POI_MAX_DISTRICTS = 16;
+// Для выбранного дома хватает его района и ближайших соседей.
+const POI_NEAR_DISTRICTS = 4;
 const POI_LABEL_MIN_ZOOM = 14;
 // Порядок слоёв = порядок отрисовки: метро важнее всего на обзоре.
 const POI_LAYER_DEFS: {
@@ -2487,8 +2491,8 @@ export default function Map() {
       const palette = MAP_THEMES[themeRef.current];
 
       // POI — только видимые районы, кэш в памяти. В источник попадают
-      // загруженные видимые (+ запас 12%) районы, не больше POI_MAX_DISTRICTS:
-      // на старте это 1–4 файла вместо 132.
+      // загруженные видимые (+ запас 12%) районы, не больше POI_MAX_DISTRICTS
+      // (16): на обзоре это покрывает весь кадр, а не 4 центральных района.
       const poiByDistrict: Record<number, GFeature<PoiProps>[]> = {};
       const poiRequests: Record<number, Promise<GFeature<PoiProps>[]>> = {};
       const poiPoints: { f: GFeature<PoiProps>; center: [number, number] }[] = [];
@@ -2601,7 +2605,7 @@ export default function Map() {
               center[1] >= bbox[1] - pad &&
               center[1] <= bbox[3] + pad,
           )
-          .slice(0, POI_MAX_DISTRICTS)
+          .slice(0, POI_NEAR_DISTRICTS)
           .map((district) => district.id)
           .filter((id) => !poiByDistrict[id]);
         if (!ids.length) return;
