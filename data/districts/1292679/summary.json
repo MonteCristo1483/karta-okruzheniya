@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 1292679,
+    "name": "район Проспект Вернадского"
+  },
+  "buildings": 517,
+  "homes": 270,
+  "poi": 66,
+  "redzones": 82,
+  "geojson_bytes": {
+    "buildings": 445307,
+    "poi": 10367,
+    "redzones": 21840,
+    "district": 7481
+  },
+  "index_rows": 270,
+  "index_bytes": 28500,
+  "tiles": null,
+  "seconds": 4.4
+}

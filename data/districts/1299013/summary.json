@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 1299013,
+    "name": "район Перово"
+  },
+  "buildings": 2005,
+  "homes": 1317,
+  "poi": 161,
+  "redzones": 583,
+  "geojson_bytes": {
+    "buildings": 1816253,
+    "poi": 24747,
+    "redzones": 177452,
+    "district": 5192
+  },
+  "index_rows": 1317,
+  "index_bytes": 141831,
+  "tiles": null,
+  "seconds": 5.9
+}

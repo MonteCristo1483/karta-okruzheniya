@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 446079,
+    "name": "район Аэропорт"
+  },
+  "buildings": 1401,
+  "homes": 570,
+  "poi": 140,
+  "redzones": 200,
+  "geojson_bytes": {
+    "buildings": 1047331,
+    "poi": 21623,
+    "redzones": 66279,
+    "district": 4103
+  },
+  "index_rows": 570,
+  "index_bytes": 62831,
+  "tiles": null,
+  "seconds": 4.8
+}

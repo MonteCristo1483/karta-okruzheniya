@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 446114,
+    "name": "район Дорогомилово"
+  },
+  "buildings": 1173,
+  "homes": 510,
+  "poi": 124,
+  "redzones": 496,
+  "geojson_bytes": {
+    "buildings": 935639,
+    "poi": 19352,
+    "redzones": 136266,
+    "district": 2550
+  },
+  "index_rows": 510,
+  "index_bytes": 56992,
+  "tiles": null,
+  "seconds": 4.8
+}

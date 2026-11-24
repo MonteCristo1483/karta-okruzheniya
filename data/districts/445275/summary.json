@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 445275,
+    "name": "район Западное Дегунино"
+  },
+  "buildings": 1121,
+  "homes": 473,
+  "poi": 94,
+  "redzones": 344,
+  "geojson_bytes": {
+    "buildings": 824615,
+    "poi": 14560,
+    "redzones": 115577,
+    "district": 6163
+  },
+  "index_rows": 473,
+  "index_bytes": 50611,
+  "tiles": null,
+  "seconds": 4.4
+}

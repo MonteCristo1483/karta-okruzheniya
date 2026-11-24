@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 434560,
+    "name": "район Строгино"
+  },
+  "buildings": 1422,
+  "homes": 732,
+  "poi": 106,
+  "redzones": 344,
+  "geojson_bytes": {
+    "buildings": 1136428,
+    "poi": 16593,
+    "redzones": 87104,
+    "district": 4906
+  },
+  "index_rows": 732,
+  "index_bytes": 79760,
+  "tiles": null,
+  "seconds": 5.4
+}

@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 455208,
+    "name": "район Капотня"
+  },
+  "buildings": 854,
+  "homes": 76,
+  "poi": 32,
+  "redzones": 134,
+  "geojson_bytes": {
+    "buildings": 379300,
+    "poi": 4959,
+    "redzones": 38197,
+    "district": 3309
+  },
+  "index_rows": 76,
+  "index_bytes": 8324,
+  "tiles": null,
+  "seconds": 3.8
+}

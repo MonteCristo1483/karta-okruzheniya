@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 445285,
+    "name": "район Восточное Дегунино"
+  },
+  "buildings": 605,
+  "homes": 223,
+  "poi": 68,
+  "redzones": 90,
+  "geojson_bytes": {
+    "buildings": 419291,
+    "poi": 10602,
+    "redzones": 30734,
+    "district": 5001
+  },
+  "index_rows": 223,
+  "index_bytes": 24083,
+  "tiles": null,
+  "seconds": 4.0
+}

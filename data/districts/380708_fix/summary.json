@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 380708,
+    "name": "район Внуково"
+  },
+  "buildings": 25931,
+  "homes": 6525,
+  "poi": 183,
+  "redzones": 822,
+  "geojson_bytes": {
+    "buildings": 13755534,
+    "poi": 28106,
+    "redzones": 297226,
+    "district": 12302
+  },
+  "index_rows": 6525,
+  "index_bytes": 671179,
+  "tiles": null,
+  "seconds": 13.1
+}

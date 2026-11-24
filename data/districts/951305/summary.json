@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 951305,
+    "name": "район Чертаново Центральное"
+  },
+  "buildings": 787,
+  "homes": 308,
+  "poi": 86,
+  "redzones": 118,
+  "geojson_bytes": {
+    "buildings": 551214,
+    "poi": 13464,
+    "redzones": 35110,
+    "district": 5201
+  },
+  "index_rows": 308,
+  "index_bytes": 34414,
+  "tiles": null,
+  "seconds": 4.3
+}

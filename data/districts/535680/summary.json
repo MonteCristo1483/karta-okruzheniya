@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 535680,
+    "name": "район Чертаново Северное"
+  },
+  "buildings": 592,
+  "homes": 207,
+  "poi": 96,
+  "redzones": 121,
+  "geojson_bytes": {
+    "buildings": 414637,
+    "poi": 14945,
+    "redzones": 34809,
+    "district": 3813
+  },
+  "index_rows": 207,
+  "index_bytes": 22029,
+  "tiles": null,
+  "seconds": 4.1
+}

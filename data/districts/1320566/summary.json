@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 1320566,
+    "name": "район Матушкино"
+  },
+  "buildings": 570,
+  "homes": 124,
+  "poi": 59,
+  "redzones": 148,
+  "geojson_bytes": {
+    "buildings": 327661,
+    "poi": 9015,
+    "redzones": 34914,
+    "district": 5986
+  },
+  "index_rows": 124,
+  "index_bytes": 14131,
+  "tiles": null,
+  "seconds": 3.8
+}

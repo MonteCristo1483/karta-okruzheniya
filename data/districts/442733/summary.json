@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 442733,
+    "name": "район Митино"
+  },
+  "buildings": 1796,
+  "homes": 599,
+  "poi": 219,
+  "redzones": 415,
+  "geojson_bytes": {
+    "buildings": 1301987,
+    "poi": 33861,
+    "redzones": 113873,
+    "district": 46304
+  },
+  "index_rows": 599,
+  "index_bytes": 63050,
+  "tiles": null,
+  "seconds": 5.6
+}

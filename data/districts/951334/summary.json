@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 951334,
+    "name": "район Ясенево"
+  },
+  "buildings": 1177,
+  "homes": 358,
+  "poi": 165,
+  "redzones": 262,
+  "geojson_bytes": {
+    "buildings": 810013,
+    "poi": 25743,
+    "redzones": 64138,
+    "district": 9823
+  },
+  "index_rows": 358,
+  "index_bytes": 39313,
+  "tiles": null,
+  "seconds": 5.4
+}

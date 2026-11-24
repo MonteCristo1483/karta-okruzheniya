@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 535662,
+    "name": "Нагорный район"
+  },
+  "buildings": 1142,
+  "homes": 493,
+  "poi": 95,
+  "redzones": 249,
+  "geojson_bytes": {
+    "buildings": 838388,
+    "poi": 14730,
+    "redzones": 68402,
+    "district": 4553
+  },
+  "index_rows": 493,
+  "index_bytes": 53728,
+  "tiles": null,
+  "seconds": 4.6
+}

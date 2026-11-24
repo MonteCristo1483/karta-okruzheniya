@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 445298,
+    "name": "район Беговой"
+  },
+  "buildings": 986,
+  "homes": 379,
+  "poi": 45,
+  "redzones": 142,
+  "geojson_bytes": {
+    "buildings": 774370,
+    "poi": 7070,
+    "redzones": 54057,
+    "district": 3746
+  },
+  "index_rows": 379,
+  "index_bytes": 39985,
+  "tiles": null,
+  "seconds": 4.5
+}

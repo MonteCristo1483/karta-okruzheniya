@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 951336,
+    "name": "район Тёплый Стан"
+  },
+  "buildings": 623,
+  "homes": 332,
+  "poi": 115,
+  "redzones": 141,
+  "geojson_bytes": {
+    "buildings": 521734,
+    "poi": 17909,
+    "redzones": 30268,
+    "district": 5370
+  },
+  "index_rows": 332,
+  "index_bytes": 36915,
+  "tiles": null,
+  "seconds": 4.9
+}

@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 1281209,
+    "name": "Даниловский район"
+  },
+  "buildings": 2224,
+  "homes": 933,
+  "poi": 210,
+  "redzones": 642,
+  "geojson_bytes": {
+    "buildings": 1784466,
+    "poi": 32353,
+    "redzones": 219035,
+    "district": 6638
+  },
+  "index_rows": 933,
+  "index_bytes": 103336,
+  "tiles": null,
+  "seconds": 5.9
+}

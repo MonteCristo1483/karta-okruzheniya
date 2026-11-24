@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 446078,
+    "name": "Войковский район"
+  },
+  "buildings": 1001,
+  "homes": 504,
+  "poi": 109,
+  "redzones": 135,
+  "geojson_bytes": {
+    "buildings": 821070,
+    "poi": 16722,
+    "redzones": 43354,
+    "district": 5182
+  },
+  "index_rows": 504,
+  "index_bytes": 58124,
+  "tiles": null,
+  "seconds": 4.8
+}

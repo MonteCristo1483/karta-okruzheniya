@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 1250618,
+    "name": "район Свиблово"
+  },
+  "buildings": 707,
+  "homes": 310,
+  "poi": 88,
+  "redzones": 238,
+  "geojson_bytes": {
+    "buildings": 545342,
+    "poi": 13586,
+    "redzones": 66279,
+    "district": 4415
+  },
+  "index_rows": 310,
+  "index_bytes": 31770,
+  "tiles": null,
+  "seconds": 4.2
+}

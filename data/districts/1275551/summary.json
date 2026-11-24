@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 1275551,
+    "name": "Пресненский район"
+  },
+  "buildings": 3306,
+  "homes": 1700,
+  "poi": 243,
+  "redzones": 914,
+  "geojson_bytes": {
+    "buildings": 2907947,
+    "poi": 38599,
+    "redzones": 259631,
+    "district": 11019
+  },
+  "index_rows": 1700,
+  "index_bytes": 193798,
+  "tiles": null,
+  "seconds": 22.4
+}

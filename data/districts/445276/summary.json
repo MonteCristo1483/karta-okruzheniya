@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 445276,
+    "name": "Тимирязевский район"
+  },
+  "buildings": 1234,
+  "homes": 592,
+  "poi": 135,
+  "redzones": 258,
+  "geojson_bytes": {
+    "buildings": 977341,
+    "poi": 20839,
+    "redzones": 71212,
+    "district": 5227
+  },
+  "index_rows": 592,
+  "index_bytes": 64390,
+  "tiles": null,
+  "seconds": 4.7
+}

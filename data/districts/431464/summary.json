@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 431464,
+    "name": "район Щукино"
+  },
+  "buildings": 1830,
+  "homes": 1039,
+  "poi": 137,
+  "redzones": 244,
+  "geojson_bytes": {
+    "buildings": 1616681,
+    "poi": 21280,
+    "redzones": 69458,
+    "district": 5204
+  },
+  "index_rows": 1039,
+  "index_bytes": 116322,
+  "tiles": null,
+  "seconds": 5.4
+}

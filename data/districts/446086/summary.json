@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 446086,
+    "name": "район Северное Медведково"
+  },
+  "buildings": 924,
+  "homes": 400,
+  "poi": 85,
+  "redzones": 212,
+  "geojson_bytes": {
+    "buildings": 670829,
+    "poi": 13168,
+    "redzones": 46860,
+    "district": 5364
+  },
+  "index_rows": 400,
+  "index_bytes": 40958,
+  "tiles": null,
+  "seconds": 4.5
+}

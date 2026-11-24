@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 548619,
+    "name": "район Выхино-Жулебино"
+  },
+  "buildings": 1870,
+  "homes": 812,
+  "poi": 216,
+  "redzones": 278,
+  "geojson_bytes": {
+    "buildings": 1466812,
+    "poi": 33400,
+    "redzones": 71114,
+    "district": 7975
+  },
+  "index_rows": 812,
+  "index_bytes": 89410,
+  "tiles": null,
+  "seconds": 5.3
+}

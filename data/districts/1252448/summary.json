@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 1252448,
+    "name": "Лосиноостровский район"
+  },
+  "buildings": 803,
+  "homes": 434,
+  "poi": 86,
+  "redzones": 88,
+  "geojson_bytes": {
+    "buildings": 674407,
+    "poi": 13227,
+    "redzones": 40525,
+    "district": 4193
+  },
+  "index_rows": 434,
+  "index_bytes": 45237,
+  "tiles": null,
+  "seconds": 4.5
+}

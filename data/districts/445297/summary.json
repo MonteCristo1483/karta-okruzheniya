@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 445297,
+    "name": "Головинский район"
+  },
+  "buildings": 1632,
+  "homes": 730,
+  "poi": 104,
+  "redzones": 284,
+  "geojson_bytes": {
+    "buildings": 1204714,
+    "poi": 15940,
+    "redzones": 97268,
+    "district": 5773
+  },
+  "index_rows": 730,
+  "index_bytes": 79121,
+  "tiles": null,
+  "seconds": 5.2
+}

@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 445273,
+    "name": "район Левобережный"
+  },
+  "buildings": 714,
+  "homes": 279,
+  "poi": 61,
+  "redzones": 136,
+  "geojson_bytes": {
+    "buildings": 541822,
+    "poi": 9496,
+    "redzones": 36397,
+    "district": 6051
+  },
+  "index_rows": 279,
+  "index_bytes": 30161,
+  "tiles": null,
+  "seconds": 4.4
+}

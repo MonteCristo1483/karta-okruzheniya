@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 1257472,
+    "name": "Можайский район"
+  },
+  "buildings": 2072,
+  "homes": 1034,
+  "poi": 137,
+  "redzones": 385,
+  "geojson_bytes": {
+    "buildings": 1608415,
+    "poi": 21003,
+    "redzones": 120655,
+    "district": 13966
+  },
+  "index_rows": 1034,
+  "index_bytes": 107551,
+  "tiles": null,
+  "seconds": 5.3
+}

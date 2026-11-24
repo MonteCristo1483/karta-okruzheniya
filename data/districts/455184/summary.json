@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 455184,
+    "name": "район Текстильщики"
+  },
+  "buildings": 910,
+  "homes": 524,
+  "poi": 116,
+  "redzones": 241,
+  "geojson_bytes": {
+    "buildings": 764952,
+    "poi": 17922,
+    "redzones": 82124,
+    "district": 5089
+  },
+  "index_rows": 524,
+  "index_bytes": 57075,
+  "tiles": null,
+  "seconds": 4.6
+}

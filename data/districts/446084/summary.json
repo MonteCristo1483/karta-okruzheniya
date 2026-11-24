@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 446084,
+    "name": "район Лианозово"
+  },
+  "buildings": 1194,
+  "homes": 531,
+  "poi": 86,
+  "redzones": 135,
+  "geojson_bytes": {
+    "buildings": 858651,
+    "poi": 13416,
+    "redzones": 37508,
+    "district": 1822
+  },
+  "index_rows": 531,
+  "index_bytes": 55207,
+  "tiles": null,
+  "seconds": 4.3
+}

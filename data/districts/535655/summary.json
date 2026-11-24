@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 535655,
+    "name": "район Нагатино-Садовники"
+  },
+  "buildings": 1168,
+  "homes": 521,
+  "poi": 89,
+  "redzones": 221,
+  "geojson_bytes": {
+    "buildings": 897119,
+    "poi": 13745,
+    "redzones": 61213,
+    "district": 2855
+  },
+  "index_rows": 521,
+  "index_bytes": 57800,
+  "tiles": null,
+  "seconds": 4.8
+}

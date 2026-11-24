@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 1257484,
+    "name": "район Арбат"
+  },
+  "buildings": 868,
+  "homes": 509,
+  "poi": 71,
+  "redzones": 137,
+  "geojson_bytes": {
+    "buildings": 846770,
+    "poi": 11002,
+    "redzones": 35845,
+    "district": 8028
+  },
+  "index_rows": 509,
+  "index_bytes": 56992,
+  "tiles": null,
+  "seconds": 5.4
+}

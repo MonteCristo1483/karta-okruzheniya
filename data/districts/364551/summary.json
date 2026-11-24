@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 364551,
+    "name": "район Сокольники"
+  },
+  "buildings": 1584,
+  "homes": 480,
+  "poi": 89,
+  "redzones": 399,
+  "geojson_bytes": {
+    "buildings": 1048135,
+    "poi": 13804,
+    "redzones": 115281,
+    "district": 5466
+  },
+  "index_rows": 480,
+  "index_bytes": 52291,
+  "tiles": null,
+  "seconds": 4.7
+}

@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 1257403,
+    "name": "район Южное Бутово"
+  },
+  "buildings": 2644,
+  "homes": 1601,
+  "poi": 216,
+  "redzones": 218,
+  "geojson_bytes": {
+    "buildings": 2295172,
+    "poi": 33434,
+    "redzones": 70850,
+    "district": 25105
+  },
+  "index_rows": 1601,
+  "index_bytes": 180395,
+  "tiles": null,
+  "seconds": 6.4
+}

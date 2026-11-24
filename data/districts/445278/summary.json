@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 445278,
+    "name": "Дмитровский район"
+  },
+  "buildings": 1152,
+  "homes": 495,
+  "poi": 99,
+  "redzones": 163,
+  "geojson_bytes": {
+    "buildings": 845271,
+    "poi": 15381,
+    "redzones": 56797,
+    "district": 4941
+  },
+  "index_rows": 495,
+  "index_bytes": 53412,
+  "tiles": null,
+  "seconds": 4.4
+}

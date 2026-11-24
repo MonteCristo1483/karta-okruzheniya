@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 446087,
+    "name": "район Южное Медведково"
+  },
+  "buildings": 538,
+  "homes": 257,
+  "poi": 74,
+  "redzones": 109,
+  "geojson_bytes": {
+    "buildings": 419397,
+    "poi": 11371,
+    "redzones": 27309,
+    "district": 6980
+  },
+  "index_rows": 257,
+  "index_bytes": 25889,
+  "tiles": null,
+  "seconds": 4.1
+}

@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 1281220,
+    "name": "Академический район"
+  },
+  "buildings": 1123,
+  "homes": 660,
+  "poi": 149,
+  "redzones": 218,
+  "geojson_bytes": {
+    "buildings": 984229,
+    "poi": 22933,
+    "redzones": 59383,
+    "district": 3045
+  },
+  "index_rows": 660,
+  "index_bytes": 72592,
+  "tiles": null,
+  "seconds": 5.1
+}

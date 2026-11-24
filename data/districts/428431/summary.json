@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 428431,
+    "name": "район Хорошёво-Мнёвники"
+  },
+  "buildings": 2378,
+  "homes": 1397,
+  "poi": 188,
+  "redzones": 362,
+  "geojson_bytes": {
+    "buildings": 2163851,
+    "poi": 29875,
+    "redzones": 112855,
+    "district": 7559
+  },
+  "index_rows": 1397,
+  "index_bytes": 166053,
+  "tiles": null,
+  "seconds": 6.4
+}

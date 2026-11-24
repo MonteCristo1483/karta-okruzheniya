@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 446272,
+    "name": "район Ростокино"
+  },
+  "buildings": 808,
+  "homes": 315,
+  "poi": 55,
+  "redzones": 166,
+  "geojson_bytes": {
+    "buildings": 568783,
+    "poi": 8553,
+    "redzones": 58587,
+    "district": 4009
+  },
+  "index_rows": 315,
+  "index_bytes": 33990,
+  "tiles": null,
+  "seconds": 4.4
+}

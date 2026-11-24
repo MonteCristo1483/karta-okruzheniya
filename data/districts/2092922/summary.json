@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 2092922,
+    "name": "район Вороново"
+  },
+  "buildings": 14894,
+  "homes": 1124,
+  "poi": 56,
+  "redzones": 247,
+  "geojson_bytes": {
+    "buildings": 5673413,
+    "poi": 8599,
+    "redzones": 82097,
+    "district": 20604
+  },
+  "index_rows": 1124,
+  "index_bytes": 116121,
+  "tiles": null,
+  "seconds": 6.3
+}

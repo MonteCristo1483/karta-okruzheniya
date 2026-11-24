@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 1275627,
+    "name": "район Якиманка"
+  },
+  "buildings": 1324,
+  "homes": 654,
+  "poi": 72,
+  "redzones": 227,
+  "geojson_bytes": {
+    "buildings": 1140841,
+    "poi": 11023,
+    "redzones": 64763,
+    "district": 8100
+  },
+  "index_rows": 654,
+  "index_bytes": 73365,
+  "tiles": null,
+  "seconds": 5.2
+}

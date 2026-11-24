@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 446111,
+    "name": "район Фили-Давыдково"
+  },
+  "buildings": 914,
+  "homes": 491,
+  "poi": 125,
+  "redzones": 182,
+  "geojson_bytes": {
+    "buildings": 749402,
+    "poi": 19583,
+    "redzones": 38862,
+    "district": 8150
+  },
+  "index_rows": 491,
+  "index_bytes": 53514,
+  "tiles": null,
+  "seconds": 4.3
+}

@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 2092925,
+    "name": "Краснопахорский район"
+  },
+  "buildings": 13636,
+  "homes": 2497,
+  "poi": 49,
+  "redzones": 358,
+  "geojson_bytes": {
+    "buildings": 6433969,
+    "poi": 7458,
+    "redzones": 106683,
+    "district": 15239
+  },
+  "index_rows": 2497,
+  "index_bytes": 257627,
+  "tiles": null,
+  "seconds": 10.0
+}

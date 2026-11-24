@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 1257218,
+    "name": "Красносельский район"
+  },
+  "buildings": 1614,
+  "homes": 597,
+  "poi": 135,
+  "redzones": 920,
+  "geojson_bytes": {
+    "buildings": 1223968,
+    "poi": 21317,
+    "redzones": 242378,
+    "district": 11019
+  },
+  "index_rows": 597,
+  "index_bytes": 67364,
+  "tiles": null,
+  "seconds": 5.2
+}

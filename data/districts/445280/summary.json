@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 445280,
+    "name": "район Сокол"
+  },
+  "buildings": 901,
+  "homes": 521,
+  "poi": 85,
+  "redzones": 214,
+  "geojson_bytes": {
+    "buildings": 793004,
+    "poi": 13339,
+    "redzones": 63444,
+    "district": 3067
+  },
+  "index_rows": 521,
+  "index_bytes": 55552,
+  "tiles": null,
+  "seconds": 4.7
+}

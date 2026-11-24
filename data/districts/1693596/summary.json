@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 1693596,
+    "name": "район Бекасово"
+  },
+  "buildings": 10716,
+  "homes": 2068,
+  "poi": 63,
+  "redzones": 524,
+  "geojson_bytes": {
+    "buildings": 5098080,
+    "poi": 9743,
+    "redzones": 154261,
+    "district": 10928
+  },
+  "index_rows": 2068,
+  "index_bytes": 212476,
+  "tiles": null,
+  "seconds": 6.4
+}

@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 1278064,
+    "name": "район Лефортово"
+  },
+  "buildings": 1919,
+  "homes": 1090,
+  "poi": 153,
+  "redzones": 350,
+  "geojson_bytes": {
+    "buildings": 1705644,
+    "poi": 23563,
+    "redzones": 112064,
+    "district": 6606
+  },
+  "index_rows": 1090,
+  "index_bytes": 120989,
+  "tiles": null,
+  "seconds": 5.5
+}

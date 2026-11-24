@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 1298976,
+    "name": "район Новогиреево"
+  },
+  "buildings": 848,
+  "homes": 535,
+  "poi": 108,
+  "redzones": 212,
+  "geojson_bytes": {
+    "buildings": 750351,
+    "poi": 16575,
+    "redzones": 57615,
+    "district": 4635
+  },
+  "index_rows": 535,
+  "index_bytes": 57034,
+  "tiles": null,
+  "seconds": 4.5
+}

@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 1257786,
+    "name": "Тверской район"
+  },
+  "buildings": 3254,
+  "homes": 1380,
+  "poi": 253,
+  "redzones": 630,
+  "geojson_bytes": {
+    "buildings": 2861083,
+    "poi": 39333,
+    "redzones": 182726,
+    "district": 16791
+  },
+  "index_rows": 1380,
+  "index_bytes": 152003,
+  "tiles": null,
+  "seconds": 67.4
+}

@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 364001,
+    "name": "Мещанский район"
+  },
+  "buildings": 1536,
+  "homes": 699,
+  "poi": 110,
+  "redzones": 484,
+  "geojson_bytes": {
+    "buildings": 1307509,
+    "poi": 17022,
+    "redzones": 129793,
+    "district": 12451
+  },
+  "index_rows": 699,
+  "index_bytes": 77153,
+  "tiles": null,
+  "seconds": 6.2
+}

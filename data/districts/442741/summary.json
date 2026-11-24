@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 442741,
+    "name": "район Куркино"
+  },
+  "buildings": 1127,
+  "homes": 707,
+  "poi": 53,
+  "redzones": 127,
+  "geojson_bytes": {
+    "buildings": 1007326,
+    "poi": 8337,
+    "redzones": 33466,
+    "district": 13315
+  },
+  "index_rows": 707,
+  "index_bytes": 76634,
+  "tiles": null,
+  "seconds": 5.3
+}

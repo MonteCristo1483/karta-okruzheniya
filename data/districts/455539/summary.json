@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 455539,
+    "name": "район Орехово-Борисово Северное"
+  },
+  "buildings": 640,
+  "homes": 296,
+  "poi": 121,
+  "redzones": 153,
+  "geojson_bytes": {
+    "buildings": 502171,
+    "poi": 18660,
+    "redzones": 33966,
+    "district": 9284
+  },
+  "index_rows": 296,
+  "index_bytes": 32275,
+  "tiles": null,
+  "seconds": 4.3
+}

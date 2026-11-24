@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 240229,
+    "name": "район Крылатское"
+  },
+  "buildings": 1153,
+  "homes": 351,
+  "poi": 72,
+  "redzones": 168,
+  "geojson_bytes": {
+    "buildings": 759456,
+    "poi": 11190,
+    "redzones": 40805,
+    "district": 2752
+  },
+  "index_rows": 351,
+  "index_bytes": 37190,
+  "tiles": null,
+  "seconds": 4.6
+}

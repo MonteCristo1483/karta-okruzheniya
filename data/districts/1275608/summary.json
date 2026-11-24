@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 1275608,
+    "name": "Таганский район"
+  },
+  "buildings": 2594,
+  "homes": 1323,
+  "poi": 202,
+  "redzones": 650,
+  "geojson_bytes": {
+    "buildings": 2223593,
+    "poi": 31120,
+    "redzones": 166817,
+    "district": 7905
+  },
+  "index_rows": 1323,
+  "index_bytes": 148366,
+  "tiles": null,
+  "seconds": 6.9
+}

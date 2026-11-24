@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 380705,
+    "name": "Филимонковский район"
+  },
+  "buildings": 21241,
+  "homes": 5436,
+  "poi": 108,
+  "redzones": 387,
+  "geojson_bytes": {
+    "buildings": 11170443,
+    "poi": 16560,
+    "redzones": 118825,
+    "district": 7552
+  },
+  "index_rows": 5436,
+  "index_bytes": 558682,
+  "tiles": null,
+  "seconds": 15.1
+}

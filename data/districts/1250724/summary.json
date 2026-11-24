@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 1250724,
+    "name": "район Марфино"
+  },
+  "buildings": 495,
+  "homes": 215,
+  "poi": 43,
+  "redzones": 144,
+  "geojson_bytes": {
+    "buildings": 420465,
+    "poi": 6680,
+    "redzones": 42423,
+    "district": 5070
+  },
+  "index_rows": 215,
+  "index_bytes": 24217,
+  "tiles": null,
+  "seconds": 4.0
+}

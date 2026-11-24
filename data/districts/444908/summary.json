@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 444908,
+    "name": "Донской район"
+  },
+  "buildings": 1355,
+  "homes": 600,
+  "poi": 72,
+  "redzones": 304,
+  "geojson_bytes": {
+    "buildings": 1065038,
+    "poi": 11117,
+    "redzones": 84745,
+    "district": 6864
+  },
+  "index_rows": 600,
+  "index_bytes": 65613,
+  "tiles": null,
+  "seconds": 5.4
+}

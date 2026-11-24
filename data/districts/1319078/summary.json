@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 1319078,
+    "name": "район Метрогородок"
+  },
+  "buildings": 823,
+  "homes": 262,
+  "poi": 39,
+  "redzones": 161,
+  "geojson_bytes": {
+    "buildings": 519990,
+    "poi": 6097,
+    "redzones": 64139,
+    "district": 6466
+  },
+  "index_rows": 262,
+  "index_bytes": 27677,
+  "tiles": null,
+  "seconds": 4.1
+}

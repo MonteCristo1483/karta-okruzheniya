@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 1250526,
+    "name": "Алексеевский район"
+  },
+  "buildings": 1189,
+  "homes": 543,
+  "poi": 102,
+  "redzones": 454,
+  "geojson_bytes": {
+    "buildings": 904063,
+    "poi": 15661,
+    "redzones": 147352,
+    "district": 3267
+  },
+  "index_rows": 543,
+  "index_bytes": 58615,
+  "tiles": null,
+  "seconds": 4.5
+}

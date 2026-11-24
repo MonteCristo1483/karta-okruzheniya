@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 1255563,
+    "name": "Рязанский район"
+  },
+  "buildings": 1262,
+  "homes": 744,
+  "poi": 170,
+  "redzones": 236,
+  "geojson_bytes": {
+    "buildings": 1114438,
+    "poi": 25908,
+    "redzones": 80824,
+    "district": 6426
+  },
+  "index_rows": 744,
+  "index_bytes": 82362,
+  "tiles": null,
+  "seconds": 4.9
+}

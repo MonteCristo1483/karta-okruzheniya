@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 1281648,
+    "name": "Гагаринский район"
+  },
+  "buildings": 657,
+  "homes": 332,
+  "poi": 121,
+  "redzones": 248,
+  "geojson_bytes": {
+    "buildings": 573707,
+    "poi": 19082,
+    "redzones": 54533,
+    "district": 2756
+  },
+  "index_rows": 332,
+  "index_bytes": 35259,
+  "tiles": null,
+  "seconds": 4.7
+}

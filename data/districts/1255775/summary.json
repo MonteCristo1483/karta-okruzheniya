@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 1255775,
+    "name": "район Восточный"
+  },
+  "buildings": 407,
+  "homes": 241,
+  "poi": 19,
+  "redzones": 17,
+  "geojson_bytes": {
+    "buildings": 330866,
+    "poi": 2956,
+    "redzones": 8560,
+    "district": 3954
+  },
+  "index_rows": 241,
+  "index_bytes": 24037,
+  "tiles": null,
+  "seconds": 4.3
+}

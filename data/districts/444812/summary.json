@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 444812,
+    "name": "район Кузьминки"
+  },
+  "buildings": 1008,
+  "homes": 625,
+  "poi": 149,
+  "redzones": 121,
+  "geojson_bytes": {
+    "buildings": 883591,
+    "poi": 23040,
+    "redzones": 29883,
+    "district": 8260
+  },
+  "index_rows": 625,
+  "index_bytes": 69750,
+  "tiles": null,
+  "seconds": 4.7
+}

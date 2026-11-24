@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 445274,
+    "name": "район Ховрино"
+  },
+  "buildings": 781,
+  "homes": 380,
+  "poi": 92,
+  "redzones": 169,
+  "geojson_bytes": {
+    "buildings": 691054,
+    "poi": 14360,
+    "redzones": 47562,
+    "district": 4884
+  },
+  "index_rows": 380,
+  "index_bytes": 40654,
+  "tiles": null,
+  "seconds": 4.4
+}

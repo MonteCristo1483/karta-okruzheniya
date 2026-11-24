@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 1703093,
+    "name": "район Троицк"
+  },
+  "buildings": 15947,
+  "homes": 4055,
+  "poi": 138,
+  "redzones": 345,
+  "geojson_bytes": {
+    "buildings": 8491591,
+    "poi": 21049,
+    "redzones": 118704,
+    "district": 11578
+  },
+  "index_rows": 4055,
+  "index_bytes": 415090,
+  "tiles": null,
+  "seconds": 15.4
+}

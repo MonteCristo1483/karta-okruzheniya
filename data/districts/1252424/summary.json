@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 1252424,
+    "name": "Бутырский район"
+  },
+  "buildings": 1162,
+  "homes": 415,
+  "poi": 96,
+  "redzones": 332,
+  "geojson_bytes": {
+    "buildings": 806188,
+    "poi": 14922,
+    "redzones": 104910,
+    "district": 3231
+  },
+  "index_rows": 415,
+  "index_bytes": 44356,
+  "tiles": null,
+  "seconds": 4.5
+}

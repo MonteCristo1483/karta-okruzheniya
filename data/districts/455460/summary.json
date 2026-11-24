@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 455460,
+    "name": "район Нагатинский Затон"
+  },
+  "buildings": 837,
+  "homes": 376,
+  "poi": 121,
+  "redzones": 80,
+  "geojson_bytes": {
+    "buildings": 631164,
+    "poi": 18716,
+    "redzones": 26616,
+    "district": 1960
+  },
+  "index_rows": 376,
+  "index_bytes": 40708,
+  "tiles": null,
+  "seconds": 4.5
+}

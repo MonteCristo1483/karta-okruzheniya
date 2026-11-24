@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 531264,
+    "name": "район Зябликово"
+  },
+  "buildings": 689,
+  "homes": 257,
+  "poi": 111,
+  "redzones": 81,
+  "geojson_bytes": {
+    "buildings": 474052,
+    "poi": 17372,
+    "redzones": 19282,
+    "district": 5080
+  },
+  "index_rows": 257,
+  "index_bytes": 27338,
+  "tiles": null,
+  "seconds": 4.3
+}

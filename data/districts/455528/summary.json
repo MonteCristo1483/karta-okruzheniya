@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 455528,
+    "name": "район Москворечье-Сабурово"
+  },
+  "buildings": 1217,
+  "homes": 424,
+  "poi": 78,
+  "redzones": 345,
+  "geojson_bytes": {
+    "buildings": 807137,
+    "poi": 12108,
+    "redzones": 93708,
+    "district": 8147
+  },
+  "index_rows": 424,
+  "index_bytes": 46021,
+  "tiles": null,
+  "seconds": 4.7
+}

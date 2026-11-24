@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 446116,
+    "name": "район Солнцево"
+  },
+  "buildings": 3487,
+  "homes": 1131,
+  "poi": 165,
+  "redzones": 234,
+  "geojson_bytes": {
+    "buildings": 2185869,
+    "poi": 25447,
+    "redzones": 84943,
+    "district": 5674
+  },
+  "index_rows": 1131,
+  "index_bytes": 119510,
+  "tiles": null,
+  "seconds": 5.6
+}

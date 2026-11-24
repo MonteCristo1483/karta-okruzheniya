@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 446271,
+    "name": "Ярославский район"
+  },
+  "buildings": 1246,
+  "homes": 462,
+  "poi": 87,
+  "redzones": 322,
+  "geojson_bytes": {
+    "buildings": 861798,
+    "poi": 13542,
+    "redzones": 117621,
+    "district": 5181
+  },
+  "index_rows": 462,
+  "index_bytes": 48931,
+  "tiles": null,
+  "seconds": 4.4
+}

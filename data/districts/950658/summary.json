@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 950658,
+    "name": "район Бирюлёво Западное"
+  },
+  "buildings": 946,
+  "homes": 327,
+  "poi": 59,
+  "redzones": 233,
+  "geojson_bytes": {
+    "buildings": 609381,
+    "poi": 9186,
+    "redzones": 85801,
+    "district": 2932
+  },
+  "index_rows": 327,
+  "index_bytes": 36826,
+  "tiles": null,
+  "seconds": 4.3
+}

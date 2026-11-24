@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 574667,
+    "name": "район Вешняки"
+  },
+  "buildings": 1024,
+  "homes": 492,
+  "poi": 105,
+  "redzones": 225,
+  "geojson_bytes": {
+    "buildings": 783713,
+    "poi": 16293,
+    "redzones": 66071,
+    "district": 1719
+  },
+  "index_rows": 492,
+  "index_bytes": 52089,
+  "tiles": null,
+  "seconds": 4.5
+}

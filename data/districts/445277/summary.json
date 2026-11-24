@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 445277,
+    "name": "район Коптево"
+  },
+  "buildings": 1171,
+  "homes": 606,
+  "poi": 107,
+  "redzones": 186,
+  "geojson_bytes": {
+    "buildings": 963002,
+    "poi": 16473,
+    "redzones": 58876,
+    "district": 6372
+  },
+  "index_rows": 606,
+  "index_bytes": 69495,
+  "tiles": null,
+  "seconds": 5.0
+}

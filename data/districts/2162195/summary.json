@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 2162195,
+    "name": "Басманный район"
+  },
+  "buildings": 3841,
+  "homes": 1909,
+  "poi": 217,
+  "redzones": 417,
+  "geojson_bytes": {
+    "buildings": 3310561,
+    "poi": 33305,
+    "redzones": 131055,
+    "district": 13511
+  },
+  "index_rows": 1909,
+  "index_bytes": 216515,
+  "tiles": null,
+  "seconds": 8.1
+}

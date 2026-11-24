@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 446117,
+    "name": "район Ново-Переделкино"
+  },
+  "buildings": 1190,
+  "homes": 573,
+  "poi": 98,
+  "redzones": 132,
+  "geojson_bytes": {
+    "buildings": 887787,
+    "poi": 15258,
+    "redzones": 39222,
+    "district": 8267
+  },
+  "index_rows": 573,
+  "index_bytes": 61469,
+  "tiles": null,
+  "seconds": 4.4
+}

@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 1319263,
+    "name": "район Ивановское"
+  },
+  "buildings": 824,
+  "homes": 332,
+  "poi": 120,
+  "redzones": 284,
+  "geojson_bytes": {
+    "buildings": 589411,
+    "poi": 18390,
+    "redzones": 72127,
+    "district": 7265
+  },
+  "index_rows": 332,
+  "index_bytes": 35115,
+  "tiles": null,
+  "seconds": 4.8
+}

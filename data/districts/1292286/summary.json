@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 1292286,
+    "name": "район Зюзино"
+  },
+  "buildings": 919,
+  "homes": 537,
+  "poi": 116,
+  "redzones": 129,
+  "geojson_bytes": {
+    "buildings": 766090,
+    "poi": 18209,
+    "redzones": 37512,
+    "district": 2273
+  },
+  "index_rows": 537,
+  "index_bytes": 58065,
+  "tiles": null,
+  "seconds": 4.8
+}

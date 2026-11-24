@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 446115,
+    "name": "район Раменки"
+  },
+  "buildings": 1954,
+  "homes": 771,
+  "poi": 164,
+  "redzones": 560,
+  "geojson_bytes": {
+    "buildings": 1449055,
+    "poi": 25588,
+    "redzones": 156604,
+    "district": 5972
+  },
+  "index_rows": 771,
+  "index_bytes": 84421,
+  "tiles": null,
+  "seconds": 5.3
+}

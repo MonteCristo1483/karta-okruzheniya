@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 455203,
+    "name": "район Люблино"
+  },
+  "buildings": 1921,
+  "homes": 733,
+  "poi": 179,
+  "redzones": 532,
+  "geojson_bytes": {
+    "buildings": 1339414,
+    "poi": 27472,
+    "redzones": 159175,
+    "district": 8814
+  },
+  "index_rows": 733,
+  "index_bytes": 78603,
+  "tiles": null,
+  "seconds": 5.1
+}

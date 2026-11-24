@@ -1,0 +1,20 @@
+{
+  "district": {
+    "osm_id": 531287,
+    "name": "район Братеево"
+  },
+  "buildings": 471,
+  "homes": 155,
+  "poi": 74,
+  "redzones": 114,
+  "geojson_bytes": {
+    "buildings": 328792,
+    "poi": 11583,
+    "redzones": 24564,
+    "district": 5194
+  },
+  "index_rows": 155,
+  "index_bytes": 17196,
+  "tiles": null,
+  "seconds": 4.1
+}
