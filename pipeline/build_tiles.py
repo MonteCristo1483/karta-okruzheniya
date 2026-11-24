@@ -223,8 +223,19 @@ def run_tippecanoe(ndjson: Path, out: Path) -> None:
         DOCKER_IMAGE,
         "--force",
         "-o", f"/work/{rel_out}",
-        "-Z12", "-z16", "-d13",
-        "--drop-densest-as-needed",
+        "-Z9", "-z16", "-d13",
+        # LOD-A: вес тайлов z9-z13 — это атрибут breakdown (~500 Б JSON на
+        # дом), а не геометрия: --maximum-tile-bytes считается по геометрии,
+        # поэтому после прореживания до 4,7 тыс. домов тайл всё равно 2 МБ.
+        # Ниже z14 breakdown не нужен (карточка открывается на 16.6 и берёт
+        # разбивку из z16-тайла/шарда routes/<id>.json), поэтому режем его
+        # фильтром по $zoom — это attribute-LOD, z14-z16 не меняются.
+        "-j", '{"*":["attribute-filter","breakdown",[">=","$zoom",14]]}',
+        # -an — режет самые мелкие полигоны только в тайлах сверх лимита;
+        # -r1 обязателен: иначе фоновое прореживание по -r2.5 режет ~60%
+        # домов даже на z15-z16 (проверено: z14 502 КБ → 6 КБ).
+        "--drop-smallest-as-needed", "-r1",
+        "--maximum-tile-bytes", "400000",
         "--no-tile-stats",
         "-l", LAYER,
         "--use-attribute-for-id=id",
