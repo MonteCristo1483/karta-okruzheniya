@@ -44,6 +44,17 @@ LAYER = "buildings"
 # objects, so it travels as a JSON string.
 TILE_ATTRS = ("id", "index", "height", "address", "year")
 
+# Tiles-B: единый feature-filter (tippecanoe применяет к слою только его).
+# breakdown пишем с z14 (attribute-LOD), дома ниже 9 м прореживаем только
+# на обзоре (z9-14): на z15-16 нужны все дома, иначе деградирует 16.6.
+TILE_FILTER = json.dumps({
+    "*": [
+        "all",
+        ["attribute-filter", "breakdown", [">=", "$zoom", 14]],
+        ["any", [">=", "$zoom", 15], [">=", "height", 9]],
+    ]
+}, separators=(",", ":"))
+
 # Index row layout (buildings-index.json), one array per building:
 #   [id, lon, lat, address, index, year, road, railway, construction, industrial]
 # The last four are percentiles of the penalty distance distribution, computed
@@ -224,18 +235,21 @@ def run_tippecanoe(ndjson: Path, out: Path) -> None:
         "--force",
         "-o", f"/work/{rel_out}",
         "-Z9", "-z16", "-d13",
-        # LOD-A: вес тайлов z9-z13 — это атрибут breakdown (~500 Б JSON на
-        # дом), а не геометрия: --maximum-tile-bytes считается по геометрии,
-        # поэтому после прореживания до 4,7 тыс. домов тайл всё равно 2 МБ.
-        # Ниже z14 breakdown не нужен (карточка открывается на 16.6 и берёт
-        # разбивку из z16-тайла/шарда routes/<id>.json), поэтому режем его
-        # фильтром по $zoom — это attribute-LOD, z14-z16 не меняются.
-        "-j", '{"*":["attribute-filter","breakdown",[">=","$zoom",14]]}',
-        # -an — режет самые мелкие полигоны только в тайлах сверх лимита;
-        # -r1 обязателен: иначе фоновое прореживание по -r2.5 режет ~60%
-        # домов даже на z15-z16 (проверено: z14 502 КБ → 6 КБ).
-        "--drop-smallest-as-needed", "-r1",
-        "--maximum-tile-bytes", "400000",
+        # Tiles-B (бюджет z13-14). Один -j, потому что tippecanoe применяет
+        # к слою только последний фильтр: несколько -j затирают друг друга.
+        # Внутри "all" два условия:
+        # 1) attribute-LOD (LOD-A): breakdown ниже z14 не нужен — карточка
+        #    открывается на z16.6 и берёт разбивку из z16-тайла/шарда;
+        # 2) height-LOD для обзора: ниже z15 оставляем дома от 9 м, иначе
+        #    z13-14 не влезают в бюджет (замер: 275/346 КБ → 118/164 КБ).
+        #    z15-z16 не трогаем: там дома нужны все (кадр 16.6 без потерь).
+        "-j", TILE_FILTER,
+        # -an режет самые мелкие полигоны, -as (--drop-densest-as-needed)
+        # добавляет прореживание по плотности; оба срабатывают только в
+        # тайлах сверх лимита. -r1 обязателен: иначе фоновое прореживание
+        # по -r2.5 режет ~60% домов даже на z15-z16 (502 КБ → 6 КБ).
+        "--drop-smallest-as-needed", "--drop-densest-as-needed", "-r1",
+        "--maximum-tile-bytes", "220000",
         "--no-tile-stats",
         "-l", LAYER,
         "--use-attribute-for-id=id",
