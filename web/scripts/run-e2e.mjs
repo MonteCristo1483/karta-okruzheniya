@@ -58,19 +58,8 @@ async function main() {
     return;
   }
 
-  // Страницы домов пишутся после сборки (в Deploy — отдельным шагом).
-  // Локально после `npm run build` их нет: генерируем перед прогоном.
-  if (!existsSync(join(DIST, "r"))) {
-    console.log("dist/r отсутствует — генерирую страницы домов…");
-    const code = await run(process.execPath, [
-      join(WEB_ROOT, "scripts", "generate-building-pages.mjs"),
-    ]);
-    if (code !== 0) {
-      process.exitCode = code;
-      return;
-    }
-  }
-
+  // Страниц на дом больше нет: /r/ — одна страница приложения, старые
+  // ссылки /r/<id>/ ловит public/404.html. Генератор в прогоне не участвует.
   prepareLayout();
 
   const server = spawn(

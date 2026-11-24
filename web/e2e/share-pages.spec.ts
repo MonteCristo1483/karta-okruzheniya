@@ -1,18 +1,44 @@
 import { test, expect } from "@playwright/test";
 
-// Страницы /r/<id>/ генерируются в dist после сборки (generate-building-pages).
-// Проверяем три реальных дома из данных; 64091236 — из брифа.
-const PAGES = [
-  { id: 64091236, address: "Тверской бульвар, 3/1" },
-  { id: 64091280, address: "Малая Никитская улица, 14 с1" },
-  { id: 64091298, address: "Скарятинский переулок, 5" },
-];
+// Страниц на дом больше нет: /r/ — одна страница приложения, которая читает
+// ?b=<id> и уводит на карту. Старые ссылки /r/<id>/ ловит public/404.html
+// (GitHub Pages отдаёт его на неизвестный путь; serve-test.mjs имитирует).
+const ID = 49553156;
 
-test("/r/<id>/ отдаёт 200 и содержит адрес (3 дома)", async ({ request }) => {
-  for (const { id, address } of PAGES) {
-    // Путь без ведущего слэша: baseURL уже содержит /karta-okruzheniya/.
-    const response = await request.get(`r/${id}/`);
-    expect(response.status(), `GET /r/${id}/`).toBe(200);
-    expect(await response.text(), `адрес на /r/${id}/`).toContain(address);
-  }
+// После редиректа карта открывает дом по ?building=<id>; карточку на этой
+// странице не рисуем — проверяем адрес и что карта вообще поднялась.
+test("Поделиться: /r/?b=<id> уводит на карту с ?building=<id>", async ({
+  page,
+}) => {
+  await page.goto(`r/?b=${ID}`);
+  await page.waitForURL((url) => url.searchParams.get("building") === String(ID));
+
+  const url = new URL(page.url());
+  expect(url.pathname).toMatch(/\/$/);
+  expect(url.searchParams.get("building")).toBe(String(ID));
+  await expect(page.getByLabel("Поиск дома по адресу")).toBeVisible();
+});
+
+test("Поделиться: старая ссылка /r/<id>/ открывает тот же дом", async ({
+  page,
+}) => {
+  await page.goto(`r/${ID}/`);
+  await page.waitForURL((url) => url.searchParams.get("building") === String(ID));
+
+  const url = new URL(page.url());
+  expect(url.pathname).toMatch(/\/$/);
+  expect(url.searchParams.get("building")).toBe(String(ID));
+  await expect(page.getByLabel("Поиск дома по адресу")).toBeVisible();
+});
+
+test("Поделиться: /r/ без параметра — «Ссылка неполная» и ссылка на карту", async ({
+  page,
+}) => {
+  await page.goto("r/");
+
+  await expect(page.getByText("Ссылка неполная")).toBeVisible();
+  const link = page.getByRole("link", { name: "Открыть карту" });
+  await expect(link).toHaveAttribute("href", /\/$/);
+  await link.click();
+  await expect(page.getByLabel("Поиск дома по адресу")).toBeVisible();
 });
