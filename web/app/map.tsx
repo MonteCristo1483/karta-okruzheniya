@@ -1592,8 +1592,31 @@ const facadePatternExpr = (
 type BasemapProps = { layer: string; class: string; name?: string };
 
 const BM_LAYER = (layer: string) => ["==", ["get", "layer"], layer] as never;
-const BM_CLASS = (cls: string) => ["==", ["get", "class"], cls] as never;
-const BM_ROAD = (cls: string) => ["all", BM_LAYER("road"), BM_CLASS(cls)] as never;
+// Дороги фильтруются по исходному `highway` (свойство roadclass из BM-1):
+// class major/minor слишком грубый для «показывать магистрали на обзоре».
+const BM_ROADCLASS = (...classes: string[]) =>
+  ["all", BM_LAYER("road"), ["match", ["get", "roadclass"], classes, true, false]] as never;
+// Классы из pipeline/build_basemap.py (ROAD_CLASSES).
+const BM_MAJOR = [
+  "motorway",
+  "motorway_link",
+  "trunk",
+  "trunk_link",
+  "primary",
+  "primary_link",
+  "secondary",
+  "secondary_link",
+  "tertiary",
+  "tertiary_link",
+];
+const BM_MINOR = [
+  "residential",
+  "unclassified",
+  "living_street",
+  "road",
+  "service",
+  "pedestrian",
+];
 
 // Нижние слои подложки: земля, зелень, вода, дороги. Порядок важен —
 // здания и оверлеи проекта добавляются выше.
@@ -1688,13 +1711,45 @@ function basemapLayers(p: Palette): maplibregl.LayerSpecification[] {
         "line-width": ["interpolate", ["linear"], ["zoom"], 12, 0.8, 16, 3],
       },
     },
+    // Дороги по зумам. Фильтр MapLibre не умеет `zoom`, поэтому классы
+    // разложены по слоям с собственным minzoom: на обзоре — только
+    // магистрали (motorway/trunk), дворовые улицы появляются с z14.
+    // Ширины — прежние кривые: major для motorway…tertiary, minor для
+    // residential…pedestrian. Обводки лежат ниже линий и начинаются не
+    // раньше своих классов (иначе на z12 видна «дорога без асфальта»).
     {
-      id: "bm-road-minor-casing",
+      id: "bm-road-casing-primary",
       type: "line",
       source: "basemap",
       "source-layer": "road",
       minzoom: 12,
-      filter: BM_ROAD("minor"),
+      filter: BM_ROADCLASS("primary", "primary_link", "secondary", "secondary_link"),
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: {
+        "line-color": p.roadMajorCasing,
+        "line-width": ["interpolate", ["linear"], ["zoom"], 11, 2.8, 14, 5.5, 16, 9.5, 18, 16],
+      },
+    },
+    {
+      id: "bm-road-casing-tertiary",
+      type: "line",
+      source: "basemap",
+      "source-layer": "road",
+      minzoom: 13,
+      filter: BM_ROADCLASS("tertiary", "tertiary_link"),
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: {
+        "line-color": p.roadMajorCasing,
+        "line-width": ["interpolate", ["linear"], ["zoom"], 11, 2.8, 14, 5.5, 16, 9.5, 18, 16],
+      },
+    },
+    {
+      id: "bm-road-casing-minor",
+      type: "line",
+      source: "basemap",
+      "source-layer": "road",
+      minzoom: 14,
+      filter: BM_ROADCLASS(...BM_MINOR),
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
         "line-color": p.roadCasing,
@@ -1706,8 +1761,8 @@ function basemapLayers(p: Palette): maplibregl.LayerSpecification[] {
       type: "line",
       source: "basemap",
       "source-layer": "road",
-      minzoom: 11,
-      filter: BM_ROAD("minor"),
+      minzoom: 14,
+      filter: BM_ROADCLASS(...BM_MINOR),
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
         "line-color": p.roadMinor,
@@ -1715,25 +1770,52 @@ function basemapLayers(p: Palette): maplibregl.LayerSpecification[] {
       },
     },
     {
-      id: "bm-road-casing",
+      id: "bm-road-tertiary",
       type: "line",
       source: "basemap",
       "source-layer": "road",
-      minzoom: 10,
-      filter: BM_ROAD("major"),
+      minzoom: 13,
+      filter: BM_ROADCLASS("tertiary", "tertiary_link"),
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
-        "line-color": p.roadMajorCasing,
-        "line-width": ["interpolate", ["linear"], ["zoom"], 11, 2.8, 14, 5.5, 16, 9.5, 18, 16],
+        "line-color": p.roadMajor,
+        "line-width": ["interpolate", ["linear"], ["zoom"], 11, 1.6, 14, 3.4, 16, 6.2, 18, 11],
       },
     },
     {
-      id: "bm-road-major",
+      id: "bm-road-secondary",
+      type: "line",
+      source: "basemap",
+      "source-layer": "road",
+      minzoom: 12,
+      filter: BM_ROADCLASS("secondary", "secondary_link"),
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: {
+        "line-color": p.roadMajor,
+        "line-width": ["interpolate", ["linear"], ["zoom"], 11, 1.6, 14, 3.4, 16, 6.2, 18, 11],
+      },
+    },
+    {
+      id: "bm-road-primary",
       type: "line",
       source: "basemap",
       "source-layer": "road",
       minzoom: 10,
-      filter: BM_ROAD("major"),
+      filter: BM_ROADCLASS("primary", "primary_link"),
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: {
+        "line-color": p.roadMajor,
+        "line-width": ["interpolate", ["linear"], ["zoom"], 11, 1.6, 14, 3.4, 16, 6.2, 18, 11],
+      },
+    },
+    {
+      // z < 10: единственный класс дорог в кадре — магистрали, без обводки.
+      id: "bm-road-motorway",
+      type: "line",
+      source: "basemap",
+      "source-layer": "road",
+      minzoom: 0,
+      filter: BM_ROADCLASS("motorway", "motorway_link", "trunk", "trunk_link"),
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
         "line-color": p.roadMajor,
@@ -1748,7 +1830,7 @@ function basemapLayers(p: Palette): maplibregl.LayerSpecification[] {
       source: "basemap",
       "source-layer": "road",
       minzoom: 13,
-      filter: BM_ROAD("major"),
+      filter: BM_ROADCLASS(...BM_MAJOR),
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
         "line-color": p.roadMark,
@@ -1774,10 +1856,14 @@ function basemapPaint(p: Palette): Record<string, Record<string, unknown>> {
     "bm-water": { "fill-color": p.water, "fill-outline-color": p.waterLine },
     "bm-river": { "line-color": p.water },
     "bm-waterway": { "line-color": p.waterLine },
-    "bm-road-minor-casing": { "line-color": p.roadCasing },
+    "bm-road-casing-primary": { "line-color": p.roadMajorCasing },
+    "bm-road-casing-tertiary": { "line-color": p.roadMajorCasing },
+    "bm-road-casing-minor": { "line-color": p.roadCasing },
     "bm-road-minor": { "line-color": p.roadMinor },
-    "bm-road-casing": { "line-color": p.roadMajorCasing },
-    "bm-road-major": { "line-color": p.roadMajor },
+    "bm-road-tertiary": { "line-color": p.roadMajor },
+    "bm-road-secondary": { "line-color": p.roadMajor },
+    "bm-road-primary": { "line-color": p.roadMajor },
+    "bm-road-motorway": { "line-color": p.roadMajor },
     "bm-road-marking": { "line-color": p.roadMark },
     "glow-outer": { "circle-color": p.selected },
     "glow-inner": { "circle-color": p.selected },
@@ -2106,13 +2192,22 @@ const POI_LABEL_MIN_ZOOM = 14;
 // Красные зоны — та же политика, что у POI: файлы районов грузятся только для
 // видимого кадра (132 файла на старте — это 35 801 линия по всему городу).
 const REDZONE_SOURCE = "redzones";
-const REDZONE_MIN_ZOOM = 11;
+// Зоны видны с обзора z12: ниже пятна слишком крупные и «светят» на весь
+// город, к тому же это лишние районы в источнике.
+const REDZONE_MIN_ZOOM = 12;
 const REDZONE_MAX_DISTRICTS = 16;
-// Плотность по зуму: ниже 13 — только магистрали первого порядка и ж/д.
-const REDZONE_DETAIL_ZOOM = 13;
-// Blur размытия включается с 15: ниже — простая линия (на обзоре он
-// превращал каждый отрезок в дорогую заблюренную геометрию).
-const REDZONE_BLUR_MIN_ZOOM = 15;
+// Плотность по зуму: z12–13 — только магистрали первого порядка (trunk,
+// primary) и ж/д, с 14 — все классы.
+const REDZONE_DETAIL_ZOOM = 14;
+// Заливка полигонов (промзоны/стройки) — с 13: раньше это крупные пятна.
+const REDZONE_FILL_MIN_ZOOM = 13;
+// Линейные слои зон: ореол + ядро (замена line-blur) и дороги/ж/д.
+const REDZONE_LINE_LAYERS = [
+  "redzones-glow",
+  "redzones-core",
+  "redzones-road",
+  "redzones-rail",
+];
 // Порядок слоёв = порядок отрисовки: метро важнее всего на обзоре.
 const POI_LAYER_DEFS: {
   id: string;
@@ -2819,8 +2914,8 @@ export default function Map() {
           features.length;
       };
 
-      // Плотность по зуму: до 11 зон нет, 11–12 — только магистрали первого
-      // порядка (class trunk) и ж/д, с 13 — все классы.
+      // Плотность по зуму: до 12 зон нет, 12–13 — только магистрали первого
+      // порядка (trunk, primary) и ж/д, с 14 — все классы.
       let redzoneBand: 0 | 1 | 2 | null = null;
       let redzoneVisibilityKey = "";
       const redzoneBandForZoom = (zoom: number): 0 | 1 | 2 =>
@@ -2828,21 +2923,24 @@ export default function Map() {
 
       const syncRedzoneVisibility = () => {
         if (!map || !map.getLayer("redzones-glow")) return;
-        const band = redzoneBandForZoom(map.getZoom());
-        const show = visibleRef.current.redzones && band > 0;
-        const key = `${show ? 1 : 0}${show && band === 2 ? 1 : 0}`;
-        // На каждый moveend не дёргаем стиль: 8 одинаковых setLayoutProperty
+        const zoom = map.getZoom();
+        // Линии и заливка включаются на разных зумах, поэтому show/fill —
+        // независимые флаги.
+        const show = visibleRef.current.redzones && zoom >= REDZONE_MIN_ZOOM;
+        const showFill = show && zoom >= REDZONE_FILL_MIN_ZOOM;
+        const key = `${show ? 1 : 0}${showFill ? 1 : 0}`;
+        // На каждый moveend не дёргаем стиль: лишние setLayoutProperty
         // = лишний пересчёт и лишний кадр.
         if (key === redzoneVisibilityKey) return;
         redzoneVisibilityKey = key;
         const lineVis = show ? "visible" : "none";
-        map.setLayoutProperty("redzones-glow", "visibility", lineVis);
-        map.setLayoutProperty("redzones-road", "visibility", lineVis);
-        map.setLayoutProperty("redzones-rail", "visibility", lineVis);
+        for (const id of REDZONE_LINE_LAYERS) {
+          map.setLayoutProperty(id, "visibility", lineVis);
+        }
         map.setLayoutProperty(
           "redzones-fill",
           "visibility",
-          show && band === 2 ? "visible" : "none",
+          showFill ? "visible" : "none",
         );
       };
 
@@ -2851,24 +2949,28 @@ export default function Map() {
         const band = redzoneBandForZoom(map.getZoom());
         if (band !== redzoneBand) {
           redzoneBand = band;
-          const major = [
+          const top = [
             "any",
             ["==", ["get", "kind"], "railway"],
             ["==", ["get", "class"], "trunk"],
+            ["==", ["get", "class"], "primary"],
           ];
-          map.setFilter(
-            "redzones-glow",
-            (band === 1 ? major : null) as never,
-          );
+          const topRoad = [
+            "all",
+            ["!=", ["get", "kind"], "railway"],
+            [
+              "any",
+              ["==", ["get", "class"], "trunk"],
+              ["==", ["get", "class"], "primary"],
+            ],
+          ];
+          // Ореол и ядро — одна геометрия, фильтр плотности у них общий.
+          for (const id of ["redzones-glow", "redzones-core"]) {
+            map.setFilter(id, (band === 1 ? top : null) as never);
+          }
           map.setFilter(
             "redzones-road",
-            (band === 1
-              ? [
-                  "all",
-                  ["!=", ["get", "kind"], "railway"],
-                  ["==", ["get", "class"], "trunk"],
-                ]
-              : ["!=", ["get", "kind"], "railway"]) as never,
+            (band === 1 ? topRoad : ["!=", ["get", "kind"], "railway"]) as never,
           );
           map.setFilter(
             "redzones-rail",
@@ -3032,40 +3134,32 @@ export default function Map() {
             // Полноценная подложка: земля, парки, вода, улицы (локальный OSM).
             ...basemapLayers(palette),
             {
+              // Ореол вместо line-blur: широкая полупрозрачная линия той же
+              // геометрии, что и ядро. Blur в MapLibre растеризуется заново
+              // на каждый кадр и стоил больше, чем обзор всего города.
+              // opacity держится константой: свечение не должно «темнеть»
+              // при зуме.
               id: "redzones-glow",
               type: "line",
               source: "redzones",
               layout: { "line-cap": "round", "line-join": "round" },
               paint: {
                 "line-color": palette.redzone,
-                "line-width": ["interpolate", ["linear"], ["zoom"], 14, 9, 17.5, 24],
-                // Blur — только с z15 (REDZONE_BLUR_MIN_ZOOM): ниже простая
-                // линия. Узкая ветка 14.99→15 убирает резкий «прыжок», а на
-                // z≥15 кривая ровно та же, что была (паритет на z16.6).
-                "line-blur": [
-                  "interpolate",
-                  ["linear"],
-                  ["zoom"],
-                  0,
-                  0,
-                  REDZONE_BLUR_MIN_ZOOM - 0.01,
-                  0,
-                  // 10.142857 = старое значение кривой (14→7 … 17.5→18) в z15:
-                  // так на z≥15 линия blur совпадает с прежней (паритет z16.6).
-                  REDZONE_BLUR_MIN_ZOOM,
-                  10.142857,
-                  17.5,
-                  18,
-                ],
-                "line-opacity": [
-                  "interpolate",
-                  ["linear"],
-                  ["zoom"],
-                  14,
-                  themeRef.current === "dark" ? 0.26 : 0.22,
-                  17.5,
-                  themeRef.current === "dark" ? 0.36 : 0.3,
-                ],
+                "line-width": ["interpolate", ["linear"], ["zoom"], 12, 8, 14, 14, 16, 22],
+                "line-opacity": themeRef.current === "dark" ? 0.16 : 0.12,
+              },
+            },
+            {
+              // Ядро — узкая яркая линия поверх ореола. Вместе с ним даёт
+              // «мягкий ореол + чёткая линия» без размытия.
+              id: "redzones-core",
+              type: "line",
+              source: "redzones",
+              layout: { "line-cap": "round", "line-join": "round" },
+              paint: {
+                "line-color": palette.redzone,
+                "line-width": ["interpolate", ["linear"], ["zoom"], 12, 1.6, 14, 2.2, 16, 3.0],
+                "line-opacity": 0.9,
               },
             },
             {
@@ -4188,15 +4282,8 @@ export default function Map() {
           }
         }
         map.setPaintProperty("redzones-glow", "line-color", p.redzone);
-        map.setPaintProperty("redzones-glow", "line-opacity", [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          14,
-          t === "dark" ? 0.26 : 0.22,
-          17.5,
-          t === "dark" ? 0.36 : 0.3,
-        ] as never);
+        map.setPaintProperty("redzones-glow", "line-opacity", t === "dark" ? 0.16 : 0.12);
+        map.setPaintProperty("redzones-core", "line-color", p.redzone);
         map.setPaintProperty("redzones-road", "line-color", p.redzone);
         map.setPaintProperty("redzones-rail", "line-color", p.redzone);
         map.setPaintProperty("routes-glow", "line-color", p.route);
