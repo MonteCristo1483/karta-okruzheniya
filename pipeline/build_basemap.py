@@ -427,8 +427,12 @@ def run_tippecanoe_basemap(ndjson: Path, out: Path) -> None:
         # объекты только в тайлах, которые реально больше лимита; -r1 —
         # чтобы не включилось фоновое прореживание по -r и улицы не редели
         # на z13-z16.
-        "--drop-smallest-as-needed", "-al", "-ap", "-r1",
-        "--maximum-tile-bytes", "300000",
+        # Tiles-B: лимит снижен 300000 → 200000, добавлен
+        # --drop-densest-as-needed. На 300000 z8/z9 были 533/534 КБ;
+        # на 200000 — 363/368 КБ, z10 636 → 445 КБ, z11-z16 без изменений.
+        "--drop-smallest-as-needed", "--drop-densest-as-needed",
+        "-al", "-ap", "-r1",
+        "--maximum-tile-bytes", "200000",
         "--no-tile-stats",
         f"/work/{rel_in}",
     ]
