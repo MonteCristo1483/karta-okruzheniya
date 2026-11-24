@@ -30,6 +30,22 @@
     { "action": "shell", "resource": "*docker volume rm*", "effect": "deny" },
     { "action": "shell", "resource": "*ssh *", "effect": "ask" },
     { "action": "shell", "resource": "*scp *", "effect": "ask" },
-    { "action": "external_directory", "resource": "*", "effect": "ask" }
+    { "action": "external_directory", "resource": "*", "effect": "ask" },
+
+    { "action": "read", "resource": "data/raw/*", "effect": "deny" },
+    { "action": "read", "resource": "data/processed/*", "effect": "deny" },
+    { "action": "read", "resource": "data/districts/*", "effect": "deny" },
+    { "action": "read", "resource": "data/routes/*", "effect": "deny" },
+    { "action": "read", "resource": "data/isochrones/*", "effect": "deny" },
+    { "action": "read", "resource": "data/city/*", "effect": "deny" },
+    { "action": "read", "resource": "data/release/*", "effect": "deny" },
+    { "action": "read", "resource": "web/public/data/*", "effect": "deny" },
+    { "action": "read", "resource": "web/dist/*", "effect": "deny" },
+    { "action": "read", "resource": "web/node_modules/*", "effect": "deny" },
+    { "action": "read", "resource": "node_modules/*", "effect": "deny" },
+    { "action": "read", "resource": "*.geojson", "effect": "deny" },
+    { "action": "read", "resource": "*.pmtiles", "effect": "deny" },
+    { "action": "read", "resource": "*.gz", "effect": "deny" },
+    { "action": "read", "resource": "data.zip", "effect": "deny" }
   ]
 }
