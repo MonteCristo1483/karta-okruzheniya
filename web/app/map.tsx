@@ -14,7 +14,7 @@ import SearchBox from "./search-box";
 import type { SearchItem } from "./search-box";
 import { geometryCenter, haversineM, nearestPosition } from "./geo-utils";
 import { ICON_PATHS, type IconKey } from "./icons";
-import { initialTheme, THEME_KEY } from "./theme";
+import { initialTheme, MAP_FOG, THEME_KEY } from "./theme";
 import type { Theme } from "./theme";
 
 // Пути относительные — статический экспорт живёт в подпапке
@@ -248,6 +248,56 @@ const DEFAULT_COLOR_STOPS: ColorStops = {
 };
 
 const NON_HOME_DIM_MIN_ZOOM = 15.5;
+const BUILDING_MIN_ZOOM = 14;
+const BUILDING_GROW_MAX_ZOOM = 14.6;
+
+const buildingExtrusionHeightExpr = () =>
+  [
+    "interpolate",
+    ["linear"],
+    ["zoom"],
+    BUILDING_MIN_ZOOM,
+    0,
+    BUILDING_GROW_MAX_ZOOM,
+    [
+      "case",
+      ["to-boolean", ["feature-state", "selected"]],
+      0,
+      ["coalesce", ["get", "height"], 9],
+    ],
+  ] as never;
+
+const buildingRoofBaseExpr = () =>
+  [
+    "interpolate",
+    ["linear"],
+    ["zoom"],
+    BUILDING_MIN_ZOOM,
+    0,
+    BUILDING_GROW_MAX_ZOOM,
+    [
+      "case",
+      ["to-boolean", ["feature-state", "selected"]],
+      0,
+      ["coalesce", ["get", "height"], 9],
+    ],
+  ] as never;
+
+const buildingRoofHeightExpr = () =>
+  [
+    "interpolate",
+    ["linear"],
+    ["zoom"],
+    BUILDING_MIN_ZOOM,
+    0,
+    BUILDING_GROW_MAX_ZOOM,
+    [
+      "case",
+      ["to-boolean", ["feature-state", "selected"]],
+      0,
+      ["+", ["coalesce", ["get", "height"], 9], 0.5],
+    ],
+  ] as never;
 
 const isNonHomeBuildingExpr = () => [
   "any",
@@ -1572,6 +1622,7 @@ function basemapLayers(p: Palette): maplibregl.LayerSpecification[] {
       id: "bm-trees",
       type: "circle",
       source: "trees",
+      minzoom: 14,
       paint: {
         "circle-pitch-alignment": "map",
         "circle-pitch-scale": "map",
@@ -2683,6 +2734,7 @@ export default function Map() {
         style: {
           version: 8,
           light: MAP_LIGHT[themeRef.current],
+          sky: MAP_FOG[themeRef.current],
           sources: {
             basemap: {
               type: "vector",
@@ -2800,6 +2852,7 @@ export default function Map() {
               id: "glow-outer",
               type: "circle",
               source: "glow",
+              minzoom: 14,
               paint: {
                 "circle-color": palette.selected,
                 "circle-radius": ["interpolate", ["linear"], ["zoom"], 14, 28, 17, 76],
@@ -2812,6 +2865,7 @@ export default function Map() {
               id: "glow-inner",
               type: "circle",
               source: "glow",
+              minzoom: 14,
               paint: {
                 "circle-color": palette.selected,
                 "circle-radius": ["interpolate", ["linear"], ["zoom"], 14, 14, 17, 38],
@@ -2841,6 +2895,7 @@ export default function Map() {
               id: "outline-halo",
               type: "line",
               source: "buildings",
+              minzoom: 14,
               ...buildingSourceLayer,
               layout: { "line-cap": "round", "line-join": "round" },
               paint: {
@@ -2860,6 +2915,7 @@ export default function Map() {
               id: "outline-core",
               type: "line",
               source: "buildings",
+              minzoom: 14,
               ...buildingSourceLayer,
               layout: { "line-cap": "round", "line-join": "round" },
               paint: {
@@ -2912,6 +2968,7 @@ export default function Map() {
               id: "buildings",
               type: "fill-extrusion",
               source: "buildings",
+              minzoom: 14,
               ...buildingSourceLayer,
               paint: {
                 // fill-extrusion-color поддерживает feature-state,
@@ -2921,12 +2978,7 @@ export default function Map() {
                   colorStops,
                   themeRef.current === "dark" ? palette.selectedBody : null,
                 ),
-                "fill-extrusion-height": [
-                  "case",
-                  ["to-boolean", ["feature-state", "selected"]],
-                  0,
-                  ["coalesce", ["get", "height"], 9],
-                ] as never,
+                "fill-extrusion-height": buildingExtrusionHeightExpr(),
                 "fill-extrusion-base": 0,
                 "fill-extrusion-opacity": 0.95,
                 "fill-extrusion-vertical-gradient": true,
@@ -2937,6 +2989,7 @@ export default function Map() {
               id: "buildings-selected-body",
               type: "fill-extrusion",
               source: "selectedBuilding",
+              minzoom: 14,
               paint: {
                 "fill-extrusion-color":
                   themeRef.current === "dark"
@@ -2957,18 +3010,8 @@ export default function Map() {
               ...buildingSourceLayer,
               paint: {
                 "fill-extrusion-color": buildingRoofColorExpr(palette, colorStops),
-                "fill-extrusion-base": [
-                  "case",
-                  ["to-boolean", ["feature-state", "selected"]],
-                  0,
-                  ["coalesce", ["get", "height"], 9],
-                ] as never,
-                "fill-extrusion-height": [
-                  "case",
-                  ["to-boolean", ["feature-state", "selected"]],
-                  0,
-                  ["+", ["coalesce", ["get", "height"], 9], 0.5],
-                ] as never,
+                "fill-extrusion-base": buildingRoofBaseExpr(),
+                "fill-extrusion-height": buildingRoofHeightExpr(),
                 "fill-extrusion-opacity": 0.95,
                 "fill-extrusion-vertical-gradient": false,
               },
@@ -2979,6 +3022,7 @@ export default function Map() {
               id: "buildings-selected-roof-edge",
               type: "fill-extrusion",
               source: "selectedRoofEdge",
+              minzoom: 14,
               paint: {
                 "fill-extrusion-color": palette.outlineCore,
                 "fill-extrusion-base": ["coalesce", ["get", "height"], 9] as never,
@@ -2993,6 +3037,7 @@ export default function Map() {
               id: "buildings-selected-roof",
               type: "fill-extrusion",
               source: "selectedBuilding",
+              minzoom: 14,
               paint: {
                 "fill-extrusion-color": selectedStepColorsExpr(palette, colorStops, 0.05) as never,
                 "fill-extrusion-base": ["coalesce", ["get", "height"], 9] as never,
@@ -3073,7 +3118,7 @@ export default function Map() {
         zoom: 15.35,
         pitch: 55,
         bearing: -25,
-        maxPitch: 72,
+        maxPitch: 58,
         attributionControl: false,
         });
       } catch (e) {
@@ -3106,6 +3151,7 @@ export default function Map() {
         const sorted = [...labelCandidates].sort((a, b) => b.importance - a.importance);
         for (const c of sorted) {
           if (labelMarkers.length >= maxLabels) break;
+          if (c.kind === "street" && zoom < 14) continue;
           if (c.kind === "park" && zoom < 15) continue;
           if (c.kind === "water" && zoom < 12.8) continue;
           const mid: [number, number] = [(c.a[0] + c.b[0]) / 2, (c.a[1] + c.b[1]) / 2];
@@ -3221,7 +3267,9 @@ export default function Map() {
           }
           labelCandidates = buildLabelCandidates(features);
           (map.getSource("trees") as maplibregl.GeoJSONSource | null)?.setData(
-            buildTreePoints(features) as never,
+            (map.getZoom() >= BUILDING_MIN_ZOOM
+              ? buildTreePoints(features)
+              : { type: "FeatureCollection", features: [] }) as never,
           );
           rebuildLabels();
         });
@@ -3718,6 +3766,7 @@ export default function Map() {
         if (!map || !map.getLayer("buildings")) return;
         const p = MAP_THEMES[t];
         map.setLight(MAP_LIGHT[t]);
+        map.setSky(MAP_FOG[t]);
         map.setPaintProperty(
           "buildings",
           "fill-extrusion-color",
@@ -3726,12 +3775,7 @@ export default function Map() {
         map.setPaintProperty(
           "buildings",
           "fill-extrusion-height",
-          [
-            "case",
-            ["to-boolean", ["feature-state", "selected"]],
-            0,
-            ["coalesce", ["get", "height"], 9],
-          ] as never,
+          buildingExtrusionHeightExpr(),
         );
         map.setPaintProperty(
           "buildings-selected-body",
@@ -3757,6 +3801,16 @@ export default function Map() {
           "buildings-roof",
           "fill-extrusion-color",
           buildingRoofColorExpr(p, colorStops),
+        );
+        map.setPaintProperty(
+          "buildings-roof",
+          "fill-extrusion-base",
+          buildingRoofBaseExpr(),
+        );
+        map.setPaintProperty(
+          "buildings-roof",
+          "fill-extrusion-height",
+          buildingRoofHeightExpr(),
         );
         if (map.getLayer("buildings-selected-roof")) {
           map.setPaintProperty(
