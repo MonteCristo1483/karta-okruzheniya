@@ -1,6 +1,10 @@
 {
   "require_address": true,
   "default_is_home": true,
+  "home_building": [
+    "apartments", "residential", "house", "detached", "semidetached_house",
+    "terrace", "dormitory"
+  ],
   "non_home_building": [
     "garage", "garages", "garage_boxes", "shed", "hut", "roof", "carport",
     "construction", "ruins", "industrial", "warehouse", "factory",

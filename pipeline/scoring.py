@@ -15,6 +15,7 @@ Valhalla) — берём его минуты и длину; иначе счит�
 
 Использование:
   python scoring.py             — жилые здания buildings_presnya
+  python scoring.py --new-moscow — новые жилые дома Москвы, которых нет в scores
   python scoring.py 123 456 ... — конкретные жилые osm_id из buildings (для T12)
 """
 
@@ -155,6 +156,14 @@ def clamp(value: Decimal, low: Decimal, high: Decimal) -> Decimal:
 
 
 def scope_from_args(argv: list[str]) -> tuple[str, list]:
+    if argv == ["--new-moscow"]:
+        # HOMES-V2: только новые жилые дома Москвы, которых ещё нет в scores.
+        return (
+            "(SELECT b.* FROM buildings b "
+            "JOIN moscow m ON ST_Intersects(b.geometry, m.geometry) "
+            "WHERE b.is_home AND b.osm_id NOT IN (SELECT building_id FROM scores))",
+            [],
+        )
     if not argv:
         return "(SELECT * FROM buildings_presnya WHERE is_home)", []
     ids = [int(a) for a in argv]
