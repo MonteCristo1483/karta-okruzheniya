@@ -54,7 +54,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_BBOX = (37.47, 55.72, 37.59, 55.815)
 # Захватываем узлы с запасом, чтобы линии на краю рамки не рвались.
 NODE_MARGIN = 0.08
-PRECISION = 0.00002  # ~2 м — на z16 это меньше пикселя
+PRECISION = 0.00002  # ~2 м — на z14 это меньше пикселя
 ROAD_SIMPLIFY = 0.00004  # ~4 м — убирает дрожание GPS-точек OSM
 AREA_SIMPLIFY = 0.00005
 MIN_AREA = 1e-6  # ~0,7 га: мельче на обзорном масштабе не видно
@@ -427,19 +427,21 @@ def run_tippecanoe_basemap(ndjson: Path, out: Path) -> None:
         DOCKER_IMAGE,
         "--force",
         "-o", f"/work/{rel_out}",
-        "-Z6", "-z16", "-d13",
+        "-Z6", "-z14", "-d14",
         # LOD-A: прореживание в tippecanoe не трогает линии/полигоны без
         # -al/-ap, а --drop-densest-as-needed на плотном центре не дотягивает
         # до лимита. -an (--drop-smallest-as-needed) режет самые мелкие
         # объекты только в тайлах, которые реально больше лимита; -r1 —
         # чтобы не включилось фоновое прореживание по -r и улицы не редели
-        # на z13-z16.
+        # на z13-z14.
         # Tiles-B: лимит снижен 300000 → 200000, добавлен
         # --drop-densest-as-needed. На 300000 z8/z9 были 533/534 КБ;
         # на 200000 — 363/368 КБ, z10 636 → 445 КБ, z11-z16 без изменений.
+        # TILES-SEAMLESS: maxzoom z14 (-d14) и лимит 200000 → 350000, чтобы
+        # на z12-14 --drop-densest-as-needed не резал улицы в центре.
         "--drop-smallest-as-needed", "--drop-densest-as-needed",
         "-al", "-ap", "-r1",
-        "--maximum-tile-bytes", "200000",
+        "--maximum-tile-bytes", "350000",
         "--no-tile-stats",
         f"/work/{rel_in}",
     ]
