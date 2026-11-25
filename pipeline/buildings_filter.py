@@ -2,17 +2,27 @@
 """Единственное правило `is_home`: жилой дом для расчёта или нет.
 
 Логика из config/buildings.json, без копий списков в других модулях:
-  * по умолчанию жилое, если есть addr:street и addr:housenumber
-    (require_address / default_is_home);
-  * понижаем до нежилого только по явному признаку — значению building=*
-    из non_home_building или паре ключ/значение из non_home_tags;
-  * порога этажности нет: иначе вырежется частный сектор Некрасовки.
+  * явные нежилые признаки сильнее всего: building=* из non_home_building
+    или пара ключ/значение из non_home_tags -> нежилое;
+  * жилой тип застройки (home_building: apartments, residential, house,
+    detached, semidetached_house, terrace, dormitory) -> жилое даже без
+    адреса на полигоне;
+  * addr:housenumber на полигоне -> жилое даже без addr:street
+    (в Зеленограде улица приходит из addr:place, в остальных районах —
+    от соседнего дома в 30 м или из адресного реестра);
+  * иначе, если require_address=true — нежилое; если false — значение
+    default_is_home. Порога этажности нет: иначе вырежется частный сектор
+    Некрасовки.
 
 Последними применяются ручные исключения из config/buildings_overrides.json
 (формат: {"v":1,"overrides":[{"osm_id":123,"is_home":true,"reason":"..."}]}):
 они перекрывают и теги, и адресное правило, в обе стороны. Запись без
 непустого reason считается ошибкой конфигурации — факт должен быть
 подтверждён источником, а не угадан.
+
+Связь с жилым паспортом ГИС ЖКХ (building_year_match.distance_m <= 25)
+проверяется не здесь, а в PostGIS при переклассификации
+(pipeline/reclassify_homes.py): функция остаётся чистой от БД.
 
 Всё, что не жилое, остаётся на карте, но не получает балл, маршруты и
 изохрону. Импорт, экспорт, скоринг и выборка маршрутов вызывают только
@@ -33,9 +43,12 @@ OVERRIDES_PATH = ROOT / "config" / "buildings_overrides.json"
 
 
 @lru_cache(maxsize=1)
-def _rules() -> tuple[bool, bool, frozenset[str], tuple[tuple[str, frozenset[str]], ...]]:
+def _rules() -> tuple[
+    bool, bool, frozenset[str], frozenset[str], tuple[tuple[str, frozenset[str]], ...]
+]:
     cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     building = frozenset(cfg.get("non_home_building", []))
+    home_building = frozenset(cfg.get("home_building", []))
     tags = tuple(
         (key, frozenset(values))
         for key, values in cfg.get("non_home_tags", {}).items()
@@ -43,6 +56,7 @@ def _rules() -> tuple[bool, bool, frozenset[str], tuple[tuple[str, frozenset[str
     return (
         bool(cfg.get("require_address", True)),
         bool(cfg.get("default_is_home", True)),
+        home_building,
         building,
         tags,
     )
@@ -73,29 +87,44 @@ def _overrides() -> dict[int, bool]:
     return load_overrides(OVERRIDES_PATH)
 
 
-def is_home(tags: Mapping[str, str] | None, osm_id: int | None = None) -> bool:
-    """True — жилой дом (получает балл, маршруты, изохрону); False — нет.
+def classify(
+    tags: Mapping[str, str] | None, osm_id: int | None = None
+) -> tuple[bool, bool]:
+    """(is_home по тегам, можно ли поднимать по паспорту ГИС ЖКХ).
 
-    osm_id нужен только для ручных исключений; без него правило работает
-    по тегам, как раньше. Overrides применяются последними.
+    Второй флаг False только у явных нежилых признаков и ручных overrides:
+    жилой паспорт в 25 м не должен «оживлять» гараж или офис.
     """
     if osm_id is not None:
         override = _overrides().get(int(osm_id))
         if override is not None:
-            return override
+            return override, False
     if not tags:
-        return False
-    require_address, default_home, non_home_building, non_home_tags = _rules()
-    if require_address and not (
-        tags.get("addr:street") and tags.get("addr:housenumber")
-    ):
-        return False
+        return False, True
+    require_address, default_home, home_building, non_home_building, non_home_tags = (
+        _rules()
+    )
     if tags.get("building") in non_home_building:
-        return False
+        return False, False
     for key, values in non_home_tags:
         if tags.get(key) in values:
-            return False
-    return default_home
+            return False, False
+    if tags.get("building") in home_building:
+        return True, True
+    if tags.get("addr:housenumber"):
+        return True, True
+    if not require_address:
+        return default_home, True
+    return False, True
+
+
+def is_home(tags: Mapping[str, str] | None, osm_id: int | None = None) -> bool:
+    """True — жилой дом (получает балл, маршруты, изохрону); False — нет.
+
+    osm_id нужен только для ручных исключений; без него правило работает
+    по тегам. Overrides применяются первыми.
+    """
+    return classify(tags, osm_id)[0]
 
 
 def apply_overrides(cursor) -> list[tuple[int, bool, str]]:

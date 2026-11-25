@@ -72,36 +72,36 @@ maplibregl.setWorkerUrl("maplibre-gl-worker.mjs");
 // Палитры карты по темам (мягкие акценты, не неон — SPEC).
 const MAP_THEMES = {
   light: {
-    // Обычные дома: 5 приглушённых ступеней балла (смешаны с нейтральным #c3ccd6 на 60%).
-    vlow: "#c8b4b2",
-    low: "#cbbfb8",
-    mid: "#cbcdc6",
-    high: "#b8cbc3",
-    vhigh: "#a3c6ba",
+    // Обычные дома: 5 ступеней балла (насыщенные стены и выразительные тёплые/цветные крыши).
+    vlow: "#c5a39e",
+    low: "#cab1a2",
+    mid: "#c7c5b6",
+    high: "#afc5b9",
+    vhigh: "#96bfa9",
     // Выбранный дом: яркий цвет ступени (не приглушать).
     selectedVlow: "#cf8f7c",
     selectedLow: "#d8ab8b",
     selectedMid: "#d8cfae",
     selectedHigh: "#a8c9a7",
     selectedVhigh: "#74bd8f",
-    // Крыши обычных домов: почти нейтральные светлые — mix(крыша, #f2f5f8, 0.60).
-    roofVlow: "#e4ccd8",
-    roofLow: "#ddd9e6",
-    roofMid: "#dbe5ec",
-    roofHigh: "#c9e0d6",
-    roofVhigh: "#add8c3",
-    roofDim: "#d8dfea",
-    // Нежилые здания: холодный стальной контекст в гамме подложки (на z >= 15.5 приглушён к land).
-    otherOverview: "#a4b5c9",
-    other: "#aebfd2",
-    roofOtherOverview: "#b5c5d8",
-    roofOther: "#bac9dc",
+    // Крыши жилых домов: выразительные светлые ступени индекса, чётко отделяющиеся от стен и от нежилого фона.
+    roofVlow: "#e3beb9",
+    roofLow: "#e5cbb9",
+    roofMid: "#e3ddca",
+    roofHigh: "#c5ddcd",
+    roofVhigh: "#a8d6bc",
+    roofDim: "#cbd5e2",
+    // Нежилые здания: спокойный матовый фон в гамме земли (приглушён уже с z >= 13.5).
+    otherOverview: "#b4c3d3",
+    other: "#b9c7d7",
+    roofOtherOverview: "#bccad9",
+    roofOther: "#c0cedd",
     selected: "#38b874",
     // Крыша выбранного дома — цвет его ступени (на 5% светлее), не мятная.
     selectedRoof: "#dfd7b8",
     // В светлой теме выбранный дом без заливки тела на всех зумах (тело красится по яркой ступени балла).
     selectedBody: "#d8cfae",
-    dim: "#b8c4d4",
+    dim: "#b8c6d6",
     halo: "#38b874",
     outlineCore: "#289e60",
     redzone: "#e2604a",
@@ -152,17 +152,17 @@ const MAP_THEMES = {
     roofMid: "#4f627d",
     roofHigh: "#44716e",
     roofVhigh: "#4a8066",
-    roofDim: "#2a3340",
-    // Нежилые здания в тёмной теме: спокойный тёмно-сланцевый контекст без окон.
-    otherOverview: "#2c3646",
-    other: "#26303e",
-    roofOtherOverview: "#354254",
-    roofOther: "#2f3b4c",
+    roofDim: "#212936",
+    // Нежилые здания в тёмной теме: спокойный низкоконтрастный макетный фон ближе к подложке земли.
+    otherOverview: "#1d2632",
+    other: "#1b232e",
+    roofOtherOverview: "#232d3b",
+    roofOther: "#202936",
     selected: "#5ec98f",
     selectedRoof: "#586a84",
     // Тёмная тема: благородный сланцевый фасад выбранного дома (ярче обычных домов и dim).
     selectedBody: "#50627c",
-    dim: "#2a3340",
+    dim: "#1f2733",
     halo: "#5ec98f",
     outlineCore: "#58c288",
     redzone: "#ff8a7a",
@@ -224,13 +224,26 @@ const MAP_LIGHT: Record<Theme, ThemeLight> = {
   },
 };
 
-// Мягкая многослойная тень под домами (3 слоя со сдвигом [3,3]..[6,6], z >= 16):
-// убирает эффект «парящих» коробок без z-fighting и двойных кромок.
+// Мягкая многослойная тень под домами (3 слоя со сдвигом [3,3]..[6,6], плавно с z >= 14.8):
+// убирает эффект «парящих» коробок на z15–16 без z-fighting и двойных кромок.
 const BUILDING_SHADOW_LAYERS = [
   { id: "buildings-shadow-1", translate: [3, 3] as [number, number], opacity: { light: 0.1, dark: 0.16 } },
   { id: "buildings-shadow-2", translate: [4.5, 4.5] as [number, number], opacity: { light: 0.08, dark: 0.12 } },
   { id: "buildings-shadow-3", translate: [6, 6] as [number, number], opacity: { light: 0.05, dark: 0.08 } },
 ] as const;
+
+const buildingShadowOpacityExpr = (maxOpacity: number) =>
+  [
+    "interpolate",
+    ["linear"],
+    ["zoom"],
+    BUILDING_SHADOW_MIN_ZOOM,
+    0,
+    15.0,
+    Number((maxOpacity * 0.35).toFixed(4)),
+    16.0,
+    maxOpacity,
+  ] as never;
 
 // FX-2: пороги цвета — квантили реального распределения индекса.
 // Жёсткий step 5/7 после скоринга v4 давал ~56% зданий одним бежевым
@@ -249,15 +262,15 @@ const DEFAULT_COLOR_STOPS: ColorStops = {
   mid: 7.1,
 };
 
-const NON_HOME_DIM_MIN_ZOOM = 15.5;
+const NON_HOME_DIM_MIN_ZOOM = 13.5;
 // Дома видны с z13 плоскими: тайлы z13 уже приходят вместе с подложкой,
 // поэтому полоса роста 13→15 начинается раньше, чем подъезжает z14.
 // Раньше слои включались на z14 до прихода тайлов — было видно
 // «пусто → заминка → сразу полная высота». Механизм роста не менялся.
 const BUILDING_MIN_ZOOM = 13;
 const BUILDING_GROW_MAX_ZOOM = 15;
-// Тени (3 плоских fill по всем домам) — только крупный план, z16+.
-const BUILDING_SHADOW_MIN_ZOOM = 16;
+// Тени (3 плоских fill по всем домам) — плавно проявляются с z14.8 к z16.
+const BUILDING_SHADOW_MIN_ZOOM = 14.8;
 // Декоративные деревья — только с z15 (на z13–15 это лишние круги).
 const TREE_MIN_ZOOM = 15;
 // Подписи улиц/воды/парков — с z12.6 (см. rebuildLabels). Ниже этого зума
@@ -3141,7 +3154,7 @@ export default function Map() {
               },
             },
             // Мягкая многослойная тень под домами: 3 плоских fill со сдвигом
-            // [3,3]..[6,6], opacity 0.05..0.10 (light), без обводки и только z >= 16.
+            // [3,3]..[6,6], плавно проявляется с z14.8 к z16.
             ...BUILDING_SHADOW_LAYERS.map((s) => ({
               id: s.id,
               type: "fill" as const,
@@ -3150,7 +3163,7 @@ export default function Map() {
               ...buildingSourceLayer,
               paint: {
                 "fill-color": palette.shadow,
-                "fill-opacity": s.opacity[themeRef.current],
+                "fill-opacity": buildingShadowOpacityExpr(s.opacity[themeRef.current]),
                 "fill-translate": s.translate,
                 "fill-translate-anchor": "viewport" as const,
                 "fill-antialias": false,
@@ -4039,11 +4052,19 @@ export default function Map() {
         currentFacadeLod = lod;
         currentNonHomeDim = dimNonHome;
         addFacadeImages(t);
-        map.setPaintProperty(
-          "buildings",
-          "fill-extrusion-pattern",
-          facadePatternExpr(t, colorStops, lod, selectedId, dimNonHome),
-        );
+        // В светлой теме у слоя buildings обычные жилые и нежилые здания не имеют оконной
+        // текстуры (а выбранный дом рисуется отдельным слоем buildings-selected-body + 3D hero-окна),
+        // поэтому в light-теме и при zoom < 15.4 ("flat") не вешаем fill-extrusion-pattern на
+        // весь город: нативный шейдер цвета даёт живой светотеневой объём стен на всех зумах z14–16+.
+        if (t === "light" || zoom < FACADE_COARSE_MIN_ZOOM) {
+          map.setPaintProperty("buildings", "fill-extrusion-pattern", undefined);
+        } else {
+          map.setPaintProperty(
+            "buildings",
+            "fill-extrusion-pattern",
+            facadePatternExpr(t, colorStops, lod, selectedId, dimNonHome),
+          );
+        }
         map.setLayoutProperty("buildings-roof", "visibility", "visible");
         if (
           map.getLayer("buildings-selected-body") &&
@@ -4144,7 +4165,11 @@ export default function Map() {
         syncFacades(t);
         for (const s of BUILDING_SHADOW_LAYERS) {
           if (map.getLayer(s.id)) {
-            map.setPaintProperty(s.id, "fill-opacity", s.opacity[t]);
+            map.setPaintProperty(
+              s.id,
+              "fill-opacity",
+              buildingShadowOpacityExpr(s.opacity[t]),
+            );
           }
         }
         map.setPaintProperty("glow-outer", "circle-opacity", t === "dark" ? 0.13 : 0.06);

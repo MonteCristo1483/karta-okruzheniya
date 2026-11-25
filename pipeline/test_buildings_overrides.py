@@ -115,5 +115,92 @@ class IsHomeWithOverridesTest(unittest.TestCase):
         self.assertTrue(buildings_filter.is_home(HOUSE, 1234567890))
 
 
+class IsHomeWithoutAddressTest(unittest.TestCase):
+    """HOMES-V2: жилой тип или addr:housenumber важнее адреса на полигоне."""
+
+    def test_residential_type_without_address(self) -> None:
+        for building in (
+            "apartments",
+            "residential",
+            "house",
+            "detached",
+            "semidetached_house",
+            "terrace",
+            "dormitory",
+        ):
+            self.assertTrue(buildings_filter.is_home({"building": building}), building)
+
+    def test_residential_type_with_place_instead_of_street(self) -> None:
+        # Зеленоград и СНТ: addr:place вместо addr:street.
+        self.assertTrue(
+            buildings_filter.is_home(
+                {"building": "house", "addr:place": "СНТ «Лесное»", "addr:housenumber": "5"}
+            )
+        )
+
+    def test_housenumber_without_street(self) -> None:
+        self.assertTrue(
+            buildings_filter.is_home({"building": "yes", "addr:housenumber": "7 к1"})
+        )
+
+    def test_street_without_housenumber_is_not_a_home(self) -> None:
+        self.assertFalse(
+            buildings_filter.is_home(
+                {"building": "yes", "addr:street": "Тверская улица"}
+            )
+        )
+
+    def test_non_home_tag_beats_residential_type(self) -> None:
+        self.assertFalse(
+            buildings_filter.is_home(
+                {
+                    "building": "residential",
+                    "amenity": "kindergarten",
+                    "addr:housenumber": "1",
+                }
+            )
+        )
+
+    def test_non_home_building_beats_housenumber(self) -> None:
+        self.assertFalse(
+            buildings_filter.is_home(
+                {"building": "garage", "addr:housenumber": "3"}
+            )
+        )
+        self.assertFalse(
+            buildings_filter.is_home(
+                {
+                    "building": "office",
+                    "addr:street": "Пресненская набережная",
+                    "addr:housenumber": "8 с1",
+                }
+            )
+        )
+
+    def test_empty_tags_are_not_home(self) -> None:
+        self.assertFalse(buildings_filter.is_home(None))
+        self.assertFalse(buildings_filter.is_home({}))
+
+
+class ClassifyYearMatchFlagTest(unittest.TestCase):
+    """Второй флаг разрешает подъём по паспорту ГИС ЖКХ только неявным."""
+
+    def test_residential_can_be_raised(self) -> None:
+        self.assertEqual(
+            buildings_filter.classify({"building": "residential"}), (True, True)
+        )
+
+    def test_untagged_can_be_raised_by_passport(self) -> None:
+        # Дом без адреса/типа может получить is_home из building_year_match.
+        self.assertEqual(buildings_filter.classify({"building": "yes"}), (False, True))
+
+    def test_explicit_non_home_is_blocked(self) -> None:
+        self.assertEqual(buildings_filter.classify({"building": "garage"}), (False, False))
+        self.assertEqual(
+            buildings_filter.classify({"building": "yes", "shop": "mall"}),
+            (False, False),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
