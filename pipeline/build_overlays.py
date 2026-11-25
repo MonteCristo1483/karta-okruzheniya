@@ -6,9 +6,14 @@
 красные магистрали были выключены. Теперь три слоя лежат в одном модульном
 файле `data/overlays.pmtiles` (z8–16):
 
-    redzones — линии магистралей и ж/д из `linear` + промзоны/стройки из
-               `zones`; режем не по районам, а по рамке Москвы (+0.02°),
-               линии берём целиком — без дублей и без обрывов на границах;
+    redzones — линии магистралей и ж/д из `linear` (trunk/primary/secondary,
+               railway) + motorway, съезды развязок и активные многополосные
+               tertiary из PBF одним проходом; режем не по районам, а по рамке
+               Москвы (+0.02°), линии берём целиком — без дублей и обрывов на
+               границах; промзоны и стройки — полигоны `zones` с z13;
+               LOD: motorway/motorway_link/trunk/trunk_link/primary/
+               primary_link/railway — z8+, secondary/secondary_link/tertiary —
+               z12+ (tertiary: lanes >= 3 либо oneway=yes и lanes >= 2);
     poi      — `poi` в рамках скоринга (магазины — только subtype из
                config/scoring.json, как в export_map_data.py);
     trees    — декоративные кроны внутри полигонов green (park/wood):
@@ -34,8 +39,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+import osmium
 import psycopg
-from shapely.geometry import Polygon, shape
+from shapely import wkb as shapely_wkb
+from shapely.geometry import Polygon, mapping, shape
 from shapely.prepared import prep
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -47,6 +54,7 @@ from db import DB_DSN  # noqa: E402
 CITY_DIR = ROOT / "data" / "city"
 DEFAULT_OUT = ROOT / "data" / "overlays.pmtiles"
 BASEMAP = ROOT / "data" / "basemap.pmtiles"
+PBF_PATH = ROOT / "data" / "raw" / "moscow.osm.pbf"
 WEB_OUT = ROOT / "web" / "public" / "data" / "overlays.pmtiles"
 CONFIG_PATH = ROOT / "config" / "scoring.json"
 DOCKER_IMAGE = "karta-tippecanoe:2.79.0"
@@ -77,6 +85,14 @@ WHERE kind = 'road' AND class = 'secondary'
   AND ST_Intersects(geometry, (SELECT ST_Buffer(geometry, %s) FROM moscow))
 """
 
+# В PostGIS `linear` лежат только трёхклассовые магистрали из SPEC §3 (их
+# использует скоринг). Для отрисовки красных зон нужны ещё motorway, съезды
+# развязок и активные многополосные tertiary — берём их из PBF одним проходом,
+# чтобы не менять `linear` (иначе поедут golden-тесты скоринга).
+PBF_MIN_ZOOM8 = ("motorway", "motorway_link", "trunk_link", "primary_link")
+PBF_MIN_ZOOM12 = ("secondary_link",)
+ONEWAY_VALUES = {"yes", "1", "true"}
+
 ZONES_QUERY = """
 SELECT DISTINCT kind, ST_AsGeoJSON(geometry)
 FROM zones
@@ -105,12 +121,12 @@ def moscow_shape(cur):
     return shape(json.loads(cur.fetchone()[0]))
 
 
-def line_feature(kind: str, cls: str, geom_json: str, minzoom: int) -> dict:
+def line_feature(kind: str, cls: str, geometry: dict, minzoom: int) -> dict:
     return {
         "type": "Feature",
         "tippecanoe": {"layer": "redzones", "minzoom": minzoom},
         "properties": {"kind": kind, "class": cls},
-        "geometry": json.loads(geom_json),
+        "geometry": geometry,
     }
 
 
@@ -138,12 +154,93 @@ def poi_feature(poi_type: str, subtype, name, geom_json: str) -> dict:
 def collect_redzones(cur) -> list[dict]:
     features: list[dict] = []
     cur.execute(LINEAR_MAJOR_QUERY, [MOSCOW_MARGIN])
-    features += [line_feature(k, c, g, 8) for k, c, g in cur.fetchall()]
+    features += [line_feature(k, c, json.loads(g), 8) for k, c, g in cur.fetchall()]
     cur.execute(LINEAR_SECONDARY_QUERY, [MOSCOW_MARGIN])
-    features += [line_feature(k, c, g, 12) for k, c, g in cur.fetchall()]
+    features += [line_feature(k, c, json.loads(g), 12) for k, c, g in cur.fetchall()]
     cur.execute(ZONES_QUERY, [MOSCOW_MARGIN])
     features += [zone_feature(k, g) for k, g in cur.fetchall()]
     return features
+
+
+# --------------------------------------------------------------------------- #
+# недостающие классы магистралей из PBF (motorway, съезды, активные tertiary)
+# --------------------------------------------------------------------------- #
+
+def parse_lanes(value: str | None) -> int | None:
+    """`lanes` из OSM: "3", "3;4", "2.5" → целое или None."""
+    if not value:
+        return None
+    first = value.split(";")[0].strip().replace(",", ".")
+    try:
+        return int(float(first))
+    except ValueError:
+        return None
+
+
+def is_active_tertiary(tags: dict[str, str]) -> bool:
+    """Активная многополосная дорога: lanes >= 3 либо односторонняя с lanes >= 2."""
+    lanes = parse_lanes(tags.get("lanes"))
+    if lanes is None:
+        return False
+    if lanes >= 3:
+        return True
+    return lanes >= 2 and (tags.get("oneway") or "").strip().lower() in ONEWAY_VALUES
+
+
+class MissingRoadsCollector(osmium.SimpleHandler):
+    """Один проход по PBF: нужные highway внутри рамки Москвы (+запас)."""
+
+    def __init__(self, area):
+        super().__init__()
+        self.scope = prep(area)
+        self.wkbfab = osmium.geom.WKBFactory()
+        self.features: list[dict] = []
+        self.counts: dict[str, int] = {}
+        self.skipped = 0
+
+    def way(self, w: osmium.osm.Way) -> None:
+        highway = w.tags.get("highway")
+        if highway in PBF_MIN_ZOOM8:
+            minzoom = 8
+        elif highway in PBF_MIN_ZOOM12:
+            minzoom = 12
+        elif highway == "tertiary":
+            if not is_active_tertiary(w.tags):
+                return
+            minzoom = 12
+        else:
+            return
+        try:
+            wkb_hex = self.wkbfab.create_linestring(w)
+            geom = shapely_wkb.loads(bytes.fromhex(wkb_hex))
+        except (RuntimeError, ValueError):
+            self.skipped += 1
+            return
+        if geom.is_empty or not self.scope.intersects(geom):
+            return
+        self.features.append(line_feature("road", highway, mapping(geom), minzoom))
+        self.counts[highway] = self.counts.get(highway, 0) + 1
+
+
+def collect_pbf_roads(pbf: Path, moscow_geom) -> tuple[list[dict], dict[str, int]]:
+    """motorway/съезды/z12-классы из PBF — без записи в PostGIS `linear`."""
+    if not pbf.is_file():
+        raise SystemExit(f"нет {pbf}: без PBF не собрать полные классы магистралей")
+    # pyosmium на Windows не открывает PBF по абсолютному пути с кириллицей
+    # (см. build_basemap.py): передаём путь относительно cwd — он ASCII.
+    try:
+        open_arg = pbf.resolve().relative_to(Path.cwd().resolve()).as_posix()
+    except ValueError:
+        open_arg = str(pbf)
+    if not open_arg.isascii():
+        raise SystemExit(
+            f"путь к PBF содержит не-ASCII символы ({open_arg}): pyosmium его не "
+            "откроет, запустите скрипт из корня репозитория"
+        )
+    area = moscow_geom.buffer(MOSCOW_MARGIN)
+    collector = MissingRoadsCollector(area)
+    collector.apply_file(open_arg, locations=True)
+    return collector.features, dict(sorted(collector.counts.items()))
 
 
 def collect_poi(cur, shop_subtypes: list[str]) -> list[dict]:
@@ -368,6 +465,7 @@ def build(
     *,
     copy_to_web: bool = True,
     basemap: Path = BASEMAP,
+    pbf: Path = PBF_PATH,
 ) -> dict:
     """Собрать overlays.pmtiles и вернуть сводку (фичи, размер, тайлы)."""
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -377,9 +475,17 @@ def build(
     with psycopg.connect(DB_DSN) as conn, conn.cursor() as cur:
         moscow_geom = moscow_shape(cur)
         redzones = collect_redzones(cur)
-        print(f"  redzones: {len(redzones):,} фич", flush=True)
+        print(f"  redzones (PostGIS): {len(redzones):,} фич", flush=True)
         poi = collect_poi(cur, shop_subtypes)
         print(f"  poi: {len(poi):,} фич", flush=True)
+
+    pbf_roads, pbf_counts = collect_pbf_roads(pbf, moscow_geom)
+    redzones += pbf_roads
+    print(
+        f"  redzones (PBF): {len(pbf_roads):,} фич {pbf_counts}, "
+        f"всего {len(redzones):,}",
+        flush=True,
+    )
 
     if not basemap.is_file():
         raise SystemExit(f"нет {basemap}: сначала соберите data/basemap.pmtiles")
@@ -405,6 +511,7 @@ def build(
         "path": str(out),
         "bytes": out.stat().st_size,
         "features": {"redzones": len(redzones), "poi": len(poi), "trees": len(trees)},
+        "pbf_roads": pbf_counts,
         "tiles": stats["tiles"],
         "zooms": (stats["min_zoom"], stats["max_zoom"]),
         "per_zoom": stats["per_zoom"],
@@ -435,12 +542,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-copy", action="store_true",
                         help="не копировать в web/public/data")
     parser.add_argument("--basemap", type=Path, default=BASEMAP)
+    parser.add_argument("--pbf", type=Path, default=PBF_PATH,
+                        help="PBF для motorway/съездов/активных tertiary")
     args = parser.parse_args(argv)
 
     summary = build(
         args.out.resolve(),
         copy_to_web=not args.no_copy,
         basemap=args.basemap.resolve(),
+        pbf=args.pbf.resolve(),
     )
     features = summary["features"]
     print()
