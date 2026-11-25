@@ -1967,6 +1967,41 @@ function firstCoordinateKey(geometry: Geometry): string {
   }
 }
 
+/**
+ * PERF-3-TILECACHE: bbox геометрии пересекается с окном подписей.
+ * Нужна, чтобы из большого тайлового кэша (600 тайлов) в
+ * buildLabelCandidates шли только фичи вокруг текущего экрана.
+ */
+function geometryInBounds(
+  geometry: Geometry,
+  west: number,
+  south: number,
+  east: number,
+  north: number,
+): boolean {
+  if (geometry.type === "GeometryCollection") {
+    return geometry.geometries.some((g) => geometryInBounds(g, west, south, east, north));
+  }
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  const visit = (coords: unknown): void => {
+    if (!Array.isArray(coords)) return;
+    const [x, y] = coords;
+    if (typeof x === "number" && typeof y === "number") {
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+      return;
+    }
+    for (const child of coords) visit(child);
+  };
+  visit((geometry as { coordinates?: unknown }).coordinates);
+  return maxX >= west && minX <= east && maxY >= south && minY <= north;
+}
+
 // Декоративные деревья в park и wood больше не генерируются в клиенте:
 // точки приходят из тайлов overlays.pmtiles (source-layer "trees", z15+).
 
@@ -2553,7 +2588,6 @@ export default function Map() {
       let districts: DistrictEntry[] = [];
       let buildingMeta: BuildingMeta[] = [];
       let metaById: Record<number, BuildingMeta> = {};
-      let allIds: number[] = [];
       let buildingCenters: Record<number, [number, number]> = {};
       const colorStops: ColorStops = DEFAULT_COLOR_STOPS;
       let searchIndexData: CompactSearchIndex | null = null;
@@ -2593,7 +2627,6 @@ export default function Map() {
             buildingCenters[id] = meta.center as [number, number];
             return meta;
           });
-          allIds = buildingMeta.map((meta) => meta.id);
           if (!cancelled) {
             setSearchItems(
               buildingMeta
@@ -3356,12 +3389,17 @@ export default function Map() {
         // (на 20 тайлах это читалось как «карта дёргается кусками»).
         // 0 не дало заметного мерцания — оставляем его.
         fadeDuration: 0,
-        // Потолок тайлового кэша (память). MapLibre берёт
-        // min(512, тайлы_во_вьюпорте × maxTileCacheZoomLevels), т.е. 512 —
-        // это верхняя граница: на большом экране/DPR кэш не разрастётся,
-        // на телефоне при нехватке памяти — 256. Повторное движение по тому
-        // же месту не грузит тайлы заново (проверено сетевым логом).
-        maxTileCacheSize: 512,
+        // PERF-3-TILECACHE: при pitch 60° в кадре ~30 тайлов, и на резком
+        // сдвиге камеры MapLibre выбрасывал родительские тайлы z9–13 и
+        // соседние кварталы — на новом квадрате z14 до прихода тайла был
+        // виден обрыв дороги/магистрали. Щедрый кэш (600 тайлов, 8 зум-
+        // уровней) держит соседние кварталы в памяти, а движение по тому же
+        // месту не грузит тайлы заново (проверено сетевым логом).
+        maxTileCacheSize: 600,
+        maxTileCacheZoomLevels: 8,
+        // Не отменяем уже начатые запросы тайлов при зуме: отмена давала
+        // «дыры» в кадре и повторную загрузку того же тайла.
+        cancelPendingTileRequestsWhileZooming: false,
         attributionControl: false,
         });
       } catch (e) {
@@ -3497,10 +3535,25 @@ export default function Map() {
           }
           const seen = new Set<string>();
           const features: GFeature<BasemapProps>[] = [];
+          // PERF-3-TILECACHE: в кэше 600 тайлов; подписи нужны только
+          // вокруг текущего экрана — отсекаем фичи вне bounds с запасом,
+          // иначе buildLabelCandidates перебирает кварталы за кадром.
+          const bounds = map.getBounds();
+          const padDeg = 0.01;
+          const west = bounds.getWest() - padDeg;
+          const east = bounds.getEast() + padDeg;
+          const south = bounds.getSouth() - padDeg;
+          const north = bounds.getNorth() + padDeg;
           // PERF-LOAD: landuse и waterway в buildLabelCandidates не читаются —
           // не опрашиваем их вовсе.
           for (const sourceLayer of ["green", "water", "river", "road"]) {
-            for (const feature of map.querySourceFeatures("basemap", { sourceLayer })) {
+            for (const feature of map.querySourceFeatures("basemap", {
+              sourceLayer,
+              // Фильтр на стороне MapLibre: без него на каждый вызов в JS
+              // создаются тысячи безымянных GeoJSONFeature из всех
+              // закэшированных тайлов.
+              filter: ["has", "name"] as never,
+            })) {
               const properties = feature.properties as unknown as
                 | BasemapProps
                 | undefined;
@@ -3508,6 +3561,8 @@ export default function Map() {
               const name = properties.name;
               // Безымянные сегменты дорог/воды и green в подписи не годятся.
               if (!name) continue;
+              // Фичи за пределами экрана (с запасом) в подписи не попадут.
+              if (!geometryInBounds(feature.geometry, west, south, east, north)) continue;
               // Ключ без полной геометрии: sourceLayer + класс + имя +
               // id/начало геометрии достаточно, чтобы отсечь дубли на стыках.
               const key = `${sourceLayer}/${properties.class ?? ""}/${name}/${feature.id ?? ""}/${firstCoordinateKey(feature.geometry)}`;
@@ -3527,7 +3582,7 @@ export default function Map() {
           }
           labelCandidates = buildLabelCandidates(features);
           rebuildLabels();
-        }, 120);
+        }, 45);
       };
       map.on("sourcedata", (event) => {
         if (
@@ -4191,56 +4246,37 @@ export default function Map() {
         else rebuildForViewport();
       });
 
-      let featureStateInitialized = false;
       let appliedSelectedId: number | null = null;
       const applySelection = (activateSelected = true) => {
         if (!map || !map.getSource("buildings")) return;
-        currentFacadeLod = null;
-        currentNonHomeDim = null;
-        syncFacades(themeRef.current);
         // Векторному источнику нужен sourceLayer и для feature-state.
         const stateSource = tileMode
           ? { source: "buildings", sourceLayer: "buildings" }
           : { source: "buildings" };
-        if (featureStateInitialized && selectedId !== null) {
-          if (appliedSelectedId !== null && appliedSelectedId !== selectedId) {
-            map.setFeatureState(
-              { ...stateSource, id: appliedSelectedId },
-              { selected: false, inactive: true },
-            );
-          }
-          if (activateSelected && appliedSelectedId !== selectedId) {
-            map.setFeatureState(
-              { ...stateSource, id: selectedId },
-              { selected: true, inactive: false },
-            );
-          } else if (!activateSelected) {
-            map.setFeatureState(
-              { ...stateSource, id: selectedId },
-              { selected: false, inactive: false },
-            );
-          }
-          appliedSelectedId = activateSelected ? selectedId : null;
-          return;
-        }
-        const idsToStyle =
-          allIds.length > 0
-            ? allIds
-            : map
-                .querySourceFeatures("buildings", { sourceLayer: "buildings" })
-                .map((feature) => Number(feature.id ?? feature.properties?.id))
-                .filter((id) => Number.isFinite(id));
-        for (const id of idsToStyle) {
+        // PERF-1-FLY: ровно точечные вызовы. Раньше здесь был цикл по всем
+        // 100 049 домам Москвы ради `inactive`, который ни один стиль не читает.
+        if (appliedSelectedId !== null && appliedSelectedId !== selectedId) {
           map.setFeatureState(
-            { ...stateSource, id },
-            {
-              selected: activateSelected && id === selectedId,
-              inactive: selectedId !== null && id !== selectedId,
-            },
+            { ...stateSource, id: appliedSelectedId },
+            { selected: false },
           );
         }
-        featureStateInitialized = true;
+        if (selectedId !== null) {
+          map.setFeatureState(
+            { ...stateSource, id: selectedId },
+            { selected: Boolean(activateSelected) },
+          );
+        }
         appliedSelectedId = activateSelected ? selectedId : null;
+        // PERF-1-FLY: на старте flyTo (activateSelected === false) не сбрасываем
+        // LOD и не пересобираем fill-extrusion-pattern всех видимых тайлов — эта
+        // пересборка 3D-геометрии и давала слайд-шоу в первых кадрах перелёта.
+        // Pattern обновляет reveal по moveend/idle — там applySelection() с true.
+        if (activateSelected) {
+          currentFacadeLod = null;
+          currentNonHomeDim = null;
+          syncFacades(themeRef.current);
+        }
       };
 
       const setSelectedBodyLayerVisible = (visible: boolean) => {
@@ -4956,14 +4992,31 @@ export default function Map() {
         selectById(id, feats[0], [e.lngLat.lng, e.lngLat.lat]);
       });
 
+      let lastHoverCheckMs = 0;
+      let lastHoverCursor = "";
       map.on("mousemove", (e) => {
         if (!map || !map.getLayer("buildings")) return;
-        const feats = map.queryRenderedFeatures(e.point, { layers: buildingHitLayers() });
+        // 3D-рейкаст по сотням домов стоит 10–25 мс на событие (z15–16).
+        // Во время движения карты и чаще раза в 60 мс его не запускаем.
+        if (map.isMoving() || selectionMovePending) return;
+        const now = performance.now();
+        if (now - lastHoverCheckMs < 60) return;
+        lastHoverCheckMs = now;
         const poiLayers = poiHitLayers();
-        const poi =
+        // Лёгкие 2D-слои POI проверяем первыми: если попали, тяжёлый
+        // рейкаст по 3D-экструзии зданий не нужен.
+        let hit =
           poiLayers.length > 0 &&
           map.queryRenderedFeatures(e.point, { layers: poiLayers }).length > 0;
-        map.getCanvas().style.cursor = feats.length || poi ? "pointer" : "";
+        if (!hit) {
+          hit =
+            map.queryRenderedFeatures(e.point, { layers: buildingHitLayers() }).length > 0;
+        }
+        const nextCursor = hit ? "pointer" : "";
+        if (nextCursor !== lastHoverCursor) {
+          lastHoverCursor = nextCursor;
+          map.getCanvas().style.cursor = nextCursor;
+        }
       });
     };
 
