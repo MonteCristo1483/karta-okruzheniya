@@ -4,17 +4,17 @@
     "name": "район Силино"
   },
   "buildings": 822,
-  "homes": 467,
+  "homes": 587,
   "poi": 39,
   "redzones": 125,
   "geojson_bytes": {
-    "buildings": 678063,
+    "buildings": 767613,
     "poi": 5978,
     "redzones": 42089,
     "district": 8553
   },
-  "index_rows": 467,
-  "index_bytes": 53068,
+  "index_rows": 587,
+  "index_bytes": 62092,
   "tiles": null,
-  "seconds": 4.2
+  "seconds": 0.1
 }

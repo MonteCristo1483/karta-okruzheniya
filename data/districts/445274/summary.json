@@ -4,17 +4,17 @@
     "name": "район Ховрино"
   },
   "buildings": 781,
-  "homes": 380,
+  "homes": 381,
   "poi": 92,
   "redzones": 169,
   "geojson_bytes": {
-    "buildings": 691054,
+    "buildings": 691823,
     "poi": 14360,
     "redzones": 47562,
     "district": 4884
   },
-  "index_rows": 380,
-  "index_bytes": 40654,
+  "index_rows": 381,
+  "index_bytes": 40702,
   "tiles": null,
-  "seconds": 4.4
+  "seconds": 0.1
 }

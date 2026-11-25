@@ -4,17 +4,17 @@
     "name": "Ярославский район"
   },
   "buildings": 1246,
-  "homes": 462,
+  "homes": 465,
   "poi": 87,
   "redzones": 322,
   "geojson_bytes": {
-    "buildings": 861798,
+    "buildings": 864101,
     "poi": 13542,
     "redzones": 117621,
     "district": 5181
   },
-  "index_rows": 462,
-  "index_bytes": 48931,
+  "index_rows": 465,
+  "index_bytes": 49252,
   "tiles": null,
-  "seconds": 4.4
+  "seconds": 0.1
 }

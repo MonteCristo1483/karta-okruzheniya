@@ -4,17 +4,17 @@
     "name": "район Савёлки"
   },
   "buildings": 626,
-  "homes": 110,
+  "homes": 291,
   "poi": 59,
   "redzones": 126,
   "geojson_bytes": {
-    "buildings": 330160,
+    "buildings": 466619,
     "poi": 9071,
     "redzones": 32604,
     "district": 15100
   },
-  "index_rows": 110,
-  "index_bytes": 11002,
+  "index_rows": 291,
+  "index_bytes": 26029,
   "tiles": null,
-  "seconds": 3.9
+  "seconds": 0.1
 }

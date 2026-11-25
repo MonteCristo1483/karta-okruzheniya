@@ -4,17 +4,17 @@
     "name": "район Куркино"
   },
   "buildings": 1127,
-  "homes": 707,
+  "homes": 779,
   "poi": 53,
   "redzones": 127,
   "geojson_bytes": {
-    "buildings": 1007326,
+    "buildings": 1063166,
     "poi": 8337,
     "redzones": 33466,
     "district": 13315
   },
-  "index_rows": 707,
-  "index_bytes": 76634,
+  "index_rows": 779,
+  "index_bytes": 83670,
   "tiles": null,
-  "seconds": 5.3
+  "seconds": 0.1
 }

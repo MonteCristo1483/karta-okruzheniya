@@ -4,17 +4,17 @@
     "name": "район Раменки"
   },
   "buildings": 1954,
-  "homes": 771,
+  "homes": 879,
   "poi": 164,
   "redzones": 560,
   "geojson_bytes": {
-    "buildings": 1449055,
+    "buildings": 1533738,
     "poi": 25588,
     "redzones": 156604,
     "district": 5972
   },
-  "index_rows": 771,
-  "index_bytes": 84421,
+  "index_rows": 879,
+  "index_bytes": 95584,
   "tiles": null,
-  "seconds": 5.3
+  "seconds": 0.2
 }

@@ -4,17 +4,17 @@
     "name": "Южнопортовый район"
   },
   "buildings": 812,
-  "homes": 353,
+  "homes": 355,
   "poi": 99,
   "redzones": 258,
   "geojson_bytes": {
-    "buildings": 637528,
+    "buildings": 639048,
     "poi": 15369,
     "redzones": 66219,
     "district": 4323
   },
-  "index_rows": 353,
-  "index_bytes": 39751,
+  "index_rows": 355,
+  "index_bytes": 39930,
   "tiles": null,
-  "seconds": 4.6
+  "seconds": 0.1
 }

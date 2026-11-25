@@ -4,17 +4,17 @@
     "name": "Мещанский район"
   },
   "buildings": 1536,
-  "homes": 699,
+  "homes": 708,
   "poi": 110,
   "redzones": 484,
   "geojson_bytes": {
-    "buildings": 1307509,
+    "buildings": 1314408,
     "poi": 17022,
     "redzones": 129793,
     "district": 12451
   },
-  "index_rows": 699,
-  "index_bytes": 77153,
+  "index_rows": 708,
+  "index_bytes": 77987,
   "tiles": null,
-  "seconds": 6.2
+  "seconds": 0.2
 }

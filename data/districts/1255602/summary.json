@@ -4,17 +4,17 @@
     "name": "район Новокосино"
   },
   "buildings": 505,
-  "homes": 255,
+  "homes": 256,
   "poi": 99,
   "redzones": 79,
   "geojson_bytes": {
-    "buildings": 431793,
+    "buildings": 432538,
     "poi": 15165,
     "redzones": 19564,
     "district": 2159
   },
-  "index_rows": 255,
-  "index_bytes": 27793,
+  "index_rows": 256,
+  "index_bytes": 27863,
   "tiles": null,
-  "seconds": 4.1
+  "seconds": 0.3
 }

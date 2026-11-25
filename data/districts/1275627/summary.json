@@ -4,17 +4,17 @@
     "name": "район Якиманка"
   },
   "buildings": 1324,
-  "homes": 654,
+  "homes": 664,
   "poi": 72,
   "redzones": 227,
   "geojson_bytes": {
-    "buildings": 1140841,
+    "buildings": 1148434,
     "poi": 11023,
     "redzones": 64763,
     "district": 8100
   },
-  "index_rows": 654,
-  "index_bytes": 73365,
+  "index_rows": 664,
+  "index_bytes": 74276,
   "tiles": null,
-  "seconds": 5.2
+  "seconds": 0.2
 }

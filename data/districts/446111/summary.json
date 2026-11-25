@@ -4,17 +4,17 @@
     "name": "район Фили-Давыдково"
   },
   "buildings": 914,
-  "homes": 491,
+  "homes": 500,
   "poi": 125,
   "redzones": 182,
   "geojson_bytes": {
-    "buildings": 749402,
+    "buildings": 756202,
     "poi": 19583,
     "redzones": 38862,
     "district": 8150
   },
-  "index_rows": 491,
-  "index_bytes": 53514,
+  "index_rows": 500,
+  "index_bytes": 53991,
   "tiles": null,
-  "seconds": 4.3
+  "seconds": 0.1
 }

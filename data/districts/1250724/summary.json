@@ -4,17 +4,17 @@
     "name": "район Марфино"
   },
   "buildings": 495,
-  "homes": 215,
+  "homes": 221,
   "poi": 43,
   "redzones": 144,
   "geojson_bytes": {
-    "buildings": 420465,
+    "buildings": 425117,
     "poi": 6680,
     "redzones": 42423,
     "district": 5070
   },
-  "index_rows": 215,
-  "index_bytes": 24217,
+  "index_rows": 221,
+  "index_bytes": 24808,
   "tiles": null,
-  "seconds": 4.0
+  "seconds": 0.1
 }

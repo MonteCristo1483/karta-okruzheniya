@@ -4,17 +4,17 @@
     "name": "Нагорный район"
   },
   "buildings": 1142,
-  "homes": 493,
+  "homes": 496,
   "poi": 95,
   "redzones": 249,
   "geojson_bytes": {
-    "buildings": 838388,
+    "buildings": 840697,
     "poi": 14730,
     "redzones": 68402,
     "district": 4553
   },
-  "index_rows": 493,
-  "index_bytes": 53728,
+  "index_rows": 496,
+  "index_bytes": 53990,
   "tiles": null,
-  "seconds": 4.6
+  "seconds": 0.2
 }

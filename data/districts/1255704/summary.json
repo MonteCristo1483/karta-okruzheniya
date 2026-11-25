@@ -4,17 +4,17 @@
     "name": "район Восточное Измайлово"
   },
   "buildings": 527,
-  "homes": 320,
+  "homes": 325,
   "poi": 69,
   "redzones": 82,
   "geojson_bytes": {
-    "buildings": 457673,
+    "buildings": 461537,
     "poi": 10583,
     "redzones": 21420,
     "district": 4171
   },
-  "index_rows": 320,
-  "index_bytes": 35444,
+  "index_rows": 325,
+  "index_bytes": 35939,
   "tiles": null,
-  "seconds": 4.7
+  "seconds": 0.1
 }

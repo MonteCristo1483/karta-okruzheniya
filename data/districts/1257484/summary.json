@@ -4,17 +4,17 @@
     "name": "район Арбат"
   },
   "buildings": 868,
-  "homes": 509,
+  "homes": 520,
   "poi": 71,
   "redzones": 137,
   "geojson_bytes": {
-    "buildings": 846770,
+    "buildings": 855297,
     "poi": 11002,
     "redzones": 35845,
     "district": 8028
   },
-  "index_rows": 509,
-  "index_bytes": 56992,
+  "index_rows": 520,
+  "index_bytes": 58093,
   "tiles": null,
-  "seconds": 6.7
+  "seconds": 0.2
 }

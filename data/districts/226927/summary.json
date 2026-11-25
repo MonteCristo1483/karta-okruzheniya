@@ -4,17 +4,17 @@
     "name": "район Кунцево"
   },
   "buildings": 2089,
-  "homes": 1050,
+  "homes": 1171,
   "poi": 142,
   "redzones": 359,
   "geojson_bytes": {
-    "buildings": 1641738,
+    "buildings": 1734054,
     "poi": 22005,
     "redzones": 119458,
     "district": 40506
   },
-  "index_rows": 1050,
-  "index_bytes": 115562,
+  "index_rows": 1171,
+  "index_bytes": 127084,
   "tiles": null,
-  "seconds": 6.1
+  "seconds": 0.2
 }

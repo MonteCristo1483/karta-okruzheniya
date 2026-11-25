@@ -4,17 +4,17 @@
     "name": "район Митино"
   },
   "buildings": 1796,
-  "homes": 599,
+  "homes": 667,
   "poi": 219,
   "redzones": 415,
   "geojson_bytes": {
-    "buildings": 1301987,
+    "buildings": 1354548,
     "poi": 33861,
     "redzones": 113873,
     "district": 46304
   },
-  "index_rows": 599,
-  "index_bytes": 63050,
+  "index_rows": 667,
+  "index_bytes": 69179,
   "tiles": null,
-  "seconds": 5.6
+  "seconds": 0.2
 }

@@ -4,17 +4,17 @@
     "name": "район Беговой"
   },
   "buildings": 986,
-  "homes": 379,
+  "homes": 382,
   "poi": 45,
   "redzones": 142,
   "geojson_bytes": {
-    "buildings": 774370,
+    "buildings": 776700,
     "poi": 7070,
     "redzones": 54057,
     "district": 3746
   },
-  "index_rows": 379,
-  "index_bytes": 39985,
+  "index_rows": 382,
+  "index_bytes": 40362,
   "tiles": null,
-  "seconds": 4.5
+  "seconds": 0.1
 }

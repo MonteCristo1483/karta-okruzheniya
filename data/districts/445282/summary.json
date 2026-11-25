@@ -4,17 +4,17 @@
     "name": "район Отрадное"
   },
   "buildings": 1565,
-  "homes": 596,
+  "homes": 608,
   "poi": 153,
   "redzones": 369,
   "geojson_bytes": {
-    "buildings": 1093102,
+    "buildings": 1102201,
     "poi": 23650,
     "redzones": 103592,
     "district": 7089
   },
-  "index_rows": 596,
-  "index_bytes": 63385,
+  "index_rows": 608,
+  "index_bytes": 64343,
   "tiles": null,
-  "seconds": 4.6
+  "seconds": 0.2
 }

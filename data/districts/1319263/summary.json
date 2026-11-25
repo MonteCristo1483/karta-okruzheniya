@@ -4,17 +4,17 @@
     "name": "район Ивановское"
   },
   "buildings": 824,
-  "homes": 332,
+  "homes": 365,
   "poi": 120,
   "redzones": 284,
   "geojson_bytes": {
-    "buildings": 589411,
+    "buildings": 614945,
     "poi": 18390,
     "redzones": 72127,
     "district": 7265
   },
-  "index_rows": 332,
-  "index_bytes": 35115,
+  "index_rows": 365,
+  "index_bytes": 38333,
   "tiles": null,
-  "seconds": 4.8
+  "seconds": 0.1
 }

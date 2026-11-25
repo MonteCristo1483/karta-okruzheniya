@@ -4,17 +4,17 @@
     "name": "район Орехово-Борисово Южное"
   },
   "buildings": 889,
-  "homes": 329,
+  "homes": 334,
   "poi": 125,
   "redzones": 193,
   "geojson_bytes": {
-    "buildings": 614901,
+    "buildings": 618789,
     "poi": 19363,
     "redzones": 43898,
     "district": 10932
   },
-  "index_rows": 329,
-  "index_bytes": 34610,
+  "index_rows": 334,
+  "index_bytes": 35128,
   "tiles": null,
-  "seconds": 4.7
+  "seconds": 0.1
 }

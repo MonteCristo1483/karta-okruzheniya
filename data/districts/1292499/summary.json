@@ -4,17 +4,17 @@
     "name": "Обручевский район"
   },
   "buildings": 824,
-  "homes": 376,
+  "homes": 383,
   "poi": 99,
   "redzones": 122,
   "geojson_bytes": {
-    "buildings": 652470,
+    "buildings": 657885,
     "poi": 15485,
     "redzones": 32424,
     "district": 5430
   },
-  "index_rows": 376,
-  "index_bytes": 40843,
+  "index_rows": 383,
+  "index_bytes": 41518,
   "tiles": null,
-  "seconds": 5.2
+  "seconds": 0.1
 }

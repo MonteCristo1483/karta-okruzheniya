@@ -4,17 +4,17 @@
     "name": "район Очаково-Матвеевское"
   },
   "buildings": 1984,
-  "homes": 858,
+  "homes": 874,
   "poi": 103,
   "redzones": 439,
   "geojson_bytes": {
-    "buildings": 1451774,
+    "buildings": 1463913,
     "poi": 15947,
     "redzones": 151026,
     "district": 12232
   },
-  "index_rows": 858,
-  "index_bytes": 92771,
+  "index_rows": 874,
+  "index_bytes": 94332,
   "tiles": null,
-  "seconds": 5.1
+  "seconds": 0.2
 }

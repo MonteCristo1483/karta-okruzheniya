@@ -4,17 +4,17 @@
     "name": "Ломоносовский район"
   },
   "buildings": 552,
-  "homes": 287,
+  "homes": 289,
   "poi": 125,
   "redzones": 31,
   "geojson_bytes": {
-    "buildings": 465821,
+    "buildings": 467299,
     "poi": 19236,
     "redzones": 7344,
     "district": 4419
   },
-  "index_rows": 287,
-  "index_bytes": 30808,
+  "index_rows": 289,
+  "index_bytes": 30947,
   "tiles": null,
-  "seconds": 4.7
+  "seconds": 0.1
 }

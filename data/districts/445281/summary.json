@@ -4,17 +4,17 @@
     "name": "Савёловский район"
   },
   "buildings": 845,
-  "homes": 375,
+  "homes": 380,
   "poi": 70,
   "redzones": 100,
   "geojson_bytes": {
-    "buildings": 654179,
+    "buildings": 658035,
     "poi": 10718,
     "redzones": 27094,
     "district": 3963
   },
-  "index_rows": 375,
-  "index_bytes": 40438,
+  "index_rows": 380,
+  "index_bytes": 40915,
   "tiles": null,
-  "seconds": 4.4
+  "seconds": 0.1
 }

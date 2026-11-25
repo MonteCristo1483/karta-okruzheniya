@@ -4,17 +4,17 @@
     "name": "район Черёмушки"
   },
   "buildings": 967,
-  "homes": 448,
+  "homes": 465,
   "poi": 107,
   "redzones": 129,
   "geojson_bytes": {
-    "buildings": 738878,
+    "buildings": 751680,
     "poi": 16639,
     "redzones": 32924,
     "district": 2725
   },
-  "index_rows": 448,
-  "index_bytes": 48437,
+  "index_rows": 465,
+  "index_bytes": 49677,
   "tiles": null,
-  "seconds": 4.9
+  "seconds": 0.1
 }

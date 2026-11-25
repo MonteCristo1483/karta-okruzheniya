@@ -4,17 +4,17 @@
     "name": "район Филёвский Парк"
   },
   "buildings": 1101,
-  "homes": 499,
+  "homes": 512,
   "poi": 113,
   "redzones": 155,
   "geojson_bytes": {
-    "buildings": 837979,
+    "buildings": 847872,
     "poi": 17427,
     "redzones": 49016,
     "district": 3360
   },
-  "index_rows": 499,
-  "index_bytes": 54409,
+  "index_rows": 512,
+  "index_bytes": 55464,
   "tiles": null,
-  "seconds": 4.6
+  "seconds": 0.1
 }

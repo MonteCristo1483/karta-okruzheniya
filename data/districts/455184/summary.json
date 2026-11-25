@@ -4,17 +4,17 @@
     "name": "район Текстильщики"
   },
   "buildings": 910,
-  "homes": 524,
+  "homes": 541,
   "poi": 116,
   "redzones": 241,
   "geojson_bytes": {
-    "buildings": 764952,
+    "buildings": 778560,
     "poi": 17922,
     "redzones": 82124,
     "district": 5089
   },
-  "index_rows": 524,
-  "index_bytes": 57075,
+  "index_rows": 541,
+  "index_bytes": 59057,
   "tiles": null,
-  "seconds": 4.6
+  "seconds": 0.1
 }

@@ -4,17 +4,17 @@
     "name": "Алексеевский район"
   },
   "buildings": 1189,
-  "homes": 543,
+  "homes": 548,
   "poi": 102,
   "redzones": 454,
   "geojson_bytes": {
-    "buildings": 904063,
+    "buildings": 907942,
     "poi": 15661,
     "redzones": 147352,
     "district": 3267
   },
-  "index_rows": 543,
-  "index_bytes": 58615,
+  "index_rows": 548,
+  "index_bytes": 59132,
   "tiles": null,
-  "seconds": 4.5
+  "seconds": 0.2
 }

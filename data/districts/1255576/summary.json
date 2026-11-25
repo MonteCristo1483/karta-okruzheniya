@@ -4,17 +4,17 @@
     "name": "район Косино-Ухтомский"
   },
   "buildings": 2291,
-  "homes": 1373,
+  "homes": 1801,
   "poi": 136,
   "redzones": 233,
   "geojson_bytes": {
-    "buildings": 1918677,
+    "buildings": 2248649,
     "poi": 20809,
     "redzones": 70167,
     "district": 5672
   },
-  "index_rows": 1373,
-  "index_bytes": 148538,
+  "index_rows": 1801,
+  "index_bytes": 186432,
   "tiles": null,
-  "seconds": 6.0
+  "seconds": 1.4
 }

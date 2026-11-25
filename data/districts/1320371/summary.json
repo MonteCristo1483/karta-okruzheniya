@@ -4,17 +4,17 @@
     "name": "район Крюково"
   },
   "buildings": 1682,
-  "homes": 584,
+  "homes": 1036,
   "poi": 98,
   "redzones": 445,
   "geojson_bytes": {
-    "buildings": 1152202,
+    "buildings": 1496777,
     "poi": 15222,
     "redzones": 118148,
     "district": 24062
   },
-  "index_rows": 584,
-  "index_bytes": 59407,
+  "index_rows": 1036,
+  "index_bytes": 96946,
   "tiles": null,
-  "seconds": 4.4
+  "seconds": 0.2
 }

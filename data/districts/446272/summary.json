@@ -4,17 +4,17 @@
     "name": "район Ростокино"
   },
   "buildings": 808,
-  "homes": 315,
+  "homes": 322,
   "poi": 55,
   "redzones": 166,
   "geojson_bytes": {
-    "buildings": 568783,
+    "buildings": 574062,
     "poi": 8553,
     "redzones": 58587,
     "district": 4009
   },
-  "index_rows": 315,
-  "index_bytes": 33990,
+  "index_rows": 322,
+  "index_bytes": 34568,
   "tiles": null,
-  "seconds": 4.4
+  "seconds": 0.1
 }

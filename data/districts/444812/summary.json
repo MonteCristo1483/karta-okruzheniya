@@ -4,17 +4,17 @@
     "name": "район Кузьминки"
   },
   "buildings": 1008,
-  "homes": 625,
+  "homes": 630,
   "poi": 149,
   "redzones": 121,
   "geojson_bytes": {
-    "buildings": 883591,
+    "buildings": 887593,
     "poi": 23040,
     "redzones": 29883,
     "district": 8260
   },
-  "index_rows": 625,
-  "index_bytes": 69750,
+  "index_rows": 630,
+  "index_bytes": 70364,
   "tiles": null,
-  "seconds": 4.7
+  "seconds": 0.2
 }

@@ -4,17 +4,17 @@
     "name": "район Покровское-Стрешнево"
   },
   "buildings": 1583,
-  "homes": 634,
+  "homes": 637,
   "poi": 105,
   "redzones": 368,
   "geojson_bytes": {
-    "buildings": 1161633,
+    "buildings": 1163882,
     "poi": 16168,
     "redzones": 118372,
     "district": 5296
   },
-  "index_rows": 634,
-  "index_bytes": 68535,
+  "index_rows": 637,
+  "index_bytes": 68745,
   "tiles": null,
-  "seconds": 4.7
+  "seconds": 0.2
 }

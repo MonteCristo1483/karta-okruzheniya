@@ -4,17 +4,17 @@
     "name": "Таганский район"
   },
   "buildings": 2594,
-  "homes": 1323,
+  "homes": 1341,
   "poi": 202,
   "redzones": 650,
   "geojson_bytes": {
-    "buildings": 2223593,
+    "buildings": 2237638,
     "poi": 31120,
     "redzones": 166817,
     "district": 7905
   },
-  "index_rows": 1323,
-  "index_bytes": 148366,
+  "index_rows": 1341,
+  "index_bytes": 150031,
   "tiles": null,
-  "seconds": 6.9
+  "seconds": 0.4
 }

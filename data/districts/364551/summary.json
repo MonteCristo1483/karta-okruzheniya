@@ -4,17 +4,17 @@
     "name": "район Сокольники"
   },
   "buildings": 1584,
-  "homes": 480,
+  "homes": 493,
   "poi": 89,
   "redzones": 399,
   "geojson_bytes": {
-    "buildings": 1048135,
+    "buildings": 1058141,
     "poi": 13804,
     "redzones": 115281,
     "district": 5466
   },
-  "index_rows": 480,
-  "index_bytes": 52291,
+  "index_rows": 493,
+  "index_bytes": 53460,
   "tiles": null,
-  "seconds": 4.7
+  "seconds": 0.1
 }

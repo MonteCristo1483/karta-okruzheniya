@@ -4,17 +4,17 @@
     "name": "район Левобережный"
   },
   "buildings": 714,
-  "homes": 279,
+  "homes": 290,
   "poi": 61,
   "redzones": 136,
   "geojson_bytes": {
-    "buildings": 541822,
+    "buildings": 550220,
     "poi": 9496,
     "redzones": 36397,
     "district": 6051
   },
-  "index_rows": 279,
-  "index_bytes": 30161,
+  "index_rows": 290,
+  "index_bytes": 31059,
   "tiles": null,
-  "seconds": 4.4
+  "seconds": 0.1
 }

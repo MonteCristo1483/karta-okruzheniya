@@ -4,17 +4,17 @@
     "name": "Молжаниновский район"
   },
   "buildings": 1699,
-  "homes": 1051,
+  "homes": 1138,
   "poi": 15,
   "redzones": 132,
   "geojson_bytes": {
-    "buildings": 1408843,
+    "buildings": 1476331,
     "poi": 2409,
     "redzones": 43715,
     "district": 8742
   },
-  "index_rows": 1051,
-  "index_bytes": 115799,
+  "index_rows": 1138,
+  "index_bytes": 124080,
   "tiles": null,
-  "seconds": 4.9
+  "seconds": 0.2
 }

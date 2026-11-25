@@ -4,17 +4,17 @@
     "name": "район Бирюлёво Западное"
   },
   "buildings": 946,
-  "homes": 327,
+  "homes": 329,
   "poi": 59,
   "redzones": 233,
   "geojson_bytes": {
-    "buildings": 609381,
+    "buildings": 610964,
     "poi": 9186,
     "redzones": 85801,
     "district": 2932
   },
-  "index_rows": 327,
-  "index_bytes": 36826,
+  "index_rows": 329,
+  "index_bytes": 37042,
   "tiles": null,
-  "seconds": 4.3
+  "seconds": 0.1
 }

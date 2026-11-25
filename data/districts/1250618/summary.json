@@ -4,17 +4,17 @@
     "name": "район Свиблово"
   },
   "buildings": 707,
-  "homes": 310,
+  "homes": 315,
   "poi": 88,
   "redzones": 238,
   "geojson_bytes": {
-    "buildings": 545342,
+    "buildings": 549220,
     "poi": 13586,
     "redzones": 66279,
     "district": 4415
   },
-  "index_rows": 310,
-  "index_bytes": 31770,
+  "index_rows": 315,
+  "index_bytes": 32206,
   "tiles": null,
-  "seconds": 4.2
+  "seconds": 0.1
 }

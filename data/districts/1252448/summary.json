@@ -4,17 +4,17 @@
     "name": "Лосиноостровский район"
   },
   "buildings": 803,
-  "homes": 434,
+  "homes": 442,
   "poi": 86,
   "redzones": 88,
   "geojson_bytes": {
-    "buildings": 674407,
+    "buildings": 680517,
     "poi": 13227,
     "redzones": 40525,
     "district": 4193
   },
-  "index_rows": 434,
-  "index_bytes": 45237,
+  "index_rows": 442,
+  "index_bytes": 45871,
   "tiles": null,
-  "seconds": 4.5
+  "seconds": 0.1
 }

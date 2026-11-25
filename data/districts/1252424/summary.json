@@ -4,17 +4,17 @@
     "name": "Бутырский район"
   },
   "buildings": 1162,
-  "homes": 415,
+  "homes": 421,
   "poi": 96,
   "redzones": 332,
   "geojson_bytes": {
-    "buildings": 806188,
+    "buildings": 810813,
     "poi": 14922,
     "redzones": 104910,
     "district": 3231
   },
-  "index_rows": 415,
-  "index_bytes": 44356,
+  "index_rows": 421,
+  "index_bytes": 44918,
   "tiles": null,
-  "seconds": 4.5
+  "seconds": 0.1
 }

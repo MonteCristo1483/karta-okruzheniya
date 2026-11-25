@@ -4,17 +4,17 @@
     "name": "Хорошёвский район"
   },
   "buildings": 1620,
-  "homes": 699,
+  "homes": 711,
   "poi": 113,
   "redzones": 209,
   "geojson_bytes": {
-    "buildings": 1282214,
+    "buildings": 1291412,
     "poi": 17578,
     "redzones": 78090,
     "district": 6129
   },
-  "index_rows": 699,
-  "index_bytes": 76656,
+  "index_rows": 711,
+  "index_bytes": 77705,
   "tiles": null,
-  "seconds": 5.1
+  "seconds": 0.2
 }

@@ -4,17 +4,17 @@
     "name": "Бескудниковский район"
   },
   "buildings": 569,
-  "homes": 237,
+  "homes": 241,
   "poi": 83,
   "redzones": 143,
   "geojson_bytes": {
-    "buildings": 432245,
+    "buildings": 435343,
     "poi": 12984,
     "redzones": 39147,
     "district": 6296
   },
-  "index_rows": 237,
-  "index_bytes": 26773,
+  "index_rows": 241,
+  "index_bytes": 27157,
   "tiles": null,
-  "seconds": 4.0
+  "seconds": 0.1
 }

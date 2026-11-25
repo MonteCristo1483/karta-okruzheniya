@@ -4,17 +4,17 @@
     "name": "район Замоскворечье"
   },
   "buildings": 1825,
-  "homes": 940,
+  "homes": 956,
   "poi": 131,
   "redzones": 300,
   "geojson_bytes": {
-    "buildings": 1593007,
+    "buildings": 1605141,
     "poi": 20133,
     "redzones": 88451,
     "district": 7588
   },
-  "index_rows": 940,
-  "index_bytes": 106157,
+  "index_rows": 956,
+  "index_bytes": 107474,
   "tiles": null,
-  "seconds": 5.9
+  "seconds": 0.3
 }

@@ -4,17 +4,17 @@
     "name": "район Южное Медведково"
   },
   "buildings": 538,
-  "homes": 257,
+  "homes": 261,
   "poi": 74,
   "redzones": 109,
   "geojson_bytes": {
-    "buildings": 419397,
+    "buildings": 422474,
     "poi": 11371,
     "redzones": 27309,
     "district": 6980
   },
-  "index_rows": 257,
-  "index_bytes": 25889,
+  "index_rows": 261,
+  "index_bytes": 26262,
   "tiles": null,
-  "seconds": 4.1
+  "seconds": 0.0
 }

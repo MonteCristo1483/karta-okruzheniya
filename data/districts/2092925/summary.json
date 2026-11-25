@@ -4,17 +4,17 @@
     "name": "Краснопахорский район"
   },
   "buildings": 13636,
-  "homes": 2497,
+  "homes": 6583,
   "poi": 49,
   "redzones": 358,
   "geojson_bytes": {
-    "buildings": 6433969,
+    "buildings": 9584650,
     "poi": 7458,
     "redzones": 106683,
     "district": 15239
   },
-  "index_rows": 2497,
-  "index_bytes": 257627,
+  "index_rows": 6583,
+  "index_bytes": 639118,
   "tiles": null,
-  "seconds": 10.0
+  "seconds": 0.9
 }

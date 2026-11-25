@@ -4,17 +4,17 @@
     "name": "Войковский район"
   },
   "buildings": 1001,
-  "homes": 504,
+  "homes": 509,
   "poi": 109,
   "redzones": 135,
   "geojson_bytes": {
-    "buildings": 821070,
+    "buildings": 824788,
     "poi": 16722,
     "redzones": 43354,
     "district": 5182
   },
-  "index_rows": 504,
-  "index_bytes": 58124,
+  "index_rows": 509,
+  "index_bytes": 58475,
   "tiles": null,
-  "seconds": 4.8
+  "seconds": 0.2
 }

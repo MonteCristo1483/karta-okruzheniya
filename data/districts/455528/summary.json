@@ -4,17 +4,17 @@
     "name": "район Москворечье-Сабурово"
   },
   "buildings": 1217,
-  "homes": 424,
+  "homes": 431,
   "poi": 78,
   "redzones": 345,
   "geojson_bytes": {
-    "buildings": 807137,
+    "buildings": 812564,
     "poi": 12108,
     "redzones": 93708,
     "district": 8147
   },
-  "index_rows": 424,
-  "index_bytes": 46021,
+  "index_rows": 431,
+  "index_bytes": 46697,
   "tiles": null,
-  "seconds": 4.7
+  "seconds": 0.1
 }

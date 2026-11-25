@@ -4,17 +4,17 @@
     "name": "район Хорошёво-Мнёвники"
   },
   "buildings": 2378,
-  "homes": 1397,
+  "homes": 1454,
   "poi": 188,
   "redzones": 362,
   "geojson_bytes": {
-    "buildings": 2163851,
+    "buildings": 2207761,
     "poi": 29875,
     "redzones": 112855,
     "district": 7559
   },
-  "index_rows": 1397,
-  "index_bytes": 166053,
+  "index_rows": 1454,
+  "index_bytes": 170934,
   "tiles": null,
-  "seconds": 6.4
+  "seconds": 0.3
 }

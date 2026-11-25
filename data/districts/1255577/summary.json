@@ -4,17 +4,17 @@
     "name": "район Некрасовка"
   },
   "buildings": 624,
-  "homes": 301,
+  "homes": 319,
   "poi": 101,
   "redzones": 170,
   "geojson_bytes": {
-    "buildings": 536872,
+    "buildings": 550892,
     "poi": 15666,
     "redzones": 51050,
     "district": 5725
   },
-  "index_rows": 301,
-  "index_bytes": 32612,
+  "index_rows": 319,
+  "index_bytes": 34277,
   "tiles": null,
-  "seconds": 4.2
+  "seconds": 0.3
 }

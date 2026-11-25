@@ -4,17 +4,17 @@
     "name": "район Коптево"
   },
   "buildings": 1171,
-  "homes": 606,
+  "homes": 615,
   "poi": 107,
   "redzones": 186,
   "geojson_bytes": {
-    "buildings": 963002,
+    "buildings": 969844,
     "poi": 16473,
     "redzones": 58876,
     "district": 6372
   },
-  "index_rows": 606,
-  "index_bytes": 69495,
+  "index_rows": 615,
+  "index_bytes": 70200,
   "tiles": null,
-  "seconds": 5.0
+  "seconds": 0.2
 }

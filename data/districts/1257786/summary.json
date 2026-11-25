@@ -4,17 +4,17 @@
     "name": "Тверской район"
   },
   "buildings": 3254,
-  "homes": 1380,
+  "homes": 1460,
   "poi": 253,
   "redzones": 630,
   "geojson_bytes": {
-    "buildings": 2861083,
+    "buildings": 2923828,
     "poi": 39333,
     "redzones": 182726,
     "district": 16791
   },
-  "index_rows": 1380,
-  "index_bytes": 152003,
+  "index_rows": 1460,
+  "index_bytes": 160118,
   "tiles": null,
-  "seconds": 67.4
+  "seconds": 0.5
 }

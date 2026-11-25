@@ -4,17 +4,17 @@
     "name": "район Богородское"
   },
   "buildings": 1213,
-  "homes": 618,
+  "homes": 631,
   "poi": 123,
   "redzones": 121,
   "geojson_bytes": {
-    "buildings": 989036,
+    "buildings": 998998,
     "poi": 18998,
     "redzones": 41824,
     "district": 6625
   },
-  "index_rows": 618,
-  "index_bytes": 67540,
+  "index_rows": 631,
+  "index_bytes": 68696,
   "tiles": null,
-  "seconds": 4.8
+  "seconds": 0.2
 }

@@ -4,17 +4,17 @@
     "name": "район Южное Тушино"
   },
   "buildings": 1419,
-  "homes": 488,
+  "homes": 490,
   "poi": 95,
   "redzones": 253,
   "geojson_bytes": {
-    "buildings": 959621,
+    "buildings": 961136,
     "poi": 14589,
     "redzones": 64317,
     "district": 5626
   },
-  "index_rows": 488,
-  "index_bytes": 51550,
+  "index_rows": 490,
+  "index_bytes": 51785,
   "tiles": null,
-  "seconds": 4.4
+  "seconds": 0.1
 }

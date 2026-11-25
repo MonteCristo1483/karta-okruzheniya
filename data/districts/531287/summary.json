@@ -4,17 +4,17 @@
     "name": "район Братеево"
   },
   "buildings": 471,
-  "homes": 155,
+  "homes": 164,
   "poi": 74,
   "redzones": 114,
   "geojson_bytes": {
-    "buildings": 328792,
+    "buildings": 335681,
     "poi": 11583,
     "redzones": 24564,
     "district": 5194
   },
-  "index_rows": 155,
-  "index_bytes": 17196,
+  "index_rows": 164,
+  "index_bytes": 18013,
   "tiles": null,
-  "seconds": 4.1
+  "seconds": 0.1
 }

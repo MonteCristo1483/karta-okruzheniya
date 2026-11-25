@@ -4,17 +4,17 @@
     "name": "район Чертаново Центральное"
   },
   "buildings": 787,
-  "homes": 308,
+  "homes": 311,
   "poi": 86,
   "redzones": 118,
   "geojson_bytes": {
-    "buildings": 551214,
+    "buildings": 553444,
     "poi": 13464,
     "redzones": 35110,
     "district": 5201
   },
-  "index_rows": 308,
-  "index_bytes": 34414,
+  "index_rows": 311,
+  "index_bytes": 34614,
   "tiles": null,
-  "seconds": 4.3
+  "seconds": 0.1
 }

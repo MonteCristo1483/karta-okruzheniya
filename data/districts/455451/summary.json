@@ -4,17 +4,17 @@
     "name": "район Печатники"
   },
   "buildings": 2361,
-  "homes": 1041,
+  "homes": 1057,
   "poi": 126,
   "redzones": 515,
   "geojson_bytes": {
-    "buildings": 1701044,
+    "buildings": 1713454,
     "poi": 19569,
     "redzones": 177216,
     "district": 5123
   },
-  "index_rows": 1041,
-  "index_bytes": 115311,
+  "index_rows": 1057,
+  "index_bytes": 116834,
   "tiles": null,
-  "seconds": 5.5
+  "seconds": 0.2
 }

@@ -4,17 +4,17 @@
     "name": "Можайский район"
   },
   "buildings": 2072,
-  "homes": 1034,
+  "homes": 1088,
   "poi": 137,
   "redzones": 385,
   "geojson_bytes": {
-    "buildings": 1608415,
+    "buildings": 1649071,
     "poi": 21003,
     "redzones": 120655,
     "district": 13966
   },
-  "index_rows": 1034,
-  "index_bytes": 107551,
+  "index_rows": 1088,
+  "index_bytes": 111519,
   "tiles": null,
-  "seconds": 5.3
+  "seconds": 0.2
 }

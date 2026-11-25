@@ -4,17 +4,17 @@
     "name": "Академический район"
   },
   "buildings": 1123,
-  "homes": 660,
+  "homes": 664,
   "poi": 149,
   "redzones": 218,
   "geojson_bytes": {
-    "buildings": 984229,
+    "buildings": 987260,
     "poi": 22933,
     "redzones": 59383,
     "district": 3045
   },
-  "index_rows": 660,
-  "index_bytes": 72592,
+  "index_rows": 664,
+  "index_bytes": 72932,
   "tiles": null,
-  "seconds": 5.1
+  "seconds": 0.2
 }

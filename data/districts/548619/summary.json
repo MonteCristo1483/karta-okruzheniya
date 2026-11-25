@@ -4,17 +4,17 @@
     "name": "район Выхино-Жулебино"
   },
   "buildings": 1870,
-  "homes": 812,
+  "homes": 912,
   "poi": 216,
   "redzones": 278,
   "geojson_bytes": {
-    "buildings": 1466812,
+    "buildings": 1543572,
     "poi": 33400,
     "redzones": 71114,
     "district": 7975
   },
-  "index_rows": 812,
-  "index_bytes": 89410,
+  "index_rows": 912,
+  "index_bytes": 98437,
   "tiles": null,
-  "seconds": 5.3
+  "seconds": 0.2
 }

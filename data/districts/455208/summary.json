@@ -4,17 +4,17 @@
     "name": "район Капотня"
   },
   "buildings": 854,
-  "homes": 76,
+  "homes": 202,
   "poi": 32,
   "redzones": 134,
   "geojson_bytes": {
-    "buildings": 379300,
+    "buildings": 478126,
     "poi": 4959,
     "redzones": 38197,
     "district": 3309
   },
-  "index_rows": 76,
-  "index_bytes": 8324,
+  "index_rows": 202,
+  "index_bytes": 21529,
   "tiles": null,
-  "seconds": 3.8
+  "seconds": 0.1
 }

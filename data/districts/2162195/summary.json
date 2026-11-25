@@ -4,17 +4,17 @@
     "name": "Басманный район"
   },
   "buildings": 3841,
-  "homes": 1909,
+  "homes": 1922,
   "poi": 217,
   "redzones": 417,
   "geojson_bytes": {
-    "buildings": 3310561,
+    "buildings": 3320518,
     "poi": 33305,
     "redzones": 131055,
     "district": 13511
   },
-  "index_rows": 1909,
-  "index_bytes": 216515,
+  "index_rows": 1922,
+  "index_bytes": 217705,
   "tiles": null,
-  "seconds": 8.1
+  "seconds": 0.4
 }

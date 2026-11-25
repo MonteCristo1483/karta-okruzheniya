@@ -4,17 +4,17 @@
     "name": "район Северное Измайлово"
   },
   "buildings": 707,
-  "homes": 403,
+  "homes": 404,
   "poi": 109,
   "redzones": 154,
   "geojson_bytes": {
-    "buildings": 589522,
+    "buildings": 590302,
     "poi": 16843,
     "redzones": 37775,
     "district": 3566
   },
-  "index_rows": 403,
-  "index_bytes": 42883,
+  "index_rows": 404,
+  "index_bytes": 42959,
   "tiles": null,
-  "seconds": 4.6
+  "seconds": 0.2
 }

@@ -4,17 +4,17 @@
     "name": "район Котловка"
   },
   "buildings": 588,
-  "homes": 331,
+  "homes": 334,
   "poi": 56,
   "redzones": 105,
   "geojson_bytes": {
-    "buildings": 486066,
+    "buildings": 488371,
     "poi": 8673,
     "redzones": 29629,
     "district": 5301
   },
-  "index_rows": 331,
-  "index_bytes": 36492,
+  "index_rows": 334,
+  "index_bytes": 36749,
   "tiles": null,
-  "seconds": 4.5
+  "seconds": 0.1
 }

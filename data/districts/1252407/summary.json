@@ -4,17 +4,17 @@
     "name": "район Марьина Роща"
   },
   "buildings": 1192,
-  "homes": 446,
+  "homes": 451,
   "poi": 100,
   "redzones": 336,
   "geojson_bytes": {
-    "buildings": 867858,
+    "buildings": 871703,
     "poi": 15357,
     "redzones": 125208,
     "district": 7103
   },
-  "index_rows": 446,
-  "index_bytes": 48072,
+  "index_rows": 451,
+  "index_bytes": 48506,
   "tiles": null,
-  "seconds": 4.6
+  "seconds": 0.2
 }

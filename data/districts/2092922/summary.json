@@ -4,17 +4,17 @@
     "name": "район Вороново"
   },
   "buildings": 14894,
-  "homes": 1124,
+  "homes": 4926,
   "poi": 56,
   "redzones": 247,
   "geojson_bytes": {
-    "buildings": 5673413,
+    "buildings": 8595405,
     "poi": 8599,
     "redzones": 82097,
     "district": 20604
   },
-  "index_rows": 1124,
-  "index_bytes": 116121,
+  "index_rows": 4926,
+  "index_bytes": 465867,
   "tiles": null,
-  "seconds": 6.3
+  "seconds": 1.0
 }

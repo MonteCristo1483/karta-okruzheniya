@@ -4,17 +4,17 @@
     "name": "Алтуфьевский район"
   },
   "buildings": 587,
-  "homes": 200,
+  "homes": 202,
   "poi": 35,
   "redzones": 133,
   "geojson_bytes": {
-    "buildings": 384425,
+    "buildings": 385916,
     "poi": 5450,
     "redzones": 40872,
     "district": 2043
   },
-  "index_rows": 200,
-  "index_bytes": 20491,
+  "index_rows": 202,
+  "index_bytes": 20997,
   "tiles": null,
-  "seconds": 3.9
+  "seconds": 0.0
 }

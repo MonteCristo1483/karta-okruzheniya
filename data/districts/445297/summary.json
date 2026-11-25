@@ -4,17 +4,17 @@
     "name": "Головинский район"
   },
   "buildings": 1632,
-  "homes": 730,
+  "homes": 736,
   "poi": 104,
   "redzones": 284,
   "geojson_bytes": {
-    "buildings": 1204714,
+    "buildings": 1209218,
     "poi": 15940,
     "redzones": 97268,
     "district": 5773
   },
-  "index_rows": 730,
-  "index_bytes": 79121,
+  "index_rows": 736,
+  "index_bytes": 79573,
   "tiles": null,
-  "seconds": 5.2
+  "seconds": 0.2
 }

@@ -4,17 +4,17 @@
     "name": "Пресненский район"
   },
   "buildings": 3306,
-  "homes": 1700,
+  "homes": 1728,
   "poi": 243,
   "redzones": 914,
   "geojson_bytes": {
-    "buildings": 2907947,
+    "buildings": 2929603,
     "poi": 38599,
     "redzones": 259631,
     "district": 11019
   },
-  "index_rows": 1700,
-  "index_bytes": 193798,
+  "index_rows": 1728,
+  "index_bytes": 196074,
   "tiles": null,
-  "seconds": 22.4
+  "seconds": 0.5
 }

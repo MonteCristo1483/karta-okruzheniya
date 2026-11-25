@@ -4,17 +4,17 @@
     "name": "Нижегородский район"
   },
   "buildings": 1595,
-  "homes": 837,
+  "homes": 846,
   "poi": 93,
   "redzones": 448,
   "geojson_bytes": {
-    "buildings": 1293421,
+    "buildings": 1300220,
     "poi": 14584,
     "redzones": 157344,
     "district": 5349
   },
-  "index_rows": 837,
-  "index_bytes": 92680,
+  "index_rows": 846,
+  "index_bytes": 93422,
   "tiles": null,
-  "seconds": 5.1
+  "seconds": 0.3
 }

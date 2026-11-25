@@ -4,17 +4,17 @@
     "name": "район Царицыно"
   },
   "buildings": 1292,
-  "homes": 509,
+  "homes": 515,
   "poi": 119,
   "redzones": 364,
   "geojson_bytes": {
-    "buildings": 893092,
+    "buildings": 897753,
     "poi": 18460,
     "redzones": 92800,
     "district": 5180
   },
-  "index_rows": 509,
-  "index_bytes": 53789,
+  "index_rows": 515,
+  "index_bytes": 54367,
   "tiles": null,
-  "seconds": 4.9
+  "seconds": 0.2
 }

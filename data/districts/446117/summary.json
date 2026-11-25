@@ -4,17 +4,17 @@
     "name": "район Ново-Переделкино"
   },
   "buildings": 1190,
-  "homes": 573,
+  "homes": 648,
   "poi": 98,
   "redzones": 132,
   "geojson_bytes": {
-    "buildings": 887787,
+    "buildings": 946459,
     "poi": 15258,
     "redzones": 39222,
     "district": 8267
   },
-  "index_rows": 573,
-  "index_bytes": 61469,
+  "index_rows": 648,
+  "index_bytes": 68861,
   "tiles": null,
-  "seconds": 4.4
+  "seconds": 0.1
 }

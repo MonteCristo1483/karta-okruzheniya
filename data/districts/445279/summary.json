@@ -4,17 +4,17 @@
     "name": "район Северное Тушино"
   },
   "buildings": 1011,
-  "homes": 407,
+  "homes": 419,
   "poi": 134,
   "redzones": 247,
   "geojson_bytes": {
-    "buildings": 779163,
+    "buildings": 788279,
     "poi": 20586,
     "redzones": 59564,
     "district": 4204
   },
-  "index_rows": 407,
-  "index_bytes": 44348,
+  "index_rows": 419,
+  "index_bytes": 45293,
   "tiles": null,
-  "seconds": 4.6
+  "seconds": 0.1
 }

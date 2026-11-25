@@ -4,17 +4,17 @@
     "name": "район Чертаново Северное"
   },
   "buildings": 592,
-  "homes": 207,
+  "homes": 256,
   "poi": 96,
   "redzones": 121,
   "geojson_bytes": {
-    "buildings": 414637,
+    "buildings": 453848,
     "poi": 14945,
     "redzones": 34809,
     "district": 3813
   },
-  "index_rows": 207,
-  "index_bytes": 22029,
+  "index_rows": 256,
+  "index_bytes": 28337,
   "tiles": null,
-  "seconds": 4.1
+  "seconds": 0.1
 }

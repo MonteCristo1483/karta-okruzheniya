@@ -4,17 +4,17 @@
     "name": "Гагаринский район"
   },
   "buildings": 657,
-  "homes": 332,
+  "homes": 338,
   "poi": 121,
   "redzones": 248,
   "geojson_bytes": {
-    "buildings": 573707,
+    "buildings": 578332,
     "poi": 19082,
     "redzones": 54533,
     "district": 2756
   },
-  "index_rows": 332,
-  "index_bytes": 35259,
+  "index_rows": 338,
+  "index_bytes": 35730,
   "tiles": null,
-  "seconds": 4.7
+  "seconds": 0.1
 }

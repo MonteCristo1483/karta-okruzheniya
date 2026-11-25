@@ -4,17 +4,17 @@
     "name": "район Щербинка"
   },
   "buildings": 15621,
-  "homes": 2525,
+  "homes": 12760,
   "poi": 131,
   "redzones": 541,
   "geojson_bytes": {
-    "buildings": 7103330,
+    "buildings": 14957678,
     "poi": 20247,
     "redzones": 193582,
     "district": 32990
   },
-  "index_rows": 2525,
-  "index_bytes": 259080,
+  "index_rows": 12760,
+  "index_bytes": 1095545,
   "tiles": null,
-  "seconds": 9.4
+  "seconds": 1.5
 }

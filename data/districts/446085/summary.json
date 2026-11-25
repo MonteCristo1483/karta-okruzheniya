@@ -4,17 +4,17 @@
     "name": "район Бибирево"
   },
   "buildings": 924,
-  "homes": 352,
+  "homes": 353,
   "poi": 149,
   "redzones": 160,
   "geojson_bytes": {
-    "buildings": 629416,
+    "buildings": 630162,
     "poi": 22953,
     "redzones": 36972,
     "district": 4390
   },
-  "index_rows": 352,
-  "index_bytes": 35799,
+  "index_rows": 353,
+  "index_bytes": 35866,
   "tiles": null,
-  "seconds": 4.5
+  "seconds": 0.1
 }

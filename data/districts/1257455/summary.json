@@ -4,17 +4,17 @@
     "name": "район Северное Бутово"
   },
   "buildings": 561,
-  "homes": 325,
+  "homes": 327,
   "poi": 94,
   "redzones": 101,
   "geojson_bytes": {
-    "buildings": 508672,
+    "buildings": 510225,
     "poi": 14629,
     "redzones": 34989,
     "district": 10103
   },
-  "index_rows": 325,
-  "index_bytes": 34562,
+  "index_rows": 327,
+  "index_bytes": 34742,
   "tiles": null,
-  "seconds": 4.4
+  "seconds": 0.1
 }

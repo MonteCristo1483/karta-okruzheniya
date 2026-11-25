@@ -4,17 +4,17 @@
     "name": "район Перово"
   },
   "buildings": 2005,
-  "homes": 1317,
+  "homes": 1318,
   "poi": 161,
   "redzones": 583,
   "geojson_bytes": {
-    "buildings": 1816253,
+    "buildings": 1817023,
     "poi": 24747,
     "redzones": 177452,
     "district": 5192
   },
-  "index_rows": 1317,
-  "index_bytes": 141831,
+  "index_rows": 1318,
+  "index_bytes": 141921,
   "tiles": null,
-  "seconds": 5.9
+  "seconds": 0.3
 }

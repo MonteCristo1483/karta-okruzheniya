@@ -4,17 +4,17 @@
     "name": "район Тропарёво-Никулино"
   },
   "buildings": 887,
-  "homes": 378,
+  "homes": 385,
   "poi": 129,
   "redzones": 164,
   "geojson_bytes": {
-    "buildings": 738197,
+    "buildings": 743554,
     "poi": 20028,
     "redzones": 45969,
     "district": 5082
   },
-  "index_rows": 378,
-  "index_bytes": 44986,
+  "index_rows": 385,
+  "index_bytes": 45651,
   "tiles": null,
-  "seconds": 5.2
+  "seconds": 0.1
 }

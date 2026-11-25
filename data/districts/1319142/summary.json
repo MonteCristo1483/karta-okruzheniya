@@ -4,17 +4,17 @@
     "name": "район Гольяново"
   },
   "buildings": 1418,
-  "homes": 538,
+  "homes": 539,
   "poi": 174,
   "redzones": 294,
   "geojson_bytes": {
-    "buildings": 993656,
+    "buildings": 994367,
     "poi": 26642,
     "redzones": 83521,
     "district": 4193
   },
-  "index_rows": 538,
-  "index_bytes": 56284,
+  "index_rows": 539,
+  "index_bytes": 56356,
   "tiles": null,
-  "seconds": 4.7
+  "seconds": 0.2
 }

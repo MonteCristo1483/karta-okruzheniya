@@ -4,17 +4,17 @@
     "name": "район Лианозово"
   },
   "buildings": 1194,
-  "homes": 531,
+  "homes": 613,
   "poi": 86,
   "redzones": 135,
   "geojson_bytes": {
-    "buildings": 858651,
+    "buildings": 922148,
     "poi": 13416,
     "redzones": 37508,
     "district": 1822
   },
-  "index_rows": 531,
-  "index_bytes": 55207,
+  "index_rows": 613,
+  "index_bytes": 62728,
   "tiles": null,
-  "seconds": 4.3
+  "seconds": 0.2
 }

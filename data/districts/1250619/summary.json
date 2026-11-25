@@ -4,17 +4,17 @@
     "name": "Останкинский район"
   },
   "buildings": 1689,
-  "homes": 648,
+  "homes": 654,
   "poi": 105,
   "redzones": 395,
   "geojson_bytes": {
-    "buildings": 1350385,
+    "buildings": 1354877,
     "poi": 16181,
     "redzones": 112612,
     "district": 9072
   },
-  "index_rows": 648,
-  "index_bytes": 68914,
+  "index_rows": 654,
+  "index_bytes": 69378,
   "tiles": null,
-  "seconds": 5.2
+  "seconds": 0.2
 }

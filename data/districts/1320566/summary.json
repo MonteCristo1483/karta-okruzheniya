@@ -4,17 +4,17 @@
     "name": "район Матушкино"
   },
   "buildings": 570,
-  "homes": 124,
+  "homes": 296,
   "poi": 59,
   "redzones": 148,
   "geojson_bytes": {
-    "buildings": 327661,
+    "buildings": 455901,
     "poi": 9015,
     "redzones": 34914,
     "district": 5986
   },
-  "index_rows": 124,
-  "index_bytes": 14131,
+  "index_rows": 296,
+  "index_bytes": 27297,
   "tiles": null,
-  "seconds": 3.8
+  "seconds": 0.1
 }

@@ -4,17 +4,17 @@
     "name": "район Марьино"
   },
   "buildings": 1424,
-  "homes": 557,
+  "homes": 567,
   "poi": 246,
   "redzones": 283,
   "geojson_bytes": {
-    "buildings": 1114123,
+    "buildings": 1121867,
     "poi": 38072,
     "redzones": 87115,
     "district": 4864
   },
-  "index_rows": 557,
-  "index_bytes": 59529,
+  "index_rows": 567,
+  "index_bytes": 60492,
   "tiles": null,
-  "seconds": 4.8
+  "seconds": 0.1
 }

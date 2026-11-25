@@ -4,17 +4,17 @@
     "name": "район Западное Дегунино"
   },
   "buildings": 1121,
-  "homes": 473,
+  "homes": 483,
   "poi": 94,
   "redzones": 344,
   "geojson_bytes": {
-    "buildings": 824615,
+    "buildings": 832175,
     "poi": 14560,
     "redzones": 115577,
     "district": 6163
   },
-  "index_rows": 473,
-  "index_bytes": 50611,
+  "index_rows": 483,
+  "index_bytes": 51667,
   "tiles": null,
-  "seconds": 4.4
+  "seconds": 0.1
 }

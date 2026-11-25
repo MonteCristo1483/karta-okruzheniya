@@ -4,17 +4,17 @@
     "name": "район Бекасово"
   },
   "buildings": 10716,
-  "homes": 2068,
+  "homes": 7901,
   "poi": 63,
   "redzones": 524,
   "geojson_bytes": {
-    "buildings": 5098080,
+    "buildings": 9505721,
     "poi": 9743,
     "redzones": 154261,
     "district": 10928
   },
-  "index_rows": 2068,
-  "index_bytes": 212476,
+  "index_rows": 7901,
+  "index_bytes": 700168,
   "tiles": null,
-  "seconds": 6.4
+  "seconds": 1.3
 }
