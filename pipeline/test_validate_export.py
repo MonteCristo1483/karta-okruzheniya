@@ -420,6 +420,30 @@ class TestDistrictExport(unittest.TestCase):
         report = validate_export(self.data, CONFIG_PATH, "new")
         self.assertIn("bad_city_pmtiles", {issue.code for issue in report.critical()})
 
+    def test_new_format_warns_when_overlays_missing(self):
+        # В старых фикстурах overlays.pmtiles нет: это warning, не critical.
+        report = validate_export(self.data, CONFIG_PATH, "new")
+        self.assertIn("missing_overlays_pmtiles",
+                      {issue.code for issue in report.warnings()})
+        self.assertEqual(report.critical(), [])
+
+    def test_new_format_accepts_valid_overlays(self):
+        (self.data / "overlays.pmtiles").write_bytes(b"PMTiles\x03overlays")
+        report = validate_export(self.data, CONFIG_PATH, "new")
+        self.assertNotIn("missing_overlays_pmtiles",
+                         {issue.code for issue in report.issues})
+        self.assertEqual(report.critical(), [])
+
+    def test_new_format_rejects_empty_or_broken_overlays(self):
+        (self.data / "overlays.pmtiles").write_bytes(b"")
+        report = validate_export(self.data, CONFIG_PATH, "new")
+        self.assertIn("empty_overlays_pmtiles",
+                      {issue.code for issue in report.critical()})
+        (self.data / "overlays.pmtiles").write_bytes(b"not pmtiles")
+        report = validate_export(self.data, CONFIG_PATH, "new")
+        self.assertIn("bad_overlays_pmtiles",
+                      {issue.code for issue in report.critical()})
+
     def test_explicit_new_format_requires_manifest(self):
         report = validate_export(Path(self.tmp.name) / "missing", CONFIG_PATH, "new")
         self.assertIn("missing_manifest", {issue.code for issue in report.critical()})

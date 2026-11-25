@@ -16,8 +16,8 @@ CLI:
   routes     — пешие маршруты только жилым (routes_valhalla.py --district);
   iso        — изохроны 5/10/15 только жилым (isochrones_valhalla.py);
   pack       — шарды 16+16, data/index.json.gz, data/districts/manifest.json;
-  tiles      — ОДИН городской data/city/buildings.pmtiles и
-               data/city/basemap.pmtiles (не 132 файла).
+  tiles      — ОДИН городской data/buildings.pmtiles, data/basemap.pmtiles
+               и data/overlays.pmtiles (redzones + poi + trees; не 132 файла).
 
 Резюмируемость: готовый район/файл не пересчитывается. export пропускает
 район с summary.json, pack — район с полными шардами, tiles — готовые
@@ -64,6 +64,8 @@ ISO_SHARD_BYTES = 275  # gzip на дом: 0,96 МБ / 3 585 домов
 INDEX_BYTES_PER_HOME = 15  # 51 КБ на 3 585 домов
 BUILDINGS_TILE_BYTES = 990  # Пресня: 3,2 МБ / 3 306 зданий (с breakdown)
 BASEMAP_BYTES_PER_ROAD_KM = 795 * 1024 / 57  # Пресня: 795 КБ / 57 км улиц
+OVERLAYS_TILE_BYTES = 22 * 1024 * 1024  # замер 25.11: redzones 37 925 + poi 14 980
+                                        # + trees 646 633 → 21,2 МиБ (z8–16)
 EXPORT_SEC_PER_BUILDING = 0.012  # 2b: 6,8–20,7 мс/здание (Пресня 22 с, Тверской 67 с)
 PACK_SEC_PER_HOME = 0.002
 TILES_SECONDS = 15 * 60
@@ -234,7 +236,8 @@ def print_plan(
         print(
             f"  tiles: 1 buildings.pmtiles ~{human(buildings_tiles)} "
             f"(верхняя оценка: {buildings:,} × 990 Б) + 1 basemap.pmtiles "
-            f"~{human(basemap_tiles)} ({roads_km:.0f} км улиц)"
+            f"~{human(basemap_tiles)} ({roads_km:.0f} км улиц) + 1 overlays.pmtiles "
+            f"~{human(OVERLAYS_TILE_BYTES)} (redzones + poi + trees)"
         )
     total_seconds = 0.0
     if "boundaries" in stages:
@@ -257,7 +260,7 @@ def print_plan(
     if "pack" in stages:
         disk += index_bytes
     if "tiles" in stages:
-        disk += buildings_tiles + basemap_tiles
+        disk += buildings_tiles + basemap_tiles + OVERLAYS_TILE_BYTES
     print(f"  всего: ~{hours(total_seconds)} CPU/сети, ~{human(disk)} на диске")
     top = rows[:5]
     bottom = rows[-5:][::-1] if len(rows) > 5 else rows[::-1]
@@ -392,16 +395,19 @@ def stage_pack(rows: list[dict], force: bool) -> list[dict]:
 
 
 def stage_tiles(force: bool) -> list[dict]:
-    """Один городской buildings.pmtiles и один basemap.pmtiles."""
+    """Один городской buildings.pmtiles, basemap.pmtiles и overlays.pmtiles."""
     import build_basemap
+    import build_overlays
     import build_tiles
 
     errors: list[dict] = []
     CITY_DIR.mkdir(parents=True, exist_ok=True)
     # Городские тайлы лежат в корне data/ (data/buildings.pmtiles,
-    # data/basemap.pmtiles) — так их ждут validate_export и Deploy.
+    # data/basemap.pmtiles, data/overlays.pmtiles) — так их ждут
+    # validate_export и Deploy.
     buildings_out = ROOT / "data" / "buildings.pmtiles"
     basemap_out = ROOT / "data" / "basemap.pmtiles"
+    overlays_out = ROOT / "data" / "overlays.pmtiles"
 
     if not buildings_out.exists() or force:
         features: dict[int, dict] = {}
@@ -472,6 +478,20 @@ def stage_tiles(force: bool) -> list[dict]:
               f"{len(ways.features):,} объектов")
     else:
         print("  basemap.pmtiles: готов, пропуск")
+
+    if not overlays_out.exists() or force:
+        try:
+            summary = build_overlays.build(overlays_out)
+            features = summary["features"]
+            print(
+                f"  overlays.pmtiles: {human(summary['bytes'])}, "
+                f"{summary['tiles']:,} тайлов, redzones {features['redzones']:,} + "
+                f"poi {features['poi']:,} + trees {features['trees']:,}"
+            )
+        except Exception as exc:  # нет БД/подложки/докера — фиксируем отказ
+            errors.append({"stage": "tiles", "error": f"overlays: {exc}"})
+    else:
+        print("  overlays.pmtiles: готов, пропуск")
     return errors
 
 

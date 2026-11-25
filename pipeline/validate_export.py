@@ -11,6 +11,7 @@
   * бонусы не больше максимума категории, штрафы не больше модуля максимума;
   * адрес не «16» без улицы, год не 0/1700/2050;
   * геометрия в границах Москвы;
+  * городские PMTiles (buildings, basemap, overlays) — непустые, v3 header;
   * нет дублей POI, типы POI известны конфигу;
   * типы красных зон и классов дорог есть в конфиге;
   * в маршрутах нет отрицательных минут/метров.
@@ -629,6 +630,20 @@ def validate_district_export(data_dir: Path, cfg: dict, report: Report) -> Repor
             header = fh.read(8)
         if header[:7] != b"PMTiles" or len(header) < 8 or header[7] != 3:
             report.add("critical", "bad_city_pmtiles", f"data/{city_file}: неверный PMTiles v3 header")
+
+    # overlays.pmtiles появился позже остальных городских тайлов: пока его нет
+    # (например, в старых фикстурах) — предупреждение, а не критичная ошибка.
+    overlays = data_dir / "overlays.pmtiles"
+    if not overlays.is_file():
+        report.add("warning", "missing_overlays_pmtiles", "нет data/overlays.pmtiles")
+    elif overlays.stat().st_size == 0:
+        report.add("critical", "empty_overlays_pmtiles", "data/overlays.pmtiles пустой")
+    else:
+        with overlays.open("rb") as fh:
+            header = fh.read(8)
+        if header[:7] != b"PMTiles" or len(header) < 8 or header[7] != 3:
+            report.add("critical", "bad_overlays_pmtiles",
+                       "data/overlays.pmtiles: неверный PMTiles v3 header")
 
     for path in sample_hashes:
         expected = None
