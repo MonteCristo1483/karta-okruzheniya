@@ -12,9 +12,9 @@
                Москвы (+0.02°), линии берём целиком — без дублей и обрывов на
                границах; промзоны и стройки — полигоны `zones` с z13;
                LOD: motorway/motorway_link/trunk/trunk_link/primary/
-               primary_link/railway — z8+, secondary/secondary_link/tertiary —
-               z12+ (tertiary — все, независимо от lanes: basemap рисует их как
-               major, иначе в красной магистрали остаются серые дыры);
+               primary_link/railway — z8+, secondary/secondary_link/tertiary/
+               tertiary_link — z12+ (tertiary — все, независимо от lanes: basemap
+               рисует их как major, иначе в красной магистрали остаются серые дыры);
     poi      — `poi` в рамках скоринга (магазины — только subtype из
                config/scoring.json, как в export_map_data.py);
     trees    — декоративные кроны внутри полигонов green (park/wood):
@@ -92,7 +92,7 @@ WHERE kind = 'road' AND class = 'secondary'
 # оставлял серые дыры посреди красных магистралей) — берём их из PBF одним
 # проходом, чтобы не менять `linear` (иначе поедут golden-тесты скоринга).
 PBF_MIN_ZOOM8 = ("motorway", "motorway_link", "trunk_link", "primary_link")
-PBF_MIN_ZOOM12 = ("secondary_link",)
+PBF_MIN_ZOOM12 = ("secondary_link", "tertiary_link")
 
 ZONES_QUERY = """
 SELECT DISTINCT kind, ST_AsGeoJSON(geometry)
