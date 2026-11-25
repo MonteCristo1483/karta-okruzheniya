@@ -7,13 +7,14 @@
 файле `data/overlays.pmtiles` (z8–14):
 
     redzones — линии магистралей и ж/д из `linear` (trunk/primary/secondary,
-               railway) + motorway, съезды развязок и активные многополосные
-               tertiary из PBF одним проходом; режем не по районам, а по рамке
+               railway) + motorway, съезды развязок и все tertiary из PBF одним
+               проходом; режем не по районам, а по рамке
                Москвы (+0.02°), линии берём целиком — без дублей и обрывов на
                границах; промзоны и стройки — полигоны `zones` с z13;
                LOD: motorway/motorway_link/trunk/trunk_link/primary/
                primary_link/railway — z8+, secondary/secondary_link/tertiary —
-               z12+ (tertiary: lanes >= 3 либо oneway=yes и lanes >= 2);
+               z12+ (tertiary — все, независимо от lanes: basemap рисует их как
+               major, иначе в красной магистрали остаются серые дыры);
     poi      — `poi` в рамках скоринга (магазины — только subtype из
                config/scoring.json, как в export_map_data.py);
     trees    — декоративные кроны внутри полигонов green (park/wood):
@@ -87,11 +88,11 @@ WHERE kind = 'road' AND class = 'secondary'
 
 # В PostGIS `linear` лежат только трёхклассовые магистрали из SPEC §3 (их
 # использует скоринг). Для отрисовки красных зон нужны ещё motorway, съезды
-# развязок и активные многополосные tertiary — берём их из PBF одним проходом,
-# чтобы не менять `linear` (иначе поедут golden-тесты скоринга).
+# развязок и все tertiary (basemap рисует tertiary как major; фильтр по lanes
+# оставлял серые дыры посреди красных магистралей) — берём их из PBF одним
+# проходом, чтобы не менять `linear` (иначе поедут golden-тесты скоринга).
 PBF_MIN_ZOOM8 = ("motorway", "motorway_link", "trunk_link", "primary_link")
 PBF_MIN_ZOOM12 = ("secondary_link",)
-ONEWAY_VALUES = {"yes", "1", "true"}
 
 ZONES_QUERY = """
 SELECT DISTINCT kind, ST_AsGeoJSON(geometry)
@@ -163,29 +164,8 @@ def collect_redzones(cur) -> list[dict]:
 
 
 # --------------------------------------------------------------------------- #
-# недостающие классы магистралей из PBF (motorway, съезды, активные tertiary)
+# недостающие классы магистралей из PBF (motorway, съезды, все tertiary)
 # --------------------------------------------------------------------------- #
-
-def parse_lanes(value: str | None) -> int | None:
-    """`lanes` из OSM: "3", "3;4", "2.5" → целое или None."""
-    if not value:
-        return None
-    first = value.split(";")[0].strip().replace(",", ".")
-    try:
-        return int(float(first))
-    except ValueError:
-        return None
-
-
-def is_active_tertiary(tags: dict[str, str]) -> bool:
-    """Активная многополосная дорога: lanes >= 3 либо односторонняя с lanes >= 2."""
-    lanes = parse_lanes(tags.get("lanes"))
-    if lanes is None:
-        return False
-    if lanes >= 3:
-        return True
-    return lanes >= 2 and (tags.get("oneway") or "").strip().lower() in ONEWAY_VALUES
-
 
 class MissingRoadsCollector(osmium.SimpleHandler):
     """Один проход по PBF: нужные highway внутри рамки Москвы (+запас)."""
@@ -205,8 +185,6 @@ class MissingRoadsCollector(osmium.SimpleHandler):
         elif highway in PBF_MIN_ZOOM12:
             minzoom = 12
         elif highway == "tertiary":
-            if not is_active_tertiary(w.tags):
-                return
             minzoom = 12
         else:
             return
@@ -543,7 +521,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="не копировать в web/public/data")
     parser.add_argument("--basemap", type=Path, default=BASEMAP)
     parser.add_argument("--pbf", type=Path, default=PBF_PATH,
-                        help="PBF для motorway/съездов/активных tertiary")
+                        help="PBF для motorway/съездов/всех tertiary")
     args = parser.parse_args(argv)
 
     summary = build(
