@@ -29,6 +29,14 @@ const INDEX_URL = "data/index.json.gz";
 // Протокол pmtiles регистрируем один раз за жизнь вкладки. Не на уровне
 // модуля: static export пререндерится в Node, где нет window и MapLibre.
 let pmtilesProtocolReady = false;
+let pmtilesProtocol: Protocol | null = null;
+
+// RAM-кэш готовых тайлов: MapLibre может попросить один и тот же тайл
+// повторно (overzoom, возврат в просмотренную область, смена темы), а
+// фоновый префетчер — заранее. Храним промисы, чтобы параллельные запросы
+// одного тайла не дублировали сеть. Порядок вставки в Map = порядок LRU.
+const MAX_RAM_TILES = 1800;
+const pmtilesRamCache = new globalThis.Map<string, Promise<ArrayBuffer>>();
 
 // Новый экспорт сжимает индекс, маршруты и изохроны как gzip-файлы,
 // а не HTTP Content-Encoding. Используем встроенный браузерный декодер.
@@ -43,6 +51,66 @@ async function fetchGzipJson<T>(url: string): Promise<T> {
     .stream()
     .pipeThrough(new DecompressionStream("gzip"));
   return (await new Response(stream).json()) as T;
+}
+
+function getPmtilesProtocol(): Protocol {
+  if (!pmtilesProtocol) pmtilesProtocol = new Protocol();
+  return pmtilesProtocol;
+}
+
+// Копия тайла в отдельный ArrayBuffer. pmtiles отдаёт Uint8Array поверх
+// буфера архива/декодера: такой буфер нельзя надолго оставлять в кэше и
+// нельзя отдавать в MapLibre напрямую — тот передаёт данные в Web Worker
+// через transfer и отсоединяет (detach) буфер.
+function cloneTileBytes(data: unknown): ArrayBuffer {
+  if (data instanceof Uint8Array) {
+    const copy = new Uint8Array(data.byteLength);
+    copy.set(data);
+    return copy.buffer;
+  }
+  if (data instanceof ArrayBuffer) {
+    const copy = new Uint8Array(data.byteLength);
+    copy.set(new Uint8Array(data));
+    return copy.buffer;
+  }
+  // Пустой тайл (нет данных на этих координатах) — валидный ответ протокола.
+  return new ArrayBuffer(0);
+}
+
+// Единственная точка загрузки тайла: RAM-кэш → Protocol.tile → RAM-кэш.
+// Возвращённый промис резолвится в «живой» (не отсоединённый) ArrayBuffer.
+function fetchPmtilesTile(tileUrl: string): Promise<ArrayBuffer> {
+  const cached = pmtilesRamCache.get(tileUrl);
+  if (cached) {
+    // LRU: освежаем позицию ключа, чтобы он не вылетел первым.
+    pmtilesRamCache.delete(tileUrl);
+    pmtilesRamCache.set(tileUrl, cached);
+    return cached;
+  }
+  const pending = getPmtilesProtocol()
+    .tile({ url: tileUrl, type: "arrayBuffer" } as never, new AbortController())
+    .then((res) => cloneTileBytes((res as { data?: unknown }).data));
+  pmtilesRamCache.set(tileUrl, pending);
+  while (pmtilesRamCache.size > MAX_RAM_TILES) {
+    const oldest = pmtilesRamCache.keys().next();
+    if (oldest.done) break;
+    pmtilesRamCache.delete(oldest.value);
+  }
+  // Сетевую ошибку не кэшируем: следующий запрос повторит загрузку.
+  pending.catch(() => {
+    if (pmtilesRamCache.get(tileUrl) === pending) pmtilesRamCache.delete(tileUrl);
+  });
+  return pending;
+}
+
+// Web Mercator (спецификация XYZ / slippy map): lon/lat → номер тайла.
+function lonLatToTileXY(lon: number, lat: number, zoom: number): [number, number] {
+  const n = 2 ** zoom;
+  const clampedLat = Math.max(-85.05112878, Math.min(85.05112878, lat));
+  const rad = (clampedLat * Math.PI) / 180;
+  const x = Math.floor(((lon + 180) / 360) * n);
+  const y = Math.floor(((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2) * n);
+  return [Math.min(n - 1, Math.max(0, x)), Math.min(n - 1, Math.max(0, y))];
 }
 
 type DistrictEntry = {
@@ -271,8 +339,9 @@ const BUILDING_MIN_ZOOM = 13;
 const BUILDING_GROW_MAX_ZOOM = 15;
 // Тени (3 плоских fill по всем домам) — плавно проявляются с z14.8 к z16.
 const BUILDING_SHADOW_MIN_ZOOM = 14.8;
-// Декоративные деревья — только с z15 (на z13–15 это лишние круги).
-const TREE_MIN_ZOOM = 15;
+// Декоративные деревья — с z14.5: тайлы overlays нарезаны до z14 (trees уже
+// внутри z14), дальше MapLibre надстраивает их overzoom'ом без сети.
+const TREE_MIN_ZOOM = 14.5;
 // Подписи улиц/воды/парков — с z12.6 (см. rebuildLabels). Ниже этого зума
 // декорации подложки не видны, значит их кандидатов можно не собирать:
 // именно сбор (querySourceFeatures по всей подложке) ронял обзор z10–11.
@@ -1669,9 +1738,10 @@ function basemapLayers(p: Palette): maplibregl.LayerSpecification[] {
       },
     },
     {
-      // Деревья — точки в park/wood из тайлов overlays.pmtiles (z15+).
+      // Деревья — точки в park/wood из тайлов overlays.pmtiles (z14+).
       // В плоскости карты (pitch-alignment/scale: map) и три ступени размера по зуму:
       // z < 14.6 / 14.6–16.2 / >= 16.2 — кроны уходят в перспективу и не режутся краем.
+      // z15+ — это overzoom тайла z14 (maxzoom источника), сетевых запросов нет.
       id: "bm-trees",
       type: "circle",
       source: OVERLAYS_SOURCE,
@@ -2580,6 +2650,9 @@ export default function Map() {
     let cancelled = false;
     let map: maplibregl.Map | null = null;
     let basemapDecorTimer: number | null = null;
+    let tilePrefetchTimer: number | null = null;
+    // Токен поколения префетча: новый прогон/движение камеры отменяет старый.
+    let tilePrefetchToken = 0;
 
     const init = async () => {
       const fetchJson = async (url: string): Promise<unknown> => {
@@ -2701,7 +2774,22 @@ export default function Map() {
 
       // Протокол PMTiles регистрируем один раз за жизнь вкладки.
       if (!pmtilesProtocolReady) {
-        maplibregl.addProtocol("pmtiles", new Protocol().tile);
+        maplibregl.addProtocol("pmtiles", async (params) => {
+          // TileJSON/метаданные источника (type: "json") — не тайл: в RAM-кэш
+          // их не кладём, отдаём как обычно (один запрос на источник).
+          if (params.type === "json" || params.type === "string") {
+            const res = await getPmtilesProtocol().tile(
+              { url: params.url, type: params.type } as never,
+              new AbortController(),
+            );
+            return { data: res.data as never };
+          }
+          const data = await fetchPmtilesTile(params.url);
+          // Копия обязательна: MapLibre передаёт буфер в Web Worker через
+          // transfer и отсоединяет его. В кэше должен остаться живой буфер,
+          // поэтому каждый запрос получает свою копию из RAM (~0.01 мс).
+          return { data: data.slice(0) };
+        });
         pmtilesProtocolReady = true;
       }
 
@@ -2904,14 +2992,19 @@ export default function Map() {
           sources: {
             basemap: {
               type: "vector",
+              // Тайлы нарезаны до z14 (-d14): с z14.1 MapLibre делает
+              // мгновенный overzoom уже загруженного тайла z14 и не шлёт
+              // запросы за z15–16 — подлёт к дому без «квадратов».
               url: `pmtiles://${new URL(BASEMAP_URL, window.location.href).href}`,
+              minzoom: 6,
+              maxzoom: 14,
             },
-            // Зоны, POI и деревья — единые тайлы z8–16 без разрезов по районам.
+            // Зоны, POI и деревья — единые тайлы z8–14 без разрезов по районам.
             overlays: {
               type: "vector",
               url: `pmtiles://${new URL(OVERLAYS_URL, window.location.href).href}`,
               minzoom: 8,
-              maxzoom: 16,
+              maxzoom: 14,
             },
             glow: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
             // Пилюли-подписи ближайших к выбранному дому POI.
@@ -2931,6 +3024,9 @@ export default function Map() {
               type: "vector",
               // addProtocol ждёт абсолютный URL, страница живёт в подпапке.
               url: `pmtiles://${new URL(BUILDINGS_URL, window.location.href).href}`,
+              minzoom: 9,
+              // Данные до z14: на z14.1–18 — overzoom тайла z14 из RAM.
+              maxzoom: 14,
             },
             routes: { type: "geojson", data: routesData },
             isochrone: {
@@ -3609,6 +3705,100 @@ export default function Map() {
       });
       map.on("idle", refreshBasemapDecorations);
       map.on("moveend", refreshBasemapDecorations);
+
+      // --- Фоновый префетчер соседних тайлов («чанки мира» в RAM) ---------
+      // Резкий рывок камеры на 3–10 км не должен ждать сеть: после остановки
+      // камеры тихо догружаем в RAM-кэш кольцо соседних тайлов текущего зума
+      // и родительские тайлы z-1/z-2. MapLibre об этой загрузке не знает,
+      // отрисовку она не блокирует и прерывается новым движением камеры.
+      const PREFETCH_SOURCES = [BASEMAP_URL, OVERLAYS_URL, BUILDINGS_URL] as const;
+      const PREFETCH_CONCURRENCY = 4;
+      // Кольцо вокруг экрана на текущем зуме: на z14 это ~12×12 км вокруг.
+      const PREFETCH_MARGIN = 2;
+      const PREFETCH_PARENT_MARGIN = 1;
+      // Предохранитель от безумных bounds (низкий зум/полюса).
+      const PREFETCH_MAX_SPAN = 32;
+      const pmtilesTileUrl = (base: string, z: number, x: number, y: number) =>
+        `pmtiles://${new URL(base, window.location.href).href}/${z}/${x}/${y}`;
+
+      const collectPrefetchUrls = (): string[] => {
+        if (!map) return [];
+        const bounds = map.getBounds();
+        const zoom = Math.min(14, Math.max(9, Math.floor(map.getZoom())));
+        const west = bounds.getWest();
+        const east = bounds.getEast();
+        const north = bounds.getNorth();
+        const south = bounds.getSouth();
+        const urls = new Set<string>();
+
+        const addRange = (
+          z: number,
+          x0: number,
+          x1: number,
+          y0: number,
+          y1: number,
+          margin: number,
+        ) => {
+          const n = 2 ** z;
+          const fromX = Math.max(0, x0 - margin);
+          const toX = Math.min(n - 1, x1 + margin);
+          const fromY = Math.max(0, y0 - margin);
+          const toY = Math.min(n - 1, y1 + margin);
+          if (toX - fromX >= PREFETCH_MAX_SPAN || toY - fromY >= PREFETCH_MAX_SPAN) return;
+          for (let x = fromX; x <= toX; x++) {
+            for (let y = fromY; y <= toY; y++) {
+              for (const base of PREFETCH_SOURCES) urls.add(pmtilesTileUrl(base, z, x, y));
+            }
+          }
+        };
+
+        // 1) Кольцо соседних тайлов вокруг экрана на текущем зуме.
+        const [x0] = lonLatToTileXY(west, south, zoom);
+        const [x1] = lonLatToTileXY(east, south, zoom);
+        const [, y0] = lonLatToTileXY(west, north, zoom);
+        const [, y1] = lonLatToTileXY(west, south, zoom);
+        addRange(zoom, x0, x1, y0, y1, PREFETCH_MARGIN);
+
+        // 2) Родительские тайлы: дешевле и нужны при отлёте камеры.
+        for (const pz of [Math.max(9, zoom - 1), Math.max(9, zoom - 2)]) {
+          if (pz >= zoom) continue;
+          const [px0] = lonLatToTileXY(west, south, pz);
+          const [px1] = lonLatToTileXY(east, south, pz);
+          const [, py0] = lonLatToTileXY(west, north, pz);
+          const [, py1] = lonLatToTileXY(west, south, pz);
+          addRange(pz, px0, px1, py0, py1, PREFETCH_PARENT_MARGIN);
+        }
+        return [...urls];
+      };
+
+      const runTilePrefetch = () => {
+        if (!map || map.isMoving()) return;
+        const token = ++tilePrefetchToken;
+        const queue = collectPrefetchUrls().filter((u) => !pmtilesRamCache.has(u));
+        if (!queue.length) return;
+        let cursor = 0;
+        const worker = async () => {
+          while (cursor < queue.length) {
+            // Движение камеры или новый прогон — тихо останавливаемся.
+            if (token !== tilePrefetchToken || !map || map.isMoving()) return;
+            const url = queue[cursor++];
+            if (pmtilesRamCache.has(url)) continue;
+            await fetchPmtilesTile(url).catch(() => undefined);
+          }
+        };
+        void Promise.all(Array.from({ length: PREFETCH_CONCURRENCY }, worker));
+      };
+
+      const scheduleTilePrefetch = () => {
+        if (!map) return;
+        if (tilePrefetchTimer !== null) window.clearTimeout(tilePrefetchTimer);
+        tilePrefetchTimer = window.setTimeout(() => {
+          tilePrefetchTimer = null;
+          runTilePrefetch();
+        }, 200);
+      };
+      map.on("idle", scheduleTilePrefetch);
+      map.on("moveend", scheduleTilePrefetch);
 
       // Источник изохроны: максимум одна фича (полигон выбранного времени).
       setIsoSourceRef.current = (geom) => {
@@ -5053,6 +5243,12 @@ export default function Map() {
         window.clearTimeout(basemapDecorTimer);
         basemapDecorTimer = null;
       }
+      if (tilePrefetchTimer !== null) {
+        window.clearTimeout(tilePrefetchTimer);
+        tilePrefetchTimer = null;
+      }
+      // Отменяем фоновые догрузки: они проверяют токен перед каждым тайлом.
+      tilePrefetchToken++;
       map?.remove();
       map = null;
     };

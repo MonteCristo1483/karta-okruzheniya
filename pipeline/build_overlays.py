@@ -4,7 +4,7 @@
 Зачем: раньше красные зоны, POI и деревья грузились по 132 районам, из-за
 чего Москва подгружалась кусками по границам районов, а на обзоре z9–11
 красные магистрали были выключены. Теперь три слоя лежат в одном модульном
-файле `data/overlays.pmtiles` (z8–16):
+файле `data/overlays.pmtiles` (z8–14):
 
     redzones — линии магистралей и ж/д из `linear` (trunk/primary/secondary,
                railway) + motorway, съезды развязок и активные многополосные
@@ -63,7 +63,7 @@ DOCKER_IMAGE = "karta-tippecanoe:2.79.0"
 # на границе они законно выходят за контур города.
 MOSCOW_MARGIN = 0.02
 GREEN_ZOOM = 14  # зелень из подложки: все park/wood, полигоны уже без швов районов
-TREE_MIN_ZOOM = 15
+TREE_MIN_ZOOM = 14
 TREE_LIMIT_PER_POLYGON = 220
 TREE_MIN_AREA_HA = 0.04
 TREE_DENSITY = {"wood": 78, "park": 70}
@@ -433,10 +433,10 @@ def run_tippecanoe(ndjson: Path, out: Path) -> None:
         DOCKER_IMAGE,
         "--force",
         "-o", f"/work/{rel_out}",
-        "-Z8", "-z16", "-d13", "-r1",
+        "-Z8", "-z14", "-d14", "-r1",
         "--drop-densest-as-needed",
         "-al", "-ap",
-        "--maximum-tile-bytes", "220000",
+        "--maximum-tile-bytes", "350000",
         "--no-tile-stats",
         f"/work/{rel_in}",
     ]

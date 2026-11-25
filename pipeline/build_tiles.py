@@ -45,13 +45,15 @@ LAYER = "buildings"
 TILE_ATTRS = ("id", "index", "height", "address", "year")
 
 # Tiles-B: единый feature-filter (tippecanoe применяет к слою только его).
-# breakdown пишем с z14 (attribute-LOD), дома ниже 9 м прореживаем только
-# на обзоре (z9-14): на z15-16 нужны все дома, иначе деградирует 16.6.
+# TILES-SEAMLESS: maxzoom теперь z14, поэтому breakdown пишем с z13, а дома
+# ниже 9 м прореживаем только на настоящем обзоре (z9-12): на z13-14 нужны
+# все 100% зданий, иначе при перелёте с z13 на z14 из пустоты выскакивают
+# мелкие дома и кварталы выглядят «плешивыми».
 TILE_FILTER = json.dumps({
     "*": [
         "all",
-        ["attribute-filter", "breakdown", [">=", "$zoom", 14]],
-        ["any", [">=", "$zoom", 15], [">=", "height", 9]],
+        ["attribute-filter", "breakdown", [">=", "$zoom", 13]],
+        ["any", [">=", "$zoom", 13], [">=", "height", 9]],
     ]
 }, separators=(",", ":"))
 
@@ -234,22 +236,24 @@ def run_tippecanoe(ndjson: Path, out: Path) -> None:
         DOCKER_IMAGE,
         "--force",
         "-o", f"/work/{rel_out}",
-        "-Z9", "-z16", "-d13",
+        "-Z9", "-z14", "-d14",
         # Tiles-B (бюджет z13-14). Один -j, потому что tippecanoe применяет
         # к слою только последний фильтр: несколько -j затирают друг друга.
         # Внутри "all" два условия:
-        # 1) attribute-LOD (LOD-A): breakdown ниже z14 не нужен — карточка
-        #    открывается на z16.6 и берёт разбивку из z16-тайла/шарда;
-        # 2) height-LOD для обзора: ниже z15 оставляем дома от 9 м, иначе
-        #    z13-14 не влезают в бюджет (замер: 275/346 КБ → 118/164 КБ).
-        #    z15-z16 не трогаем: там дома нужны все (кадр 16.6 без потерь).
+        # 1) attribute-LOD (LOD-A): breakdown ниже z13 не нужен — карточка
+        #    открывается на z16.6 и берёт разбивку из z14-тайла/шарда;
+        # 2) height-LOD для обзора: ниже z13 оставляем дома от 9 м, иначе
+        #    z9-12 не влезают в бюджет. z13-z14 не трогаем: там дома нужны
+        #    все (кадр 16.6 масштабируется из z14 без потерь).
         "-j", TILE_FILTER,
         # -an режет самые мелкие полигоны, -as (--drop-densest-as-needed)
         # добавляет прореживание по плотности; оба срабатывают только в
         # тайлах сверх лимита. -r1 обязателен: иначе фоновое прореживание
-        # по -r2.5 режет ~60% домов даже на z15-z16 (502 КБ → 6 КБ).
+        # по -r2.5 режет ~60% домов даже на z13-z14 (502 КБ → 6 КБ).
+        # TILES-SEAMLESS: лимит поднят 220000 → 450000, чтобы на z12-14
+        # --drop-densest-as-needed не выбивал дома в плотных кварталах центра.
         "--drop-smallest-as-needed", "--drop-densest-as-needed", "-r1",
-        "--maximum-tile-bytes", "220000",
+        "--maximum-tile-bytes", "450000",
         "--no-tile-stats",
         "-l", LAYER,
         "--use-attribute-for-id=id",
@@ -516,7 +520,7 @@ def main() -> int:
     pmtiles_bytes = pmtiles.read_bytes()
     index_bytes = INDEX.read_bytes()
     stats = pmtiles_stats(pmtiles)
-    z15 = stats["per_zoom"].get(15, {"count": 0, "bytes": 0, "max": 0})
+    zmax = stats["per_zoom"].get(stats["max_zoom"], {"count": 0, "bytes": 0, "max": 0})
 
     report = {
         "pmtiles": str(pmtiles.relative_to(ROOT)),
@@ -525,8 +529,8 @@ def main() -> int:
         "tiles": stats["tiles"],
         "tile_bytes": sum(v["bytes"] for v in stats["per_zoom"].values()),
         "tiles_per_zoom": stats["per_zoom"],
-        "z15_avg_bytes": z15["bytes"] // z15["count"] if z15["count"] else 0,
-        "z15_max_bytes": z15["max"],
+        "z14_avg_bytes": zmax["bytes"] // zmax["count"] if zmax["count"] else 0,
+        "z14_max_bytes": zmax["max"],
         "breakdown_in_tiles": not args.without_breakdown,
         "index": str(INDEX.relative_to(ROOT)),
         "index_rows": len(index_rows),
@@ -551,8 +555,8 @@ def main() -> int:
           f"({report['pmtiles_bytes']:,} B); gzip {gz_note}")
     print(f"  tiles      : {report['tiles']:,} "
           f"(z{stats['min_zoom']}-z{stats['max_zoom']}), payload {human_size(report['tile_bytes'])}")
-    print(f"  z15        : {z15['count']} tiles, avg {report['z15_avg_bytes']:,} B, "
-          f"max {report['z15_max_bytes']:,} B")
+    print(f"  z{stats['max_zoom']:<9}: {zmax['count']} tiles, avg {report['z14_avg_bytes']:,} B, "
+          f"max {report['z14_max_bytes']:,} B")
     print(f"index        : {report['index']} - {len(index_rows):,} rows, "
           f"{human_size(report['index_bytes'])}, gzip {human_size(report['index_gzip_bytes'])}")
     print(f"build time   : {report['build_seconds']} s (total {report['total_seconds']} s)")
