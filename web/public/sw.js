@@ -3,7 +3,7 @@
 // network-first: после деплоя пользователь сразу видит новую версию и
 // свежие данные, офлайн — из кэша. Хэшированные чанки —
 // stale-while-revalidate: открываются мгновенно и при сети, и из кэша.
-const CACHE_NAME = "karta-okruzheniya-v9";
+const CACHE_NAME = "karta-okruzheniya-v10";
 const BASE = "/karta-okruzheniya";
 
 // Стабильные файлы, кэшируемые при установке. JS/CSS-чанки hashed —

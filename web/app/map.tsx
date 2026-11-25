@@ -3589,7 +3589,7 @@ export default function Map() {
             c.kind === "water" ? p.labelWater : c.kind === "park" ? p.poiGreen : p.label;
           const halo = c.kind === "water" ? p.labelWaterHalo : p.labelHalo;
           const wrap = document.createElement("div");
-          wrap.style.cssText = "pointer-events:none;z-index:0;";
+          wrap.style.cssText = "pointer-events:none;z-index:0;transition:opacity 120ms linear;";
           const inner = document.createElement("div");
           inner.textContent = c.name;
           inner.style.cssText = [
@@ -3614,6 +3614,17 @@ export default function Map() {
       };
       map.on("moveend", rebuildLabels);
       map.on("resize", rebuildLabels);
+      // Угол подписи в экранных координатах зафиксирован на moveend, поэтому при
+      // вращении/наклоне (bearing/pitch меняют угол на экране) текст «выворачивается».
+      // На время жеста прячем подписи и пересобираем их на rotateend/pitchend.
+      // Панорамирование и зум угол не меняют — там подписи остаются видимыми.
+      const hideLabelsForGesture = () => {
+        for (const m of labelMarkers) m.getElement().style.opacity = "0";
+      };
+      map.on("rotatestart", hideLabelsForGesture);
+      map.on("pitchstart", hideLabelsForGesture);
+      map.on("rotateend", rebuildLabels);
+      map.on("pitchend", rebuildLabels);
       (window as unknown as { __rebuildLabels?: () => void }).__rebuildLabels = rebuildLabels;
 
       // Подложка приходит параллельно: как только она есть — подставляем
