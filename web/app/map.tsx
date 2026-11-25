@@ -3526,10 +3526,33 @@ export default function Map() {
       // Подписи улиц/воды: DOM-маркеры (без глиф-PBF). Пересобираем после
       // движения карты: за время анимации маркеры едут вместе с точкой.
       let labelMarkers: maplibregl.Marker[] = [];
+      // Угол подписи — экранный, он меняется на каждом кадре при bearing/pitch,
+      // поэтому храним отрезок и внутренний div и пересчитываем в "move".
+      const labelMeta: { inner: HTMLDivElement; a: [number, number]; b: [number, number] }[] =
+        [];
+      const screenAngle = (a: [number, number], b: [number, number]) => {
+        if (!map || (a[0] === b[0] && a[1] === b[1])) return 0;
+        const p1 = map.project(a);
+        const p2 = map.project(b);
+        let angle = (Math.atan2(p2.y - p1.y, p2.x - p1.x) * 180) / Math.PI;
+        if (angle > 90) angle -= 180;
+        if (angle < -90) angle += 180;
+        return angle;
+      };
+      const syncLabelAngles = () => {
+        if (!map) return;
+        for (const m of labelMeta) {
+          const angle = screenAngle(m.a, m.b);
+          m.inner.style.transform = `rotate(${angle.toFixed(1)}deg)`;
+          // Почти вертикальные подписи читаются хуже, чем отсутствие.
+          m.inner.style.visibility = Math.abs(angle) > 68 ? "hidden" : "";
+        }
+      };
       const rebuildLabels = () => {
         if (!map) return;
         labelMarkers.forEach((m) => m.remove());
         labelMarkers = [];
+        labelMeta.length = 0;
         const p = MAP_THEMES[themeRef.current];
         const zoom = map.getZoom();
         if (zoom < DECOR_MIN_ZOOM) return;
@@ -3557,16 +3580,8 @@ export default function Map() {
           ) {
             continue;
           }
-          let angle = 0;
-          if (c.a[0] !== c.b[0] || c.a[1] !== c.b[1]) {
-            const p1 = map.project(c.a as [number, number]);
-            const p2 = map.project(c.b as [number, number]);
-            angle = (Math.atan2(p2.y - p1.y, p2.x - p1.x) * 180) / Math.PI;
-            if (angle > 90) angle -= 180;
-            if (angle < -90) angle += 180;
-            // Почти вертикальные подписи читаются хуже, чем отсутствие.
-            if (Math.abs(angle) > 68) continue;
-          }
+          const angle = screenAngle(c.a as [number, number], c.b as [number, number]);
+          if (Math.abs(angle) > 68) continue;
           const rad = (angle * Math.PI) / 180;
           const boxW = Math.abs(bw * Math.cos(rad)) + Math.abs(bh * Math.sin(rad));
           const boxH = Math.abs(bw * Math.sin(rad)) + Math.abs(bh * Math.cos(rad));
@@ -3610,21 +3625,16 @@ export default function Map() {
               .setLngLat(mid)
               .addTo(map),
           );
+          labelMeta.push({ inner, a: c.a as [number, number], b: c.b as [number, number] });
         }
       };
       map.on("moveend", rebuildLabels);
       map.on("resize", rebuildLabels);
-      // Угол подписи в экранных координатах зафиксирован на moveend, поэтому при
-      // вращении/наклоне (bearing/pitch меняют угол на экране) текст «выворачивается».
-      // На время жеста прячем подписи и пересобираем их на rotateend/pitchend.
-      // Панорамирование и зум угол не меняют — там подписи остаются видимыми.
-      const hideLabelsForGesture = () => {
-        for (const m of labelMarkers) m.getElement().style.opacity = "0";
-      };
-      map.on("rotatestart", hideLabelsForGesture);
-      map.on("pitchstart", hideLabelsForGesture);
-      map.on("rotateend", rebuildLabels);
-      map.on("pitchend", rebuildLabels);
+      // Угол подписи экранный: bearing/pitch меняют его на каждом кадре, поэтому
+      // пересчитываем его в "move" (≤20 маркеров, ≤40 project за кадр).
+      // Скрывать на rotatestart бессмысленно: Marker#_updateOpacity на каждом
+      // "move" возвращает element.style.opacity к 1 и стирает нашу установку.
+      map.on("move", syncLabelAngles);
       (window as unknown as { __rebuildLabels?: () => void }).__rebuildLabels = rebuildLabels;
 
       // Подложка приходит параллельно: как только она есть — подставляем
