@@ -21,6 +21,8 @@ import type { Theme } from "./theme";
 // basePath (/karta-okruzheniya на GitHub Pages).
 const BUILDINGS_URL = "data/buildings.pmtiles";
 const BASEMAP_URL = "data/basemap.pmtiles";
+// Красные зоны, POI и деревья — единые тайлы на всю Москву (z8–16).
+const OVERLAYS_URL = "data/overlays.pmtiles";
 const MANIFEST_URL = "data/districts/manifest.json";
 const INDEX_URL = "data/index.json.gz";
 
@@ -1654,12 +1656,13 @@ function basemapLayers(p: Palette): maplibregl.LayerSpecification[] {
       },
     },
     {
-      // Деревья — декоративные точки в park/wood (оформление, не факт).
+      // Деревья — точки в park/wood из тайлов overlays.pmtiles (z15+).
       // В плоскости карты (pitch-alignment/scale: map) и три ступени размера по зуму:
       // z < 14.6 / 14.6–16.2 / >= 16.2 — кроны уходят в перспективу и не режутся краем.
       id: "bm-trees",
       type: "circle",
-      source: "trees",
+      source: OVERLAYS_SOURCE,
+      "source-layer": "trees",
       minzoom: TREE_MIN_ZOOM,
       paint: {
         "circle-pitch-alignment": "map",
@@ -1935,40 +1938,6 @@ function longestSegment(geom: Geometry): { a: Position; b: Position } | null {
   return best;
 }
 
-// Один кандидат на имя: самые длинные и важные улицы, река/пруды, парки.
-function ringContains(pt: Position, ring: Position[]): boolean {
-  let inside = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const xi = ring[i][0];
-    const yi = ring[i][1];
-    const xj = ring[j][0];
-    const yj = ring[j][1];
-    const cross = yi > pt[1] !== yj > pt[1] && pt[0] < ((xj - xi) * (pt[1] - yi)) / (yj - yi || 1e-12) + xi;
-    if (cross) inside = !inside;
-  }
-  return inside;
-}
-
-function polygonContains(pt: Position, rings: Position[][]): boolean {
-  if (!ringContains(pt, rings[0])) return false;
-  for (let i = 1; i < rings.length; i++) {
-    if (ringContains(pt, rings[i])) return false;
-  }
-  return true;
-}
-
-function ringAreaHectares(ring: Position[]): number {
-  if (ring.length < 3) return 0;
-  const latRad = (55.756 * Math.PI) / 180;
-  const lonM = Math.cos(latRad) * 111320;
-  const latM = 111132;
-  let sum = 0;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    sum += (ring[j][0] - ring[i][0]) * lonM * ((ring[j][1] + ring[i][1]) * 0.5 * latM);
-  }
-  return Math.abs(sum) / 10000;
-}
-
 // PERF-LOAD: ключ дедупликации фич подложки — первая координата геометрии
 // (округление до 1e-5). Раньше в ключ шла вся геометрия через JSON.stringify:
 // на z12.6+ это десятки мегабайт строк на каждую пачку догрузившихся тайлов.
@@ -1998,77 +1967,8 @@ function firstCoordinateKey(geometry: Geometry): string {
   }
 }
 
-// Декоративные деревья в park и wood: детерминированные точки внутри полигонов
-// (seeded PRNG от стабильного идентификатора полигона, 60–80 точек на гектар),
-// чтобы кроны лежали в плоскости карты и уходили в перспективу без среза по краю.
-// Это оформление, не факт из данных: в карточку и индекс не попадает.
-function buildTreePoints(
-  features: GFeature<BasemapProps>[],
-): GCollection<{ size: number; tone: number }> {
-  const points: GFeature<{ size: number; tone: number }>[] = [];
-  for (let fi = 0; fi < features.length; fi++) {
-    const f = features[fi];
-    if (f.properties.layer !== "green") continue;
-    const cls = f.properties.class;
-    if (cls !== "park" && cls !== "wood") continue;
-    let polys: Position[][][] = [];
-    if (f.geometry.type === "Polygon") polys = [f.geometry.coordinates];
-    else if (f.geometry.type === "MultiPolygon") polys = f.geometry.coordinates;
-    else continue;
-    for (let pi = 0; pi < polys.length; pi++) {
-      const rings = polys[pi];
-      let minX = Infinity;
-      let minY = Infinity;
-      let maxX = -Infinity;
-      let maxY = -Infinity;
-      for (const [x, y] of rings[0]) {
-        minX = Math.min(minX, x);
-        maxX = Math.max(maxX, x);
-        minY = Math.min(minY, y);
-        maxY = Math.max(maxY, y);
-      }
-      const areaHa = ringAreaHectares(rings[0]);
-      if (areaHa < 0.04) continue;
-      // Seed от id/координат полигона — детерминированный и независимый от порядка обхода.
-      const rawId = (f as { id?: number | string }).id;
-      const numId = typeof rawId === "number" ? rawId : Number(rawId) || 0;
-      let seed =
-        ((Math.round(minX * 1e5) * 73856093) ^
-          (Math.round(minY * 1e5) * 19349663) ^
-          ((numId || fi + 1) * 83492791) ^
-          (pi * 2654435761)) >>>
-        0;
-      const rand = () => {
-        seed = (seed * 1664525 + 1013904223) >>> 0;
-        return seed / 4294967296;
-      };
-      // 60–80 точек на гектар (в wood чуть плотнее, чем в park).
-      const densityPerHa = cls === "wood" ? 78 : 70;
-      const want = Math.min(340, Math.max(5, Math.round(areaHa * densityPerHa)));
-      let made = 0;
-      let tries = 0;
-      while (made < want && tries < want * 9) {
-        tries++;
-        const pt: [number, number] = [
-          minX + rand() * (maxX - minX),
-          minY + rand() * (maxY - minY),
-        ];
-        if (!polygonContains(pt, rings)) continue;
-        points.push({
-          type: "Feature",
-          properties: {
-            size: 0.78 + rand() * 0.62,
-            tone: rand() < (cls === "wood" ? 0.45 : 0.3) ? 1 : 0,
-          },
-          geometry: { type: "Point", coordinates: pt },
-        });
-        made++;
-        if (points.length >= 7500) return { type: "FeatureCollection", features: points };
-      }
-    }
-  }
-  return { type: "FeatureCollection", features: points };
-}
+// Декоративные деревья в park и wood больше не генерируются в клиенте:
+// точки приходят из тайлов overlays.pmtiles (source-layer "trees", z15+).
 
 function buildLabelCandidates(features: GFeature<BasemapProps>[]): LabelCandidate[] {
   const byName: Record<string, LabelCandidate> = {};
@@ -2218,30 +2118,19 @@ const POI_TO_ICON: Record<string, IconKey> = {
 const PIN_PATH =
   "M12 1.5C7.3 1.5 3.5 5.3 3.5 10c0 5.6 8.5 12.6 8.5 12.6S20.5 15.6 20.5 10c0-4.7-3.8-8.5-8.5-8.5z";
 const POI_PIXEL_RATIO = 2;
-const POI_SOURCE = "poi";
+// Все оверлеи (зоны, POI, деревья) — один векторный PMTiles-источник.
+const OVERLAYS_SOURCE = "overlays";
 const POI_LABEL_SOURCE = "poiLabels";
 const POI_LABEL_LAYER = "poi-labels";
-// Правило продукта (P1): на обзоре — ничего, дальше категории по зуму.
-const POI_MIN_ZOOM = 11;
-// Кап на кадр: на обзоре z11–13 в кадр попадает ~10 районов, поэтому 16 —
-// с запасом. Больше не грузим: 132 файла на один moveend недопустимы.
-const POI_MAX_DISTRICTS = 16;
 // Для выбранного дома хватает его района и ближайших соседей.
 const POI_NEAR_DISTRICTS = 4;
 const POI_LABEL_MIN_ZOOM = 14;
-// Красные зоны — та же политика, что у POI: файлы районов грузятся только для
-// видимого кадра (132 файла на старте — это 35 801 линия по всему городу).
-const REDZONE_SOURCE = "redzones";
-// Зоны видны с обзора z12: ниже пятна слишком крупные и «светят» на весь
-// город, к тому же это лишние районы в источнике.
-const REDZONE_MIN_ZOOM = 12;
-const REDZONE_MAX_DISTRICTS = 16;
-// Плотность по зуму: z12–13 — только магистрали первого порядка (trunk,
-// primary) и ж/д, с 14 — все классы.
-const REDZONE_DETAIL_ZOOM = 14;
+// Зоны видны с обзора z9: LOD по классам (trunk/primary с z8, secondary с z12,
+// полигоны с z13) уже заложен в тайлы overlays.pmtiles.
+const REDZONE_MIN_ZOOM = 9;
 // Заливка полигонов (промзоны/стройки) — с 13: раньше это крупные пятна.
 const REDZONE_FILL_MIN_ZOOM = 13;
-// Линейные слои зон: ореол + ядро (замена line-blur) и дороги/ж/д.
+// Линейные слои зон: ореол + ядро и дороги/ж/д.
 const REDZONE_LINE_LAYERS = [
   "redzones-glow",
   "redzones-core",
@@ -2256,9 +2145,9 @@ const POI_LAYER_DEFS: {
   minzoom: number;
 }[] = [
   { id: "poi-metro", types: ["subway_entrance", "rail_platform"], flag: "metro", minzoom: 11 },
-  { id: "poi-parks", types: ["park"], flag: "parks", minzoom: 12 },
-  { id: "poi-schools", types: ["school"], flag: "schools", minzoom: 13 },
-  { id: "poi-kindergartens", types: ["kindergarten"], flag: "kindergartens", minzoom: 13 },
+  { id: "poi-parks", types: ["park"], flag: "parks", minzoom: 13 },
+  { id: "poi-schools", types: ["school"], flag: "schools", minzoom: 14 },
+  { id: "poi-kindergartens", types: ["kindergarten"], flag: "kindergartens", minzoom: 14 },
   { id: "poi-shops", types: ["shop"], flag: "shops", minzoom: 15 },
 ];
 
@@ -2351,7 +2240,8 @@ function poiLayers(theme: Theme): maplibregl.LayerSpecification[] {
     ({
       id: def.id,
       type: "symbol",
-      source: POI_SOURCE,
+      source: OVERLAYS_SOURCE,
+      "source-layer": "poi",
       minzoom: def.minzoom,
       filter: ["match", ["get", "type"], def.types, true, false],
       layout: {
@@ -2623,7 +2513,6 @@ export default function Map() {
         `FPS ${frameTimes.length ? Math.round(1000 / avg) : "—"}`,
         `p95 ${p95 ? p95.toFixed(1) : "—"} мс`,
         `тайлы ${tiles.size}`,
-        `зоны ${(window as unknown as { __perfRedzones?: number }).__perfRedzones ?? 0}`,
         `PMTiles ${(bytes / 1048576).toFixed(2)} МБ`,
         `z ${(map?.getZoom() ?? 0).toFixed(2)}`,
       ].join(" · ");
@@ -2642,8 +2531,6 @@ export default function Map() {
     const container = containerRef.current;
     let cancelled = false;
     let map: maplibregl.Map | null = null;
-    let poiRefreshTimer: number | null = null;
-    let redzoneRefreshTimer: number | null = null;
     let basemapDecorTimer: number | null = null;
 
     const init = async () => {
@@ -2774,15 +2661,11 @@ export default function Map() {
 
       const palette = MAP_THEMES[themeRef.current];
 
-      // POI — только видимые районы, кэш в памяти. В источник попадают
-      // загруженные видимые (+ запас 12%) районы, не больше POI_MAX_DISTRICTS
-      // (16): на обзоре это покрывает весь кадр, а не 4 центральных района.
+      // POI — кэш в памяти по районам. Нужен только для ближайших POI
+      // выбранного дома (пилюли «Метро · X мин»); на карте рисуются тайлы overlays.
       const poiByDistrict: Record<number, GFeature<PoiProps>[]> = {};
       const poiRequests: Record<number, Promise<GFeature<PoiProps>[]>> = {};
       const poiPoints: { f: GFeature<PoiProps>; center: [number, number] }[] = [];
-      let poiSourceIds: number[] = [];
-      let poiSourceApplied = false;
-      let poiLoadSeq = 0;
 
       const loadDistrictPoi = (id: number): Promise<GFeature<PoiProps>[]> => {
         const cached = poiByDistrict[id];
@@ -2809,77 +2692,6 @@ export default function Map() {
           });
         poiRequests[id] = request;
         return request;
-      };
-
-      const bboxIntersectionArea = (
-        a: readonly number[],
-        b: readonly number[],
-      ): number => {
-        const w = Math.max(a[0], b[0]);
-        const s = Math.max(a[1], b[1]);
-        const e = Math.min(a[2], b[2]);
-        const n = Math.min(a[3], b[3]);
-        return e > w && n > s ? (e - w) * (n - s) : 0;
-      };
-
-      // Районы, пересекающиеся с кадром (+ запас 12%), по убыванию площади
-      // пересечения — так приоритет получают те, что реально видны.
-      const districtIdsInViewport = (minZoom: number, max: number): number[] => {
-        if (!map || map.getZoom() < minZoom) return [];
-        const bounds = map.getBounds();
-        const padX = (bounds.getEast() - bounds.getWest()) * 0.12;
-        const padY = (bounds.getNorth() - bounds.getSouth()) * 0.12;
-        const view = [
-          bounds.getWest() - padX,
-          bounds.getSouth() - padY,
-          bounds.getEast() + padX,
-          bounds.getNorth() + padY,
-        ];
-        return districts
-          .map((district) => ({
-            district,
-            area: bboxIntersectionArea(district.bbox, view),
-          }))
-          .filter((entry) => entry.area > 0)
-          .sort((a, b) => b.area - a.area)
-          .slice(0, max)
-          .map((entry) => entry.district.id);
-      };
-
-      const visiblePoiDistrictIds = (): number[] =>
-        districtIdsInViewport(POI_MIN_ZOOM, POI_MAX_DISTRICTS);
-
-      const applyPoiSource = () => {
-        const source = map?.getSource(POI_SOURCE) as maplibregl.GeoJSONSource | null;
-        if (!source) return;
-        source.setData({
-          type: "FeatureCollection",
-          features: poiSourceIds.flatMap((id) => poiByDistrict[id] ?? []),
-        } as never);
-        poiSourceApplied = true;
-      };
-
-      const refreshPoiForViewport = async () => {
-        if (!map) return;
-        const ids = visiblePoiDistrictIds();
-        const seq = ++poiLoadSeq;
-        if (!ids.length) {
-          if (!poiSourceIds.length) return;
-          poiSourceIds = [];
-          applyPoiSource();
-          rebuildOverlays(selectedRef.current, visibleRef.current);
-          return;
-        }
-        const unchanged =
-          ids.length === poiSourceIds.length &&
-          ids.every((id, index) => id === poiSourceIds[index]);
-        if (unchanged && poiSourceApplied && ids.every((id) => poiByDistrict[id])) return;
-        await Promise.all(ids.map(loadDistrictPoi));
-        if (seq !== poiLoadSeq || !map) return;
-        poiSourceIds = ids;
-        applyPoiSource();
-        // Подписи и маршруты ближайших POI зависят от загруженных данных.
-        rebuildOverlays(selectedRef.current, visibleRef.current);
       };
 
       // Выбранный дом мог оказаться у края кадра: его район (и соседей)
@@ -2915,9 +2727,6 @@ export default function Map() {
       // на старте давали 35 801 линию по городу и роняли FPS до 9.
       const redzoneByDistrict: Record<number, GFeature<RedzoneProps>[]> = {};
       const redzoneRequests: Record<number, Promise<GFeature<RedzoneProps>[]>> = {};
-      let redzoneSourceIds: number[] = [];
-      let redzoneSourceApplied = false;
-      let redzoneLoadSeq = 0;
 
       const loadDistrictRedzones = (
         id: number,
@@ -2944,145 +2753,37 @@ export default function Map() {
         return request;
       };
 
+      // Только для красных пинов выбранного дома: зоны района дома в памяти.
       const loadedRedzoneFeatures = (buildingId?: number): GFeature<RedzoneProps>[] => {
-        const dId = buildingId !== undefined ? districtByBuildingRef.current[buildingId] : undefined;
-        const ids =
-          dId !== undefined && !redzoneSourceIds.includes(dId)
-            ? [...redzoneSourceIds, dId]
-            : redzoneSourceIds;
-        return ids.flatMap((id) => redzoneByDistrict[id] ?? []);
+        const dId =
+          buildingId !== undefined
+            ? districtByBuildingRef.current[buildingId]
+            : undefined;
+        return dId !== undefined ? redzoneByDistrict[dId] ?? [] : [];
       };
 
-      const applyRedzoneSource = () => {
-        const source = map?.getSource(REDZONE_SOURCE) as
-          | maplibregl.GeoJSONSource
-          | null;
-        if (!source) return;
-        const features = redzoneSourceIds.flatMap(
-          (id) => redzoneByDistrict[id] ?? [],
-        );
-        source.setData({ type: "FeatureCollection", features } as never);
-        redzoneSourceApplied = true;
-        // ?perf=1: сколько объектов красных зон лежит в источнике сейчас.
-        (window as unknown as { __perfRedzones?: number }).__perfRedzones =
-          features.length;
-      };
-
-      // Плотность по зуму: до 12 зон нет, 12–13 — только магистрали первого
-      // порядка (trunk, primary) и ж/д, с 14 — все классы.
-      let redzoneBand: 0 | 1 | 2 | null = null;
+      // Видимость зон = только тоггл слоя: LOD по зумам заложен в тайлах overlays.
       let redzoneVisibilityKey = "";
-      const redzoneBandForZoom = (zoom: number): 0 | 1 | 2 =>
-        zoom < REDZONE_MIN_ZOOM ? 0 : zoom < REDZONE_DETAIL_ZOOM ? 1 : 2;
-
       const syncRedzoneVisibility = () => {
         if (!map || !map.getLayer("redzones-glow")) return;
-        const zoom = map.getZoom();
-        // Линии и заливка включаются на разных зумах, поэтому show/fill —
-        // независимые флаги.
-        const show = visibleRef.current.redzones && zoom >= REDZONE_MIN_ZOOM;
-        const showFill = show && zoom >= REDZONE_FILL_MIN_ZOOM;
-        const key = `${show ? 1 : 0}${showFill ? 1 : 0}`;
-        // На каждый moveend не дёргаем стиль: лишние setLayoutProperty
+        const show = visibleRef.current.redzones;
+        const key = show ? "1" : "0";
+        // На каждый вызов не дёргаем стиль: лишние setLayoutProperty
         // = лишний пересчёт и лишний кадр.
         if (key === redzoneVisibilityKey) return;
         redzoneVisibilityKey = key;
-        const lineVis = show ? "visible" : "none";
-        for (const id of REDZONE_LINE_LAYERS) {
-          map.setLayoutProperty(id, "visibility", lineVis);
+        const vis = show ? "visible" : "none";
+        for (const id of [...REDZONE_LINE_LAYERS, "redzones-fill"]) {
+          map.setLayoutProperty(id, "visibility", vis);
         }
-        map.setLayoutProperty(
-          "redzones-fill",
-          "visibility",
-          showFill ? "visible" : "none",
-        );
       };
 
-      const syncRedzoneDensity = () => {
-        if (!map || !map.getLayer("redzones-glow")) return;
-        const band = redzoneBandForZoom(map.getZoom());
-        if (band !== redzoneBand) {
-          redzoneBand = band;
-          const top = [
-            "any",
-            ["==", ["get", "kind"], "railway"],
-            ["==", ["get", "class"], "trunk"],
-            ["==", ["get", "class"], "primary"],
-          ];
-          const topRoad = [
-            "all",
-            ["!=", ["get", "kind"], "railway"],
-            [
-              "any",
-              ["==", ["get", "class"], "trunk"],
-              ["==", ["get", "class"], "primary"],
-            ],
-          ];
-          // Ореол и ядро — одна геометрия, фильтр плотности у них общий.
-          for (const id of ["redzones-glow", "redzones-core"]) {
-            map.setFilter(id, (band === 1 ? top : null) as never);
-          }
-          map.setFilter(
-            "redzones-road",
-            (band === 1 ? topRoad : ["!=", ["get", "kind"], "railway"]) as never,
-          );
-          map.setFilter(
-            "redzones-rail",
-            ["==", ["get", "kind"], "railway"] as never,
-          );
-          map.setFilter(
-            "redzones-fill",
-            ["==", ["geometry-type"], "Polygon"] as never,
-          );
-        }
-        syncRedzoneVisibility();
-      };
-
-      const refreshRedzonesForViewport = async () => {
-        if (!map) return;
-        syncRedzoneDensity();
-        const ids = districtIdsInViewport(
-          REDZONE_MIN_ZOOM,
-          REDZONE_MAX_DISTRICTS,
-        );
-        const seq = ++redzoneLoadSeq;
-        if (!ids.length) {
-          if (!redzoneSourceIds.length) return;
-          redzoneSourceIds = [];
-          applyRedzoneSource();
-          return;
-        }
-        const unchanged =
-          ids.length === redzoneSourceIds.length &&
-          ids.every((id, index) => id === redzoneSourceIds[index]);
-        // Повторное движение по уже загруженным районам — без запросов.
-        if (unchanged && redzoneSourceApplied && ids.every((id) => redzoneByDistrict[id])) {
-          return;
-        }
-        await Promise.all(ids.map(loadDistrictRedzones));
-        if (seq !== redzoneLoadSeq || !map) return;
-        redzoneSourceIds = ids;
-        applyRedzoneSource();
-      };
-
-      // Выбранный дом мог оказаться у края кадра: его район догружаем, чтобы
-      // красные пины «ближайший минус» нашли свою зону.
+      // Выбранный дом мог оказаться у края кадра: его район догружаем в кэш,
+      // чтобы красные пины «ближайший минус» нашли свою зону. На карту
+      // (в источник слоёв) это не попадает — зоны рисуются из overlays.pmtiles.
       const ensureRedzonesForDistrict = async (districtId: number) => {
-        if (redzoneByDistrict[districtId] && redzoneSourceIds.includes(districtId)) {
-          return;
-        }
+        if (redzoneByDistrict[districtId]) return;
         await loadDistrictRedzones(districtId);
-        if (cancelled || !map) return;
-        if (!redzoneSourceIds.includes(districtId)) {
-          redzoneSourceIds = [...redzoneSourceIds, districtId];
-          // PERF-LOAD: сеть стартует сразу, но setData источника посреди
-          // flyTo к дому рвёт кадр — откладываем до остановки камеры.
-          if (selectionMovePending || map.isMoving()) {
-            map.once("moveend", () => applyRedzoneSource());
-          } else {
-            applyRedzoneSource();
-          }
-        }
       };
 
       let labelCandidates: LabelCandidate[] = [];
@@ -3159,10 +2860,15 @@ export default function Map() {
               type: "vector",
               url: `pmtiles://${new URL(BASEMAP_URL, window.location.href).href}`,
             },
-            trees: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
+            // Зоны, POI и деревья — единые тайлы z8–16 без разрезов по районам.
+            overlays: {
+              type: "vector",
+              url: `pmtiles://${new URL(OVERLAYS_URL, window.location.href).href}`,
+              minzoom: 8,
+              maxzoom: 16,
+            },
             glow: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
-            // POI видимых районов и пилюли-подписи ближайших к выбранному дому.
-            poi: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
+            // Пилюли-подписи ближайших к выбранному дому POI.
             poiLabels: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
               // Отдельная геометрия выбранного дома и тонкого контура его крыши (~1.5 px).
               selectedBuilding: {
@@ -3180,10 +2886,6 @@ export default function Map() {
               // addProtocol ждёт абсолютный URL, страница живёт в подпапке.
               url: `pmtiles://${new URL(BUILDINGS_URL, window.location.href).href}`,
             },
-            redzones: {
-              type: "geojson",
-              data: { type: "FeatureCollection", features: [] },
-            },
             routes: { type: "geojson", data: routesData },
             isochrone: {
               type: "geojson",
@@ -3194,39 +2896,95 @@ export default function Map() {
             // Полноценная подложка: земля, парки, вода, улицы (локальный OSM).
             ...basemapLayers(palette),
             {
-              // Ореол вместо line-blur: широкая полупрозрачная линия той же
-              // геометрии, что и ядро. Blur в MapLibre растеризуется заново
-              // на каждый кадр и стоил больше, чем обзор всего города.
-              // opacity держится константой: свечение не должно «темнеть»
-              // при зуме.
+              // Настоящий Neon: широкий размытый ореол (line-blur) поверх
+              // магистралей и ж/д. LOD по классам (z8 trunk/primary, z12
+              // secondary) уже в тайлах overlays.pmtiles — фильтр только по kind.
               id: "redzones-glow",
               type: "line",
-              source: "redzones",
+              source: OVERLAYS_SOURCE,
+              "source-layer": "redzones",
+              minzoom: REDZONE_MIN_ZOOM,
+              filter: ["in", ["get", "kind"], ["literal", ["road", "railway"]]],
               layout: { "line-cap": "round", "line-join": "round" },
               paint: {
                 "line-color": palette.redzone,
-                "line-width": ["interpolate", ["linear"], ["zoom"], 12, 8, 14, 14, 16, 22],
-                "line-opacity": themeRef.current === "dark" ? 0.16 : 0.12,
+                "line-width": [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  9,
+                  4.5,
+                  12,
+                  8,
+                  14,
+                  13,
+                  17.5,
+                  24,
+                ],
+                "line-blur": [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  9,
+                  3.5,
+                  12,
+                  6,
+                  14,
+                  9,
+                  17.5,
+                  16,
+                ],
+                "line-opacity": [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  9,
+                  themeRef.current === "dark" ? 0.34 : 0.26,
+                  14,
+                  themeRef.current === "dark" ? 0.32 : 0.24,
+                  17.5,
+                  themeRef.current === "dark" ? 0.38 : 0.3,
+                ],
               },
             },
             {
-              // Ядро — узкая яркая линия поверх ореола. Вместе с ним даёт
-              // «мягкий ореол + чёткая линия» без размытия.
+              // Ядро — узкая яркая линия поверх ореола: «свечение + чёткая линия».
               id: "redzones-core",
               type: "line",
-              source: "redzones",
+              source: OVERLAYS_SOURCE,
+              "source-layer": "redzones",
+              minzoom: REDZONE_MIN_ZOOM,
+              filter: ["in", ["get", "kind"], ["literal", ["road", "railway"]]],
               layout: { "line-cap": "round", "line-join": "round" },
               paint: {
                 "line-color": palette.redzone,
-                "line-width": ["interpolate", ["linear"], ["zoom"], 12, 1.6, 14, 2.2, 16, 3.0],
+                "line-width": [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  9,
+                  0.9,
+                  12,
+                  1.6,
+                  14,
+                  2.2,
+                  16,
+                  3.0,
+                ],
                 "line-opacity": 0.9,
               },
             },
             {
               id: "redzones-fill",
               type: "fill",
-              source: "redzones",
-              filter: ["==", ["geometry-type"], "Polygon"],
+              source: OVERLAYS_SOURCE,
+              "source-layer": "redzones",
+              minzoom: REDZONE_FILL_MIN_ZOOM,
+              filter: [
+                "in",
+                ["get", "kind"],
+                ["literal", ["industrial", "construction"]],
+              ],
               paint: {
                 "fill-color": palette.redzone,
                 "fill-opacity": ["interpolate", ["linear"], ["zoom"], 14, 0.1, 17.5, 0.16],
@@ -3235,25 +2993,69 @@ export default function Map() {
             {
               id: "redzones-road",
               type: "line",
-              source: "redzones",
-              filter: ["!=", ["get", "kind"], "railway"],
+              source: OVERLAYS_SOURCE,
+              "source-layer": "redzones",
+              minzoom: REDZONE_MIN_ZOOM,
+              filter: ["==", ["get", "kind"], "road"],
               layout: { "line-cap": "round", "line-join": "round" },
               paint: {
                 "line-color": palette.redzone,
-                "line-width": ["interpolate", ["linear"], ["zoom"], 14, 1.6, 17.5, 2.8],
-                "line-opacity": ["interpolate", ["linear"], ["zoom"], 14, 0.48, 17.5, 0.62],
+                "line-width": [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  9,
+                  1.0,
+                  14,
+                  1.6,
+                  17.5,
+                  2.8,
+                ],
+                "line-opacity": [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  9,
+                  0.4,
+                  14,
+                  0.48,
+                  17.5,
+                  0.62,
+                ],
               },
             },
             {
               // Ж/д — фоновый слой: тонкий пунктир, чтобы не шумел (FX-3).
               id: "redzones-rail",
               type: "line",
-              source: "redzones",
+              source: OVERLAYS_SOURCE,
+              "source-layer": "redzones",
+              minzoom: REDZONE_MIN_ZOOM,
               filter: ["==", ["get", "kind"], "railway"],
               paint: {
                 "line-color": palette.redzone,
-                "line-width": ["interpolate", ["linear"], ["zoom"], 14, 1.6, 17.5, 2.8],
-                "line-opacity": ["interpolate", ["linear"], ["zoom"], 14, 0.48, 17.5, 0.6],
+                "line-width": [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  9,
+                  1.0,
+                  14,
+                  1.6,
+                  17.5,
+                  2.8,
+                ],
+                "line-opacity": [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  9,
+                  0.4,
+                  14,
+                  0.48,
+                  17.5,
+                  0.6,
+                ],
                 "line-dasharray": [3, 3],
               },
             },
@@ -3685,23 +3487,18 @@ export default function Map() {
           basemapDecorTimer = null;
           basemapRefreshPending = false;
           if (cancelled || !map || map.isMoving()) return;
-          // BM-LOW: ниже DECOR_MIN_ZOOM подписи и деревья не рисуются вовсе,
-          // а сбор кандидатов — самое дорогое в кадре: querySourceFeatures по
+          // BM-LOW: ниже DECOR_MIN_ZOOM подписи не рисуются вовсе, а сбор
+          // кандидатов — самое дорогое в кадре: querySourceFeatures по
           // всей подложке на обзоре отдаёт ~85 тыс. фич и ~20 МБ geometry-JSON,
           // и это повторяется на каждый moveend/idle/загрузку тайла. Пропускаем.
           if (map.getZoom() < DECOR_MIN_ZOOM) {
             labelCandidates = [];
-            (map.getSource("trees") as maplibregl.GeoJSONSource | null)?.setData({
-              type: "FeatureCollection",
-              features: [],
-            } as never);
             return;
           }
-          const zoom = map.getZoom();
           const seen = new Set<string>();
           const features: GFeature<BasemapProps>[] = [];
-          // PERF-LOAD: landuse и waterway ни в buildLabelCandidates, ни в
-          // buildTreePoints не читаются — не опрашиваем их вовсе.
+          // PERF-LOAD: landuse и waterway в buildLabelCandidates не читаются —
+          // не опрашиваем их вовсе.
           for (const sourceLayer of ["green", "water", "river", "road"]) {
             for (const feature of map.querySourceFeatures("basemap", { sourceLayer })) {
               const properties = feature.properties as unknown as
@@ -3709,15 +3506,8 @@ export default function Map() {
                 | undefined;
               if (!properties) continue;
               const name = properties.name;
-              // Фильтр до дедупликации: безымянные сегменты дорог/воды и
-              // неподписанные green не годятся ни в подписи, ни в деревья.
-              if (sourceLayer === "green") {
-                const treeLayer =
-                  properties.class === "park" || properties.class === "wood";
-                if (!name && (zoom < TREE_MIN_ZOOM || !treeLayer)) continue;
-              } else if (!name) {
-                continue;
-              }
+              // Безымянные сегменты дорог/воды и green в подписи не годятся.
+              if (!name) continue;
               // Ключ без полной геометрии: sourceLayer + класс + имя +
               // id/начало геометрии достаточно, чтобы отсечь дубли на стыках.
               const key = `${sourceLayer}/${properties.class ?? ""}/${name}/${feature.id ?? ""}/${firstCoordinateKey(feature.geometry)}`;
@@ -3736,11 +3526,6 @@ export default function Map() {
             }
           }
           labelCandidates = buildLabelCandidates(features);
-          (map.getSource("trees") as maplibregl.GeoJSONSource | null)?.setData(
-            (map.getZoom() >= TREE_MIN_ZOOM
-              ? buildTreePoints(features)
-              : { type: "FeatureCollection", features: [] }) as never,
-          );
           rebuildLabels();
         }, 120);
       };
@@ -3802,32 +3587,8 @@ export default function Map() {
         }
       });
 
-      // POI видимых районов: старт и дебаунс после движения.
-      const schedulePoiRefresh = () => {
-        if (poiRefreshTimer !== null) window.clearTimeout(poiRefreshTimer);
-        poiRefreshTimer = window.setTimeout(() => {
-          poiRefreshTimer = null;
-          void refreshPoiForViewport();
-        }, 160);
-      };
-      map.on("moveend", schedulePoiRefresh);
-      map.on("zoomend", schedulePoiRefresh);
-      void refreshPoiForViewport();
-
-      // Загрузка красных зон видимых районов — на тех же событиях, что POI.
-      const scheduleRedzoneRefresh = () => {
-        if (redzoneRefreshTimer !== null) window.clearTimeout(redzoneRefreshTimer);
-        redzoneRefreshTimer = window.setTimeout(() => {
-          redzoneRefreshTimer = null;
-          void refreshRedzonesForViewport();
-        }, 160);
-      };
-      map.on("moveend", scheduleRedzoneRefresh);
-      // zoomend тоже пересчитывает плотность: refreshRedzonesForViewport
-      // начинается с syncRedzoneDensity.
-      map.on("zoomend", scheduleRedzoneRefresh);
-      void refreshRedzonesForViewport();
-
+      // Зоны, POI и деревья приходят из overlays.pmtiles: подгрузок по районам
+      // на скролле нет. Кэш районов наполняется только при выборе дома.
       // Заставка: убираем, когда карта отрисована (idle) или через 2 с —
       // что раньше.
       const hideSplash = () => setSplash((s) => (s === "show" ? "fade" : s));
@@ -3932,8 +3693,8 @@ export default function Map() {
       applyVisibilityRef.current = (v: Visibility) => {
         if (!map) return;
         if (map.getLayer("redzones-road")) {
-          // Видимость красных зон = флаг слоя И плотность по зуму.
-          syncRedzoneDensity();
+          // Видимость красных зон = флаг слоя (LOD по зуму — в тайлах).
+          syncRedzoneVisibility();
         }
         if (map.getLayer("routes-line")) {
           const rt = v.routes ? "visible" : "none";
@@ -4372,7 +4133,17 @@ export default function Map() {
           }
         }
         map.setPaintProperty("redzones-glow", "line-color", p.redzone);
-        map.setPaintProperty("redzones-glow", "line-opacity", t === "dark" ? 0.16 : 0.12);
+        map.setPaintProperty("redzones-glow", "line-opacity", [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          9,
+          t === "dark" ? 0.34 : 0.26,
+          14,
+          t === "dark" ? 0.32 : 0.24,
+          17.5,
+          t === "dark" ? 0.38 : 0.3,
+        ] as never);
         map.setPaintProperty("redzones-core", "line-color", p.redzone);
         map.setPaintProperty("redzones-road", "line-color", p.redzone);
         map.setPaintProperty("redzones-rail", "line-color", p.redzone);
@@ -5113,10 +4884,6 @@ export default function Map() {
         applyVisibilityRef.current?.(visibleRef.current);
         setIsoSourceRef.current?.(isoGeomRef.current);
         rebuildLabels();
-        // Источник POI до готовности стиля мог не принять данные.
-        void refreshPoiForViewport();
-        // Красные зоны: то же самое — источник пересобираем после загрузки стиля.
-        void refreshRedzonesForViewport();
         // Публичная ссылка «Отправить клиенту»: ?building=<osm_id>
         const param = new URLSearchParams(window.location.search).get("building");
         if (param !== null) {
@@ -5204,14 +4971,6 @@ export default function Map() {
 
     return () => {
       cancelled = true;
-      if (poiRefreshTimer !== null) {
-        window.clearTimeout(poiRefreshTimer);
-        poiRefreshTimer = null;
-      }
-      if (redzoneRefreshTimer !== null) {
-        window.clearTimeout(redzoneRefreshTimer);
-        redzoneRefreshTimer = null;
-      }
       if (basemapDecorTimer !== null) {
         window.clearTimeout(basemapDecorTimer);
         basemapDecorTimer = null;
