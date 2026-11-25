@@ -1969,6 +1969,35 @@ function ringAreaHectares(ring: Position[]): number {
   return Math.abs(sum) / 10000;
 }
 
+// PERF-LOAD: ключ дедупликации фич подложки — первая координата геометрии
+// (округление до 1e-5). Раньше в ключ шла вся геометрия через JSON.stringify:
+// на z12.6+ это десятки мегабайт строк на каждую пачку догрузившихся тайлов.
+function coordKey(point: Position | undefined): string {
+  if (!point) return "";
+  return `${Math.round(point[0] * 1e5)}:${Math.round(point[1] * 1e5)}`;
+}
+
+function firstCoordinateKey(geometry: Geometry): string {
+  switch (geometry.type) {
+    case "GeometryCollection": {
+      const first = geometry.geometries[0];
+      return first ? firstCoordinateKey(first) : "";
+    }
+    case "Point":
+      return coordKey(geometry.coordinates);
+    case "MultiPoint":
+    case "LineString":
+      return coordKey(geometry.coordinates[0]);
+    case "MultiLineString":
+    case "Polygon":
+      return coordKey(geometry.coordinates[0]?.[0]);
+    case "MultiPolygon":
+      return coordKey(geometry.coordinates[0]?.[0]?.[0]);
+    default:
+      return "";
+  }
+}
+
 // Декоративные деревья в park и wood: детерминированные точки внутри полигонов
 // (seeded PRNG от стабильного идентификатора полигона, 60–80 точек на гектар),
 // чтобы кроны лежали в плоскости карты и уходили в перспективу без среза по краю.
@@ -2615,6 +2644,7 @@ export default function Map() {
     let map: maplibregl.Map | null = null;
     let poiRefreshTimer: number | null = null;
     let redzoneRefreshTimer: number | null = null;
+    let basemapDecorTimer: number | null = null;
 
     const init = async () => {
       const fetchJson = async (url: string): Promise<unknown> => {
@@ -2869,7 +2899,14 @@ export default function Map() {
           .filter((id) => !poiByDistrict[id]);
         if (!ids.length) return;
         await Promise.all(ids.map(loadDistrictPoi));
-        if (!cancelled) rebuildOverlays(selectedRef.current, visibleRef.current);
+        if (cancelled || !map) return;
+        if (selectionMovePending || map.isMoving()) {
+          map.once("moveend", () => {
+            if (!cancelled) rebuildOverlays(selectedRef.current, visibleRef.current);
+          });
+        } else {
+          rebuildOverlays(selectedRef.current, visibleRef.current);
+        }
       };
 
       // ── Красные зоны (redzones.geojson) ────────────────────────────────
@@ -2907,8 +2944,14 @@ export default function Map() {
         return request;
       };
 
-      const loadedRedzoneFeatures = (): GFeature<RedzoneProps>[] =>
-        Object.values(redzoneByDistrict).flat();
+      const loadedRedzoneFeatures = (buildingId?: number): GFeature<RedzoneProps>[] => {
+        const dId = buildingId !== undefined ? districtByBuildingRef.current[buildingId] : undefined;
+        const ids =
+          dId !== undefined && !redzoneSourceIds.includes(dId)
+            ? [...redzoneSourceIds, dId]
+            : redzoneSourceIds;
+        return ids.flatMap((id) => redzoneByDistrict[id] ?? []);
+      };
 
       const applyRedzoneSource = () => {
         const source = map?.getSource(REDZONE_SOURCE) as
@@ -3032,7 +3075,13 @@ export default function Map() {
         if (cancelled || !map) return;
         if (!redzoneSourceIds.includes(districtId)) {
           redzoneSourceIds = [...redzoneSourceIds, districtId];
-          applyRedzoneSource();
+          // PERF-LOAD: сеть стартует сразу, но setData источника посреди
+          // flyTo к дому рвёт кадр — откладываем до остановки камеры.
+          if (selectionMovePending || map.isMoving()) {
+            map.once("moveend", () => applyRedzoneSource());
+          } else {
+            applyRedzoneSource();
+          }
         }
       };
 
@@ -3625,10 +3674,17 @@ export default function Map() {
       let basemapRefreshPending = false;
       const refreshBasemapDecorations = () => {
         if (cancelled || !map || basemapRefreshPending) return;
+        // PERF-LOAD: во время движения сбор фич не нужен — по остановке его
+        // всё равно вызовет moveend/idle, а лишний проход рвёт кадр.
+        if (map.isMoving()) return;
         basemapRefreshPending = true;
-        requestAnimationFrame(() => {
+        // Пачка догрузившихся тайлов должна обрабатываться один раз, а не на
+        // каждый тайл: короткий дебаунс вместо мгновенного requestAnimationFrame.
+        if (basemapDecorTimer !== null) window.clearTimeout(basemapDecorTimer);
+        basemapDecorTimer = window.setTimeout(() => {
+          basemapDecorTimer = null;
           basemapRefreshPending = false;
-          if (cancelled || !map) return;
+          if (cancelled || !map || map.isMoving()) return;
           // BM-LOW: ниже DECOR_MIN_ZOOM подписи и деревья не рисуются вовсе,
           // а сбор кандидатов — самое дорогое в кадре: querySourceFeatures по
           // всей подложке на обзоре отдаёт ~85 тыс. фич и ~20 МБ geometry-JSON,
@@ -3641,20 +3697,30 @@ export default function Map() {
             } as never);
             return;
           }
+          const zoom = map.getZoom();
           const seen = new Set<string>();
           const features: GFeature<BasemapProps>[] = [];
-          for (const sourceLayer of [
-            "landuse",
-            "green",
-            "water",
-            "river",
-            "waterway",
-            "road",
-          ]) {
+          // PERF-LOAD: landuse и waterway ни в buildLabelCandidates, ни в
+          // buildTreePoints не читаются — не опрашиваем их вовсе.
+          for (const sourceLayer of ["green", "water", "river", "road"]) {
             for (const feature of map.querySourceFeatures("basemap", { sourceLayer })) {
-              const properties = feature.properties as unknown as BasemapProps;
-              const geometryKey = JSON.stringify(feature.geometry);
-              const key = `${properties.layer}/${properties.class}/${properties.name ?? ""}/${geometryKey}`;
+              const properties = feature.properties as unknown as
+                | BasemapProps
+                | undefined;
+              if (!properties) continue;
+              const name = properties.name;
+              // Фильтр до дедупликации: безымянные сегменты дорог/воды и
+              // неподписанные green не годятся ни в подписи, ни в деревья.
+              if (sourceLayer === "green") {
+                const treeLayer =
+                  properties.class === "park" || properties.class === "wood";
+                if (!name && (zoom < TREE_MIN_ZOOM || !treeLayer)) continue;
+              } else if (!name) {
+                continue;
+              }
+              // Ключ без полной геометрии: sourceLayer + класс + имя +
+              // id/начало геометрии достаточно, чтобы отсечь дубли на стыках.
+              const key = `${sourceLayer}/${properties.class ?? ""}/${name}/${feature.id ?? ""}/${firstCoordinateKey(feature.geometry)}`;
               if (seen.has(key)) continue;
               seen.add(key);
               let stableId = 2166136261;
@@ -3676,12 +3742,14 @@ export default function Map() {
               : { type: "FeatureCollection", features: [] }) as never,
           );
           rebuildLabels();
-        });
+        }, 120);
       };
       map.on("sourcedata", (event) => {
         if (
           event.sourceId === "basemap" &&
-          (event.tile || event.isSourceLoaded)
+          (event.tile || event.isSourceLoaded) &&
+          map &&
+          !map.isMoving()
         ) {
           refreshBasemapDecorations();
         }
@@ -3802,9 +3870,8 @@ export default function Map() {
         } as never);
 
         if (sel?.breakdown && selCenter) {
-          // Ищем по всем загруженным районам: район дома догружается в
-          // ensureRedzonesForDistrict, соседние — по мере движения.
-          const redzonePool = loadedRedzoneFeatures();
+          // Ищем по видимым районам и району выбранного дома, а не по всему кэшу города.
+          const redzonePool = loadedRedzoneFeatures(sel.id);
           for (const [key, entry] of Object.entries(sel.breakdown.penalties)) {
             if (!entry || entry.penalty >= RED_FLAG_PENALTY) continue;
             const kind = PENALTY_TO_KIND[key];
@@ -4722,6 +4789,9 @@ export default function Map() {
 
       map.on("sourcedata", (e) => {
         if (e.sourceId !== "buildings") return;
+        // PERF-LOAD: во время flyTo к дому каждый догрузившийся тайл зданий
+        // не должен запускать захват — moveend в flyToBuilding уже это сделает.
+        if (selectionMovePending || map?.isMoving()) return;
         if (selectedId !== null && (e.tile || e.isSourceLoaded)) {
           scheduleSelectedCapture(selectedId, captureToken);
         }
@@ -4953,16 +5023,22 @@ export default function Map() {
           return;
         }
         districtByBuildingRef.current[id] = district.id;
+        const token = cancelSelectedCapture();
+        selectionMovePending = true;
+        selectedId = id;
         // POI района дома — в кэш, чтобы ближайшие и маршруты были сразу.
         void ensurePoiNear(center);
         // Красные зоны района дома — для пинов «ближайший минус».
         void ensureRedzonesForDistrict(district.id).then(() => {
-          if (selectedId === id) rebuildOverlays(selectedRef.current, visibleRef.current);
+          const revealRedzones = () => {
+            if (selectedId !== id) return;
+            rebuildOverlays(selectedRef.current, visibleRef.current);
+          };
+          // PERF-LOAD: перестройка оверлеев посреди flyTo рвёт кадр.
+          if (selectionMovePending || map?.isMoving()) map?.once("moveend", revealRedzones);
+          else revealRedzones();
         });
 
-        const token = cancelSelectedCapture();
-        selectionMovePending = true;
-        selectedId = id;
         selectedBodyRevealPending = true;
         setDeepLinkError(null);
         applySelection(false);
@@ -5135,6 +5211,10 @@ export default function Map() {
       if (redzoneRefreshTimer !== null) {
         window.clearTimeout(redzoneRefreshTimer);
         redzoneRefreshTimer = null;
+      }
+      if (basemapDecorTimer !== null) {
+        window.clearTimeout(basemapDecorTimer);
+        basemapDecorTimer = null;
       }
       map?.remove();
       map = null;

@@ -41,8 +41,8 @@ import requests
 ROOT = Path(__file__).resolve().parent.parent
 REGISTRY_ZIP = ROOT / "data" / "raw" / "mos_areestr_full.zip"
 PROC = ROOT / "data" / "processed"
-REGISTRY_JSON = PROC / "presnya_registry.json"
-HOUSES_JSON = PROC / "presnya_houses.json"
+REGISTRY_JSON = PROC / "moscow_registry.json"
+HOUSES_JSON = PROC / "moscow_houses.json"
 PASSPORT_CACHE = PROC / "build_year_cache.ndjson"
 from db import DB_DSN
 
@@ -58,9 +58,9 @@ PASSPORT_URL = (
     + "?useReadOnlyDataSource=true"
 )
 BATCH_SIZE = 100  # 300 кодов -> HTTP 414 Request-URI Too Large
-BATCH_PAUSE = 0.3  # сек между пачками
-PASSPORT_THREADS = 6
-PASSPORT_PAUSE = 0.25  # сек между запросами в потоке
+BATCH_PAUSE = 0.2  # сек между пачками
+PASSPORT_THREADS = 10
+PASSPORT_PAUSE = 0.15  # сек между запросами в потоке
 PASSPORT_RETRIES = 3
 MATCH_RADIUS_M = 50
 
@@ -137,24 +137,63 @@ def exchange_batch(codes: list[str]) -> dict:
 def exchange(fias_list: list[str]) -> dict:
     """{fias_lower: {guid, type_code, address, cadastre}} для найденных домов."""
     found: dict[str, dict] = {}
-    for i in range(0, len(fias_list), BATCH_SIZE):
-        batch = fias_list[i : i + BATCH_SIZE]
-        data = exchange_batch(batch)
-        for h in data.get("houseList") or []:
-            house = h.get("house") or {}
-            fias = (house.get("code") or "").lower()
-            if not fias:
-                continue
-            found[fias] = {
-                "guid": h.get("guid"),
-                "type_code": (h.get("houseType") or {}).get("code"),
-                "address": h.get("formattedAddress"),
-                "cadastre": h.get("cadastreNumber"),
-            }
-        time.sleep(BATCH_PAUSE)
-        done = min(i + BATCH_SIZE, len(fias_list))
-        if (done // BATCH_SIZE) % 5 == 0 or done == len(fias_list):
-            print(f"  exchange: {done}/{len(fias_list)} кодов, найдено домов {len(found)}")
+    for prev in (PROC / "presnya_houses.json", HOUSES_JSON):
+        if prev.exists():
+            try:
+                found.update(json.loads(prev.read_text(encoding="utf-8")))
+            except Exception:
+                pass
+    todo = [f for f in fias_list if f not in found]
+    batches = [todo[i : i + BATCH_SIZE] for i in range(0, len(todo), BATCH_SIZE)]
+    print(f"  exchange: уже известно {len(found)}, к обмену {len(todo)} кодов ({len(batches)} пачек)")
+    if not batches:
+        return found
+    lock = threading.Lock()
+    idx = {"i": 0, "done_batches": 0}
+
+    def ex_worker() -> None:
+        while True:
+            with lock:
+                bi = idx["i"]
+                if bi >= len(batches):
+                    return
+                idx["i"] += 1
+                batch = batches[bi]
+            url = BATCH_URL.format(",".join(batch))
+            data = {}
+            for attempt in range(PASSPORT_RETRIES):
+                try:
+                    r = session().get(url, headers=HEADERS, timeout=60)
+                    if r.status_code == 200:
+                        data = r.json()
+                        break
+                    time.sleep(1.5 * (attempt + 1))
+                except requests.RequestException:
+                    time.sleep(1.5 * (attempt + 1))
+            parsed: dict[str, dict] = {}
+            for h in data.get("houseList") or []:
+                house = h.get("house") or {}
+                fias = (house.get("code") or "").lower()
+                if fias:
+                    parsed[fias] = {
+                        "guid": h.get("guid"),
+                        "type_code": (h.get("houseType") or {}).get("code"),
+                        "address": h.get("formattedAddress"),
+                        "cadastre": h.get("cadastreNumber"),
+                    }
+            with lock:
+                found.update(parsed)
+                idx["done_batches"] += 1
+                db = idx["done_batches"]
+                if db % 25 == 0 or db == len(batches):
+                    print(f"  exchange: пачек {db}/{len(batches)}, найдено домов {len(found)}")
+            time.sleep(BATCH_PAUSE)
+
+    threads = [threading.Thread(target=ex_worker) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
     return found
 
 
@@ -256,6 +295,51 @@ def passports(houses: dict[str, dict]) -> dict[str, dict]:
 # Фаза 4: PostGIS — building_years + spatial join к buildings_presnya
 # ---------------------------------------------------------------------------
 
+def filter_registry_near_homes(rows: list[dict], only_fias: set[str] | None = None) -> list[dict]:
+    """Оставляет точки реестра в 50 м от жилых домов Москвы (а при only_fias — только ближайшую из only_fias к каждому дому)."""
+    subset = [r for r in rows if only_fias is None or r["fias"] in only_fias]
+    if not subset:
+        return []
+    with psycopg.connect(DB_DSN) as conn, conn.cursor() as cur:
+        cur.execute(
+            "CREATE TEMP TABLE tmp_reg (fias TEXT, lon DOUBLE PRECISION, lat DOUBLE PRECISION, geom GEOMETRY(Point, 4326))"
+        )
+        with cur.copy("COPY tmp_reg (fias, lon, lat) FROM STDIN") as copy:
+            for r in subset:
+                copy.write_row((r["fias"], r["lon"], r["lat"]))
+        cur.execute("UPDATE tmp_reg SET geom = ST_SetSRID(ST_MakePoint(lon, lat), 4326)")
+        cur.execute("CREATE INDEX ON tmp_reg USING GIST (geom)")
+        if only_fias is None:
+            cur.execute(
+                f"""
+                SELECT DISTINCT r.fias
+                FROM tmp_reg r
+                JOIN moscow m ON ST_Intersects(r.geom, m.geometry)
+                JOIN buildings b
+                  ON b.is_home
+                 AND b.geometry && ST_Expand(r.geom, 0.0009)
+                 AND ST_DWithin(ST_PointOnSurface(b.geometry)::geography, r.geom::geography, {MATCH_RADIUS_M})
+                """
+            )
+        else:
+            cur.execute(
+                f"""
+                SELECT DISTINCT fias FROM (
+                    SELECT DISTINCT ON (b.osm_id) r.fias
+                    FROM buildings b
+                    JOIN moscow m ON ST_Intersects(b.geometry, m.geometry)
+                    JOIN tmp_reg r
+                      ON r.geom && ST_Expand(b.geometry, 0.0009)
+                     AND ST_DWithin(ST_PointOnSurface(b.geometry)::geography, r.geom::geography, {MATCH_RADIUS_M})
+                    WHERE b.is_home
+                    ORDER BY b.osm_id, ST_DistanceSphere(ST_PointOnSurface(b.geometry), r.geom)
+                ) t
+                """
+            )
+        keep = {row[0] for row in cur.fetchall()}
+    return [r for r in rows if r["fias"] in keep]
+
+
 CREATE_YEARS = """
 CREATE TABLE building_years (
     fias_guid     TEXT PRIMARY KEY,
@@ -275,9 +359,12 @@ SELECT DISTINCT ON (b.osm_id)
        b.osm_id,
        y.building_year,
        round(ST_DistanceSphere(ST_PointOnSurface(b.geometry), y.geom)) AS distance_m
-FROM buildings_presnya b
+FROM buildings b
+JOIN moscow m ON ST_Intersects(b.geometry, m.geometry)
 JOIN building_years y
-  ON ST_DWithin(
+  ON y.building_year IS NOT NULL
+ AND y.geom && ST_Expand(b.geometry, 0.0009)
+ AND ST_DWithin(
        ST_PointOnSurface(b.geometry)::geography,
        y.geom::geography,
        {MATCH_RADIUS_M}
@@ -291,7 +378,6 @@ def load_db(registry: list[dict], houses: dict, cache: dict) -> None:
         cur.execute("DROP TABLE IF EXISTS building_year_match")
         cur.execute("DROP TABLE IF EXISTS building_years")
         cur.execute(CREATE_YEARS)
-        n = 0
         for r in registry:
             h = houses.get(r["fias"])
             rec = cache.get(r["fias"])
@@ -318,18 +404,21 @@ def load_db(registry: list[dict], houses: dict, cache: dict) -> None:
                     r["lat"],
                 ),
             )
-            n += 1
+        cur.execute("CREATE INDEX building_years_geom_idx ON building_years USING GIST (geom)")
         cur.execute(CREATE_MATCH)
-        cur.execute("SELECT count(*) FROM building_years")
+        cur.execute("CREATE INDEX building_year_match_osm_idx ON building_year_match (osm_id)")
+        cur.execute("SELECT count(*) FROM building_years WHERE building_year IS NOT NULL")
         years_n = cur.fetchone()[0]
         cur.execute("SELECT count(*) FROM building_year_match")
         match_n = cur.fetchone()[0]
-        cur.execute("SELECT count(*) FROM buildings_presnya")
+        cur.execute(
+            "SELECT count(*) FROM buildings b JOIN moscow m ON ST_Intersects(b.geometry, m.geometry) WHERE b.is_home"
+        )
         total = cur.fetchone()[0]
         conn.commit()
     print(
-        f"building_years: {years_n} домов с паспортами; "
-        f"привязано к зданиям OSM: {match_n}/{total}"
+        f"building_years (с годом): {years_n}; "
+        f"привязано к зданиям OSM Москвы: {match_n} (жилых в Москве: {total})"
     )
 
 
@@ -337,21 +426,25 @@ def load_db(registry: list[dict], houses: dict, cache: dict) -> None:
 
 
 def main() -> int:
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     phases = sys.argv[1:] or ["registry", "exchange", "passports", "load"]
-    district = "Пресненск"
+    district = ""
 
     registry: list[dict] = []
     houses: dict[str, dict] = {}
     cache: dict[str, dict] = {}
 
     if "registry" in phases:
-        print("1/4: читаю адресный реестр...")
-        registry = read_registry(district)
+        print("1/4: читаю адресный реестр Москвы и фильтрую в 50 м от жилых домов...")
+        raw_registry = read_registry(district)
+        registry = filter_registry_near_homes(raw_registry)
         PROC.mkdir(parents=True, exist_ok=True)
         REGISTRY_JSON.write_text(
             json.dumps(registry, ensure_ascii=False), encoding="utf-8"
         )
-        print(f"  зданий с FIAS в районе: {len(registry)}")
+        print(f"  зданий с FIAS всего: {len(raw_registry)}, около жилых домов (≤50 м): {len(registry)}")
     elif REGISTRY_JSON.exists():
         registry = json.loads(REGISTRY_JSON.read_text(encoding="utf-8"))
 
@@ -359,13 +452,16 @@ def main() -> int:
         print("2/4: пакетный обмен FIAS -> GUID ГИС ЖКХ...")
         houses = exchange([r["fias"] for r in registry])
         HOUSES_JSON.write_text(json.dumps(houses, ensure_ascii=False), encoding="utf-8")
-        print(f"  найдено домов: {len(houses)}/{len(registry)}")
+        print(f"  найдено домов в ГИС ЖКХ: {len(houses)}/{len(registry)}")
     elif HOUSES_JSON.exists():
         houses = json.loads(HOUSES_JSON.read_text(encoding="utf-8"))
 
     if "passports" in phases:
-        print("3/4: паспорта домов...")
-        cache = passports(houses)
+        print("3/4: отбор ближайших домов ГИС ЖКХ к жилым домам OSM и загрузка паспортов...")
+        matched_reg = filter_registry_near_homes(registry, set(houses.keys()))
+        matched_houses = {r["fias"]: houses[r["fias"]] for r in matched_reg if r["fias"] in houses}
+        print(f"  ближайших домов ГИС ЖКХ для жилых зданий Москвы: {len(matched_houses)} (из {len(houses)})")
+        cache = passports(matched_houses)
     elif PASSPORT_CACHE.exists():
         cache = {
             json.loads(line)["fias"]: json.loads(line)
