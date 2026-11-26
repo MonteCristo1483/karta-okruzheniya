@@ -413,29 +413,11 @@ def stage_tiles(force: bool) -> list[dict]:
     overlays_out = ROOT / "data" / "overlays.pmtiles"
 
     if not buildings_out.exists() or force:
-        features: dict[int, dict] = {}
-        for summary_path in sorted(DISTRICTS_DIR.glob("*/summary.json")):
-            if not summary_path.parent.name.isdigit():
-                continue  # рабочие копии вроде 1275551_fix — не районы
-            path = summary_path.parent / "buildings.geojson"
-            if not path.exists():
-                continue
-            payload = json.loads(path.read_text(encoding="utf-8"))
-            for feature in payload["features"]:
-                # Дом на границе районов есть в двух geojson — в тайлы один раз.
-                features[int(feature["properties"]["id"])] = feature
-        if not features:
-            errors.append({"stage": "tiles", "error": "нет buildings.geojson в data/districts"})
-            return errors
-        print(f"  buildings.pmtiles: {len(features):,} зданий (уникальных id)")
-        staged = CITY_DIR / ".buildings.ndjson"
-        try:
-            build_tiles.write_ndjson(list(features.values()), staged)
-            build_tiles.run_tippecanoe(staged, buildings_out)
-        finally:
-            staged.unlink(missing_ok=True)
+        print("  buildings.pmtiles: сборка")
+        features = build_tiles.build_city_buildings(buildings_out)
         print(
-            f"  buildings.pmtiles: {human(buildings_out.stat().st_size)}, "
+            f"  buildings.pmtiles: {len(features):,} зданий, "
+            f"{human(buildings_out.stat().st_size)}, "
             f"{build_tiles.pmtiles_stats(buildings_out)['tiles']:,} тайлов"
         )
     else:
