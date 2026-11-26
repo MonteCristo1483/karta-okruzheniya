@@ -39,7 +39,7 @@ MESSAGE = """Ближайшие промышленные источники (р�
 def show_point(cur, lat: float, lon: float, cfg: dict) -> int:
     cur.execute(
         """
-        SELECT id, name, hazard_class,
+        SELECT id, name, hazard_class, status,
                ST_Distance(geometry::geography,
                            ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography)
         FROM industry_sources
@@ -50,7 +50,7 @@ def show_point(cur, lat: float, lon: float, cfg: dict) -> int:
     )
     sources = [
         {"id": row[0], "name": row[1], "hazard_class": row[2],
-         "distance_m": float(row[3])}
+         "status": row[3], "distance_m": float(row[4])}
         for row in cur.fetchall()
     ]
     cur.execute(
@@ -67,7 +67,7 @@ def show_point(cur, lat: float, lon: float, cfg: dict) -> int:
     inside = bool(cur.fetchone()[0])
     entry = scoring_v2.industry_pressure(sources, cfg, inside)
     rows = "\n".join(
-        f"  {source['name']} ({source['hazard_class']}): "
+        f"  {source['name']} ({source['hazard_class']}, {source['status']}): "
         f"{source['distance_m']:.0f} м"
         for source in sources[:3]
     )

@@ -219,21 +219,24 @@ class TestIndustry(unittest.TestCase):
 
     def test_class_i_at_zero_is_full(self):
         entry = industry_pressure(
-            [{"id": "x", "name": "МНПЗ", "hazard_class": "I", "distance_m": 0}], CFG
+            [{"id": "x", "name": "МНПЗ", "hazard_class": "I", "distance_m": 0,
+              "status": "operating"}], CFG
         )
         self.assertEqual(entry["value"], 1.0)
         self.assertEqual(entry["status"], "ok")
 
     def test_half_radius_uses_power_1_5(self):
         entry = industry_pressure(
-            [{"id": "x", "name": "ТЭЦ", "hazard_class": "III", "distance_m": 150}], CFG
+            [{"id": "x", "name": "ТЭЦ", "hazard_class": "III", "distance_m": 150,
+              "status": "operating"}], CFG
         )
         weight = CFG["v2"]["industry"]["classes"]["III"]["weight"]
         self.assertAlmostEqual(entry["value"], weight * 0.5 ** 1.5, places=3)
 
     def test_service_near_190m_does_not_penalize(self):
         entry = industry_pressure(
-            [{"id": "x", "name": "автосервис", "hazard_class": "V", "distance_m": 190}],
+            [{"id": "x", "name": "автосервис", "hazard_class": "V",
+              "distance_m": 190, "status": "operating"}],
             CFG,
         )
         self.assertEqual(entry["value"], 0)
@@ -241,7 +244,8 @@ class TestIndustry(unittest.TestCase):
 
     def test_unknown_class_is_not_classified(self):
         entry = industry_pressure(
-            [{"id": "x", "name": "склад", "hazard_class": "VI", "distance_m": 20}], CFG
+            [{"id": "x", "name": "склад", "hazard_class": "VI",
+              "distance_m": 20, "status": "operating"}], CFG
         )
         self.assertEqual(entry["value"], 0)
         self.assertEqual(entry["status"], "not_classified")
@@ -269,7 +273,8 @@ class TestIndustry(unittest.TestCase):
 
     def test_inside_polygon_with_far_source_is_still_not_classified(self):
         entry = industry_pressure(
-            [{"id": "x", "name": "ТЭЦ", "hazard_class": "III", "distance_m": 900}],
+            [{"id": "x", "name": "ТЭЦ", "hazard_class": "III",
+              "distance_m": 900, "status": "operating"}],
             CFG,
             inside_unclassified_polygon=True,
         )
@@ -279,13 +284,86 @@ class TestIndustry(unittest.TestCase):
     def test_strictest_source_wins(self):
         entry = industry_pressure(
             [
-                {"id": "a", "name": "котельная", "hazard_class": "IV", "distance_m": 20},
-                {"id": "b", "name": "ТЭЦ", "hazard_class": "III", "distance_m": 100},
+                {"id": "a", "name": "котельная", "hazard_class": "IV",
+                 "distance_m": 20, "status": "operating"},
+                {"id": "b", "name": "ТЭЦ", "hazard_class": "III",
+                 "distance_m": 100, "status": "operating"},
             ],
             CFG,
         )
         self.assertEqual(entry["hazard_class"], "III")
         self.assertGreater(entry["value"], 0)
+
+    def test_conservation_does_not_penalize(self):
+        entry = industry_pressure(
+            [{"id": "msz-2", "name": "МСЗ-2", "hazard_class": "I",
+              "distance_m": 0, "status": "conservation"}], CFG
+        )
+        self.assertEqual(entry["value"], 0)
+        self.assertEqual(entry["status"], "known_zero")
+        self.assertNotIn("unknown_status", entry)
+
+    def test_outside_moscow_does_not_penalize(self):
+        entry = industry_pressure(
+            [{"id": "moskoks", "name": "Москокс", "hazard_class": "I",
+              "distance_m": 0, "status": "outside_moscow"}], CFG
+        )
+        self.assertEqual(entry["value"], 0)
+        self.assertEqual(entry["status"], "known_zero")
+        block = build_v2_block(
+            {"value": 0.0, "status": "outside", "class": None},
+            {"value": 0.0, "status": "known_zero"},
+            {"value": 0.0, "status": "known_zero"},
+            {"value": 0.0, "status": "known_zero"},
+            {"value": 0.0, "status": "known_zero"},
+            CFG,
+            industry=entry,
+        )
+        self.assertNotIn("industry:unknown_status", block["flags"])
+        self.assertNotIn("industry:not_classified", block["flags"])
+        self.assertEqual(block["index"], CFG["index"]["base"])
+
+    def test_unknown_status_zero_with_flag(self):
+        entry = industry_pressure(
+            [{"id": "polymetall", "name": "МЗП", "hazard_class": "III",
+              "distance_m": 0, "status": "unknown"}], CFG
+        )
+        self.assertEqual(entry["value"], 0)
+        self.assertEqual(entry["status"], "unknown_status")
+        block = build_v2_block(
+            {"value": 0.0, "status": "outside", "class": None},
+            {"value": 0.0, "status": "known_zero"},
+            {"value": 0.0, "status": "known_zero"},
+            {"value": 0.0, "status": "known_zero"},
+            {"value": 0.0, "status": "known_zero"},
+            CFG,
+            industry=entry,
+        )
+        self.assertIn("industry:unknown_status", block["flags"])
+        self.assertNotIn("industry:not_classified", block["flags"])
+        self.assertEqual(block["index"], CFG["index"]["base"])
+
+    def test_missing_status_is_not_penalized(self):
+        entry = industry_pressure(
+            [{"id": "x", "name": "неизвестный", "hazard_class": "I",
+              "distance_m": 0}], CFG
+        )
+        self.assertEqual(entry["value"], 0)
+        self.assertEqual(entry["status"], "unknown_status")
+
+    def test_operating_source_wins_over_unknown_status_nearby(self):
+        entry = industry_pressure(
+            [
+                {"id": "polymetall", "name": "МЗП", "hazard_class": "III",
+                 "distance_m": 10, "status": "unknown"},
+                {"id": "tec", "name": "ТЭЦ", "hazard_class": "III",
+                 "distance_m": 100, "status": "operating"},
+            ],
+            CFG,
+        )
+        self.assertEqual(entry["status"], "ok")
+        self.assertEqual(entry["name"], "ТЭЦ")
+        self.assertTrue(entry["unknown_status"])
 
     def test_max_industry_penalty(self):
         values = {"transport": 0, "industry": 1.0, "access": 0, "green": 0,
@@ -319,6 +397,38 @@ class TestIndustrySources(unittest.TestCase):
     def test_coordinates_are_verifiable_osm(self):
         for source in SOURCES:
             self.assertRegex(source["source"], r"OSM (node|way|relation) \d+")
+
+    def test_status_and_provenance_fields(self):
+        industry = CFG["v2"]["industry"]
+        allowed = (
+            set(industry["penalizing_statuses"])
+            | set(industry["unknown_statuses"])
+            | {"conservation", "outside_moscow"}
+        )
+        for source in SOURCES:
+            self.assertIn(source["status"], allowed, source["id"])
+            self.assertEqual(source["verified_at"], "2026-11-26", source["id"])
+            self.assertTrue(
+                source["source_url"].startswith("https://www.openstreetmap.org/"),
+                source["id"],
+            )
+            self.assertIn(source["osm_type"], {"node", "way", "relation"}, source["id"])
+            self.assertIsInstance(source["osm_id"], int, source["id"])
+
+    def test_verified_statuses_by_object(self):
+        by_id = {source["id"]: source for source in SOURCES}
+        self.assertEqual(by_id["msz-2"]["status"], "conservation")
+        self.assertEqual(by_id["msz-4"]["status"], "operating")
+        self.assertEqual(by_id["moskoks"]["status"], "outside_moscow")
+        self.assertEqual(by_id["polymetall"]["status"], "unknown")
+        self.assertEqual(by_id["polymetall"]["hazard_class"], "III")
+        self.assertEqual(by_id["mnpmz"]["status"], "operating")
+        self.assertEqual(by_id["kuryanovskaya"]["status"], "operating")
+
+    def test_only_operating_penalizes(self):
+        industry = CFG["v2"]["industry"]
+        self.assertEqual(industry["penalizing_statuses"], ["operating"])
+        self.assertEqual(industry["unknown_statuses"], ["unknown"])
 
 
 class TestIndex(unittest.TestCase):

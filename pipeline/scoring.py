@@ -130,7 +130,7 @@ WHERE ST_DWithin(b.geometry::geography, g.geometry::geography, %s)
 # максимального радиуса класса (1000 м для I). Сам полигон landuse=industrial
 # не штрафует — он только помечает дом как «промзона без классификации».
 V2_INDUSTRY = """
-SELECT b.osm_id, s.id, s.name, s.hazard_class,
+SELECT b.osm_id, s.id, s.name, s.hazard_class, s.status,
        ST_Distance(b.geometry::geography, s.geometry::geography)
 FROM {scope} b
 JOIN industry_sources s
@@ -402,11 +402,12 @@ def collect_v2_industry(cur, scope: str, scope_params: list, cfg: dict) -> dict:
         [*scope_params, pad, max_radius + 1],
     )
     per_building: dict[int, list[dict]] = {}
-    for osm_id, source_id, name, hazard_class, distance in cur.fetchall():
+    for osm_id, source_id, name, hazard_class, status, distance in cur.fetchall():
         per_building.setdefault(osm_id, []).append({
             "id": source_id,
             "name": name,
             "hazard_class": hazard_class,
+            "status": status,
             "distance_m": float(distance),
         })
     cur.execute(V2_INDUSTRY_INSIDE.format(scope=scope), scope_params)

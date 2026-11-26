@@ -79,10 +79,16 @@ def industry_pressure(
 ) -> dict:
     """Промышленный источник: value = max w_cls * (1 - d/R)^exp по объектам.
 
-    sources — [{"hazard_class": "I".."V", "distance_m": м, "name": ...}, ...].
+    sources — [{"hazard_class": "I".."V", "distance_m": м, "name": ...,
+    "status": "operating"|"conservation"|"outside_moscow"|"unknown"}, ...].
     Радиус и вес — по классу опасности из cfg["v2"]["industry"]. d >= R -> 0.
 
-    Неизвестный класс объекта -> value 0 + not_classified (никаких средних).
+    Штрафуют только status из penalizing_statuses (operating). Законсервированный
+    объект или объект вне Москвы -> вклад 0 без флага. status=unknown -> вклад 0
+    + флаг industry:unknown_status (видно в данных, но не штрафует).
+    Отсутствующий status трактуется как unknown: неполные данные не штрафуют.
+
+    Неизвестный класс работающего объекта -> value 0 + not_classified.
     Нет объектов, но дом внутри полигона landuse=industrial, который не
     классифицирован -> value 0 + not_classified (флаг ставит build_v2_block).
     Полигон сам по себе никогда не штрафует.
@@ -90,10 +96,18 @@ def industry_pressure(
     spec = _cfg(cfg)["industry"]
     classes = spec["classes"]
     exponent = dec(spec["exponent"])
+    penalizing = set(spec.get("penalizing_statuses") or ["operating"])
+    unknown_statuses = set(spec.get("unknown_statuses") or ["unknown"])
     best: dict | None = None
     nearest: dict | None = None
     unknown_class = False
+    has_unknown_status = False
     for source in sources:
+        status = source.get("status", "unknown")
+        if status not in penalizing:
+            if status in unknown_statuses:
+                has_unknown_status = True
+            continue
         hazard_class = source.get("hazard_class")
         distance = dec(source["distance_m"])
         if nearest is None or distance < dec(nearest["distance_m"]):
@@ -120,15 +134,30 @@ def industry_pressure(
                 "id": source.get("id"),
             }
     if best is not None:
-        return {"status": "ok", **best}
+        result = {"status": "ok", **best}
+        if has_unknown_status:
+            result["unknown_status"] = True
+        return result
     if unknown_class:
-        return {
+        result = {
             "value": 0.0,
             "status": "not_classified",
             "reason": "unknown_class",
             "distance_m": nearest["distance_m"] if nearest else None,
             "hazard_class": nearest["hazard_class"] if nearest else None,
             "name": nearest["name"] if nearest else None,
+        }
+        if has_unknown_status:
+            result["unknown_status"] = True
+        return result
+    if has_unknown_status:
+        return {
+            "value": 0.0,
+            "status": "unknown_status",
+            "unknown_status": True,
+            "distance_m": None,
+            "hazard_class": None,
+            "name": None,
         }
     if inside_unclassified_polygon:
         return {
@@ -382,6 +411,8 @@ def build_v2_block(
                 flags.append("access:not_classified")
         elif entry.get("status") == "not_classified":
             flags.append(f"{name}:not_classified")
+    if industry.get("unknown_status"):
+        flags.append("industry:unknown_status")
     return {
         "index": float(v2_index(values, cfg)),
         "factors": factors,

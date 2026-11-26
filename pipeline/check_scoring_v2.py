@@ -78,6 +78,7 @@ def main(argv: list[str] | None = None) -> int:
     factor_values = {"transport": [], "industry": [], "access": [], "green": [],
                      "home": [], "density": []}
     flags = {"transport:not_classified": 0, "industry:not_classified": 0,
+             "industry:unknown_status": 0,
              "access:not_classified": 0, "green:not_classified": 0,
              "home:not_classified": 0, "density:not_classified": 0}
     industry_penalized = 0

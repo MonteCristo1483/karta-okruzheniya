@@ -67,7 +67,7 @@
   },
   "v2": {
     "enabled": true,
-    "comment": "METHODOLOGY-V2, шесть факторов. value каждого фактора — 0..1; contribution = sign * value * weight / scale; index = clamp(index.base + сумма contribution, 0, 10). База 5 — нейтральная точка: неизвестный фактор даёт 0 штрафа/бонуса. Неизвестное = value 0 + флаг not_classified, не среднее. v7: промышленный источник по классу опасности (industry) вместо штрафа за landuse=industrial.",
+    "comment": "METHODOLOGY-V2, шесть факторов. value каждого фактора — 0..1; contribution = sign * value * weight / scale; index = clamp(index.base + сумма contribution, 0, 10). База 5 — нейтральная точка: неизвестный фактор даёт 0 штрафа/бонуса. Неизвестное = value 0 + флаг not_classified, не среднее. v7: промышленный источник по классу опасности (industry) вместо штрафа за landuse=industrial. v8 (26.11): статус источника — штрафует только operating; conservation/outside_moscow → 0; unknown → 0 + industry:unknown_status.",
     "scale": 10,
     "weights": {
       "transport": 30,
@@ -89,6 +89,9 @@
       "label": "промышленный источник",
       "comment": "СанПиН 2.2.1/2.1.1.1200-03, табл. 7.1.1: ориентировочные СЗЗ по классам I 1000 м, II 500 м, III 300 м, IV 100 м, V 50 м. value = max по объектам w_class * max(0, 1 - d/R)^exponent; d >= R -> 0. w_class — доля максимального штрафа фактора (вклад = 20/10 * value). Особые правила: ТЭЦ на газе >= 200 Гкал/ч — III, на угле/мазуте — II; мусоросжигание > 40 тыс. т/год — I; автосервис <= 5 постов — V; наземная парковка — IV/V. Источник объектов — config/industry_sources.json (ручной список, координаты из OSM). Неизвестный класс объекта -> not_classified. landuse=industrial сам по себе не штрафует: если дом внутри полигона промзоны, а классифицированного объекта в радиусе нет -> value 0 + флаг industry:not_classified.",
       "exponent": 1.5,
+      "comment_status": "Статус источника — поле status в config/industry_sources.json (operating | conservation | outside_moscow | unknown). Штрафуют только penalizing_statuses: законсервированный объект (МСЗ-2) и объект вне Москвы (Москокс) дают 0 без флага; unknown (МЗП — с 19.02.2026 технопарк) даёт 0 + флаг industry:unknown_status. Класс опасности у неработающих объектов сохранён историческим (I), вклад обнуляет статус.",
+      "penalizing_statuses": ["operating"],
+      "unknown_statuses": ["unknown"],
       "classes": {
         "I": { "weight": 1.0, "radius_m": 1000 },
         "II": { "weight": 0.8, "radius_m": 500 },
