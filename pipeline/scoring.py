@@ -29,15 +29,10 @@ from pathlib import Path
 import psycopg
 from psycopg.types.json import Jsonb
 
-import scoring_v2
-
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = ROOT / "config" / "scoring.json"
 from db import DB_DSN
 BATCH_SIZE = 5_000
-# Осторожный знаменатель для bbox-префильтра: на широте Москвы 1° долготы
-# ≈ 62 км, поэтому 60 км/° не даёт пропустить объект восточнее/западнее.
-METERS_PER_DEGREE = 60_000.0
 
 CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS scores (
@@ -91,60 +86,6 @@ CROSS JOIN LATERAL (
     ORDER BY z.geometry <-> b.geometry
     LIMIT 1
 ) z
-"""
-
-# --- v2 (docs/METHODOLOGY-V2.md) -------------------------------------------
-# Транспорт: ближайшее расстояние по каждому классу дороги в пределах его R.
-V2_TRANSPORT = """
-SELECT b.osm_id, l.class,
-       MIN(ST_Distance(b.geometry::geography, l.geometry::geography))
-FROM {scope} b
-JOIN linear l
-  ON l.kind = 'road'
- AND l.class = ANY(%s)
- AND l.geometry && ST_Expand(b.geometry, %s)
- AND ST_Distance(b.geometry::geography, l.geometry::geography) <= %s
-GROUP BY b.osm_id, l.class
-"""
-
-# Зелень: ближайший парк в радиусе (площадь в данных не хранится -> NULL).
-V2_GREEN = """
-SELECT b.osm_id,
-       MIN(ST_Distance(b.geometry::geography, p.geometry::geography))
-FROM {scope} b
-JOIN poi p
-  ON p.type = 'park'
- AND p.geometry && ST_Expand(b.geometry, %s)
- AND ST_Distance(b.geometry::geography, p.geometry::geography) <= %s
-GROUP BY b.osm_id
-"""
-
-# Дом: ближайшая запись реестра (год, серия, материал) в радиусе match_radius.
-V2_HOME = """
-SELECT b.osm_id, y.building_year, y.series, y.material
-FROM {scope} b
-LEFT JOIN LATERAL (
-    SELECT y.building_year, y.series, y.material
-    FROM building_years y
-    WHERE y.geom && ST_Expand(b.geometry, %s)
-      AND ST_DistanceSphere(ST_PointOnSurface(b.geometry), y.geom) <= %s
-    ORDER BY y.geom <-> b.geometry
-    LIMIT 1
-) y ON TRUE
-"""
-
-# Плотность: жилая площадь (footprint * этажность) соседей в радиусе.
-V2_DENSITY = """
-SELECT b.osm_id,
-       SUM(ST_Area(n.geometry::geography)
-           * COALESCE(GREATEST(1, ROUND(h.height / 3)), 1))
-FROM {scope} b
-JOIN buildings n
-  ON n.is_home
- AND n.geometry && ST_Expand(b.geometry, %s)
- AND ST_Distance(n.geometry::geography, b.geometry::geography) <= %s
-LEFT JOIN buildings_with_height h ON h.osm_id = n.osm_id
-GROUP BY b.osm_id
 """
 
 
@@ -292,59 +233,6 @@ def collect_penalties(cur, scope: str, scope_params: list, cfg: dict) -> tuple[d
     return penalties, skipped
 
 
-def collect_v2_transport(cur, scope: str, scope_params: list, cfg: dict) -> dict:
-    transport = cfg["v2"]["transport"]
-    classes = list(transport["classes"])
-    max_radius = max(dec(spec["radius_m"]) for spec in transport["classes"].values())
-    pad = float(max_radius) / METERS_PER_DEGREE * 1.2
-    cur.execute(
-        V2_TRANSPORT.format(scope=scope),
-        [*scope_params, classes, pad, float(max_radius) + 1],
-    )
-    per_building: dict[int, dict[str, float]] = {}
-    for osm_id, cls, distance in cur.fetchall():
-        per_building.setdefault(osm_id, {})[cls] = float(distance)
-    return {
-        osm_id: scoring_v2.best_transport_quality(per_class, cfg)
-        for osm_id, per_class in per_building.items()
-    }
-
-
-def collect_v2_green(cur, scope: str, scope_params: list, cfg: dict) -> dict:
-    green = cfg["v2"]["green"]
-    radius = float(green["radius_m"])
-    pad = radius / METERS_PER_DEGREE * 1.2
-    cur.execute(V2_GREEN.format(scope=scope), [*scope_params, pad, radius])
-    per_building: dict[int, dict] = {}
-    for osm_id, distance in cur.fetchall():
-        # Площадь парка в poi не хранится: честно помечаем unknown.
-        per_building[osm_id] = scoring_v2.green_quality(
-            [{"area_m2": None, "distance_m": float(distance)}], cfg
-        )
-    return per_building
-
-
-def collect_v2_home(cur, scope: str, scope_params: list, cfg: dict) -> dict:
-    radius = float(cfg["v2"]["home"]["match_radius_m"])
-    pad = radius / METERS_PER_DEGREE * 1.5
-    cur.execute(V2_HOME.format(scope=scope), [*scope_params, pad, radius])
-    return {
-        osm_id: scoring_v2.home_quality(year, series, material, cfg)
-        for osm_id, year, series, material in cur.fetchall()
-    }
-
-
-def collect_v2_density(cur, scope: str, scope_params: list, cfg: dict) -> dict:
-    radius = float(cfg["v2"]["density"]["radius_m"])
-    pad = radius / METERS_PER_DEGREE * 1.5
-    cur.execute(V2_DENSITY.format(scope=scope), [*scope_params, pad, radius])
-    per_building: dict[int, dict] = {}
-    for osm_id, floor_area in cur.fetchall():
-        density = scoring_v2.density_from_floor_area(floor_area, radius)
-        per_building[osm_id] = scoring_v2.density_pressure(density, cfg)
-    return per_building
-
-
 def run(scope: str, scope_params: list, cfg: dict) -> int:
     """Посчитать и сохранить индексы для скоупа (SQL-фрагмент FROM)."""
     base = dec(cfg["index"]["base"])
@@ -371,19 +259,6 @@ def run(scope: str, scope_params: list, cfg: dict) -> int:
         bonuses = collect_bonuses(cur, scope, scope_params, cfg, routes_map)
         penalties, skipped = collect_penalties(cur, scope, scope_params, cfg)
 
-        v2_enabled = bool(cfg.get("v2", {}).get("enabled", False))
-        if v2_enabled:
-            v2_transport = collect_v2_transport(cur, scope, scope_params, cfg)
-            v2_green = collect_v2_green(cur, scope, scope_params, cfg)
-            v2_home = collect_v2_home(cur, scope, scope_params, cfg)
-            v2_density = collect_v2_density(cur, scope, scope_params, cfg)
-
-        # Нет дороги в пределах максимального R — это известный ноль, не unknown.
-        empty_transport = {"value": 0.0, "status": "outside", "class": None}
-        empty_green = scoring_v2.green_quality([], cfg)
-        empty_home = scoring_v2.home_quality(None, None, None, cfg)
-        empty_density = scoring_v2.density_pressure(None, cfg)
-
         buffer: list[tuple] = []
         for osm_id in building_ids:
             breakdown: dict = {"base": float(base), "bonuses": {}, "penalties": {}}
@@ -397,17 +272,6 @@ def run(scope: str, scope_params: list, cfg: dict) -> int:
                 breakdown["penalties"][name] = entry
                 total += dec(entry["penalty"]) if entry else Decimal(0)
             index = finalize_index(total, cfg)
-            if v2_enabled:
-                v2_block = scoring_v2.build_v2_block(
-                    v2_transport.get(osm_id, empty_transport),
-                    v2_green.get(osm_id, empty_green),
-                    v2_home.get(osm_id, empty_home),
-                    v2_density.get(osm_id, empty_density),
-                    cfg,
-                )
-                breakdown["version"] = 2
-                breakdown["v2"] = v2_block
-                index = dec(v2_block["index"])
             breakdown["index"] = float(index)
             buffer.append((osm_id, index, Jsonb(breakdown)))
             if len(buffer) >= BATCH_SIZE:

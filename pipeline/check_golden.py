@@ -41,14 +41,8 @@ def load_buildings(data_dir: Path) -> dict[int, dict]:
 
 
 def component(breakdown: dict, kind: str, factor: str) -> dict | None:
-    if kind == "factor":
-        return ((breakdown.get("v2") or {}).get("factors") or {}).get(factor)
     bucket = "bonuses" if kind == "bonus" else "penalties"
     return (breakdown.get(bucket) or {}).get(factor)
-
-
-def flags(breakdown: dict) -> list[str]:
-    return list((breakdown.get("v2") or {}).get("flags") or [])
 
 
 def check(facts: list[dict], buildings: dict[int, dict]) -> dict:
@@ -60,35 +54,21 @@ def check(facts: list[dict], buildings: dict[int, dict]) -> dict:
             results.append({"fact": fact, "status": "critical",
                             "reason": "нет дома в выгрузке"})
             continue
-        breakdown = properties.get("breakdown") or {}
-        entry = component(breakdown, fact["type"], fact["factor"])
+        entry = component(properties.get("breakdown") or {},
+                          fact["type"], fact["factor"])
         if entry is None:
             results.append({"fact": fact, "status": "critical",
                             "reason": f"нет компонента {fact['factor']}"})
             continue
-        if fact["type"] == "factor":
-            value = entry.get("value")
-        else:
-            value = entry.get("bonus") if fact["type"] == "bonus" else entry.get("penalty")
+        value = entry.get("bonus") if fact["type"] == "bonus" else entry.get("penalty")
         if value is None:
             results.append({"fact": fact, "status": "critical",
                             "reason": "компонент без значения"})
             continue
 
-        required_flag = fact.get("flag")
-        if required_flag and required_flag not in flags(breakdown):
-            results.append({
-                "fact": fact, "status": "critical",
-                "reason": f"нет флага {required_flag}",
-            })
-            continue
-
         expected = fact["expect"]
         if expected == "positive":
-            if fact["type"] == "factor":
-                ok = value > EPS
-            else:
-                ok = value > EPS if fact["type"] == "bonus" else value < -EPS
+            ok = value > EPS if fact["type"] == "bonus" else value < -EPS
         else:
             ok = abs(value) <= EPS
         if not ok:
