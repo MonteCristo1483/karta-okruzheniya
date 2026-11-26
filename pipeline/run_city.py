@@ -315,7 +315,7 @@ def shards_done(d_id: int) -> bool:
     return True
 
 
-def stage_export(rows: list[dict], force: bool) -> list[dict]:
+def stage_export(rows: list[dict], force: bool, no_score: bool = False) -> list[dict]:
     errors: list[dict] = []
     for row in rows:
         d_id = row["id"]
@@ -323,7 +323,10 @@ def stage_export(rows: list[dict], force: bool) -> list[dict]:
             print(f"  {d_id} {row['name']}: готово, пропуск")
             continue
         started = time.monotonic()
-        rc = run_script("build_district.py", "--district", str(d_id), "--no-tiles")
+        args = ["--district", str(d_id), "--no-tiles"]
+        if no_score:
+            args.append("--no-score")
+        rc = run_script("build_district.py", *args)
         status = "ok" if rc == 0 else f"ошибка {rc}"
         print(f"  {d_id} {row['name']}: {status}, {time.monotonic() - started:.0f} с")
         if rc != 0:
@@ -410,29 +413,11 @@ def stage_tiles(force: bool) -> list[dict]:
     overlays_out = ROOT / "data" / "overlays.pmtiles"
 
     if not buildings_out.exists() or force:
-        features: dict[int, dict] = {}
-        for summary_path in sorted(DISTRICTS_DIR.glob("*/summary.json")):
-            if not summary_path.parent.name.isdigit():
-                continue  # рабочие копии вроде 1275551_fix — не районы
-            path = summary_path.parent / "buildings.geojson"
-            if not path.exists():
-                continue
-            payload = json.loads(path.read_text(encoding="utf-8"))
-            for feature in payload["features"]:
-                # Дом на границе районов есть в двух geojson — в тайлы один раз.
-                features[int(feature["properties"]["id"])] = feature
-        if not features:
-            errors.append({"stage": "tiles", "error": "нет buildings.geojson в data/districts"})
-            return errors
-        print(f"  buildings.pmtiles: {len(features):,} зданий (уникальных id)")
-        staged = CITY_DIR / ".buildings.ndjson"
-        try:
-            build_tiles.write_ndjson(list(features.values()), staged)
-            build_tiles.run_tippecanoe(staged, buildings_out)
-        finally:
-            staged.unlink(missing_ok=True)
+        print("  buildings.pmtiles: сборка")
+        features = build_tiles.build_city_buildings(buildings_out)
         print(
-            f"  buildings.pmtiles: {human(buildings_out.stat().st_size)}, "
+            f"  buildings.pmtiles: {len(features):,} зданий, "
+            f"{human(buildings_out.stat().st_size)}, "
             f"{build_tiles.pmtiles_stats(buildings_out)['tiles']:,} тайлов"
         )
     else:
@@ -513,6 +498,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--districts", default="all", help="all или osm_id через запятую")
     parser.add_argument("--dry-run", action="store_true", help="только план, без записи")
     parser.add_argument("--force", action="store_true", help="пересчитать готовое")
+    parser.add_argument(
+        "--no-score",
+        action="store_true",
+        help="экспорт без пересчёта scores (берём текущие значения из БД)",
+    )
     args = parser.parse_args(argv)
 
     os.chdir(ROOT)  # относительные пути PBF и pyosmium: кириллица в абсолютном пути
@@ -543,7 +533,7 @@ def main(argv: list[str] | None = None) -> int:
         if stage == "boundaries":
             errors += stage_boundaries()
         elif stage == "export":
-            errors += stage_export(rows, args.force)
+            errors += stage_export(rows, args.force, args.no_score)
         elif stage == "routes":
             errors += stage_routes(rows)
         elif stage == "iso":

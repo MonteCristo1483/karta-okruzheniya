@@ -72,6 +72,11 @@ def main() -> int:
     parser.add_argument("--district", required=True, help="osm_id района или имя")
     parser.add_argument("--out", type=Path, default=None, help="каталог результата")
     parser.add_argument("--no-tiles", action="store_true", help="не собирать PMTiles")
+    parser.add_argument(
+        "--no-score",
+        action="store_true",
+        help="не пересчитывать scores, выгрузить текущие значения из БД",
+    )
     args = parser.parse_args()
 
     started = time.perf_counter()
@@ -89,10 +94,13 @@ def main() -> int:
 
     # Балл — только жилым. district_buildings возвращает все здания района,
     # поэтому фильтр is_home ставим в подзапросе скоупа.
-    homes_scored = scoring.run(
-        "(SELECT * FROM district_buildings(%s) WHERE is_home)", [d_id], cfg
-    )
-    print(f"Жилых со баллом: {homes_scored:,}")
+    if args.no_score:
+        print("Скоринг: пропуск (--no-score), берём текущие scores из БД")
+    else:
+        homes_scored = scoring.run(
+            "(SELECT * FROM district_buildings(%s) WHERE is_home)", [d_id], cfg
+        )
+        print(f"Жилых со баллом: {homes_scored:,}")
 
     with psycopg.connect(DB_DSN) as conn, conn.cursor() as cur:
         data = export.collect(

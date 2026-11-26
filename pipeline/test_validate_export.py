@@ -65,6 +65,32 @@ def building(building_id: int = 1, index: float = 5.0, **overrides) -> dict:
     return {"type": "Feature", "properties": props, "geometry": copy.deepcopy(GEOMETRY)}
 
 
+def v2_breakdown(index: float = 5.0, values: dict | None = None) -> dict:
+    """Breakdown в формате v2: legacy-ключи + breakdown.v2 с факторами."""
+    weights = CFG["v2"]["weights"]
+    signs = CFG["v2"]["signs"]
+    scale = float(CFG["v2"]["scale"])
+    values = values or {}
+    factors = {}
+    for name, weight in weights.items():
+        value = float(values.get(name, 0.0))
+        sign = -1.0 if signs[name] == "penalty" else 1.0
+        factors[name] = {
+            "value": value,
+            "weight": weight,
+            "sign": signs[name],
+            "contribution": round(sign * float(weight) * value / scale, 3),
+        }
+    return {
+        "version": 2,
+        "base": CFG["index"]["base"],
+        "index": index,
+        "bonuses": zero_bonus(),
+        "penalties": zero_penalty(),
+        "v2": {"index": index, "factors": factors, "flags": []},
+    }
+
+
 def poi(poi_type: str = "park", name: str = "Парк", subtype: str | None = None) -> dict:
     return {
         "type": "Feature",
@@ -329,6 +355,52 @@ class TestCriticalErrors(ValidatorTestCase):
         }), encoding="utf-8")
         report = validate_export(data, CONFIG_PATH)
         self.assertIn("negative_route", self.codes(report, "critical"))
+
+
+class TestV2Breakdown(ValidatorTestCase):
+    def test_v2_index_from_factors_is_ok(self):
+        # access 0.5 × вес 18 / 10 = +0.9 → 5.9; legacy bonuses/penalties не в сумме.
+        bn = building(index=5.9, breakdown=v2_breakdown(5.9, {"access": 0.5}))
+        report = self.run_validator(buildings=[bn])
+        self.assertEqual(report.critical(), [])
+
+    def test_v2_penalty_factor_lowers_index(self):
+        # wind 1.0 × вес 10 / 10 = −1.0 → 4.0.
+        bn = building(index=4.0, breakdown=v2_breakdown(4.0, {"wind": 1.0}))
+        report = self.run_validator(buildings=[bn])
+        self.assertEqual(report.critical(), [])
+
+    def test_v2_legacy_keys_do_not_drive_index(self):
+        # Старое правило «base+bonuses+penalties» дало бы 5.0 — это не ошибка для v2.
+        breakdown = v2_breakdown(5.9, {"access": 0.5})
+        breakdown["bonuses"]["parks"].update(minutes=1.0, distance_m=50.0,
+                                             multiplier=1.0, bonus=1.0)
+        bn = building(index=5.9, breakdown=breakdown)
+        report = self.run_validator(buildings=[bn])
+        self.assertEqual(report.critical(), [])
+
+    def test_v2_index_mismatch_is_critical(self):
+        bn = building(index=5.0, breakdown=v2_breakdown(5.0, {"access": 0.5}))
+        report = self.run_validator(buildings=[bn])
+        self.assertIn("sum_mismatch", self.codes(report, "critical"))
+
+    def test_v2_bad_contribution_is_critical(self):
+        breakdown = v2_breakdown(5.9, {"access": 0.5})
+        breakdown["v2"]["factors"]["access"]["contribution"] = 0.0
+        report = self.run_validator(buildings=[building(index=5.9, breakdown=breakdown)])
+        self.assertIn("v2_contribution_mismatch", self.codes(report, "critical"))
+
+    def test_v2_weight_mismatch_is_critical(self):
+        breakdown = v2_breakdown(5.9, {"access": 0.5})
+        breakdown["v2"]["factors"]["access"]["weight"] = 1.0
+        report = self.run_validator(buildings=[building(index=5.9, breakdown=breakdown)])
+        self.assertIn("v2_weight_mismatch", self.codes(report, "critical"))
+
+    def test_v2_missing_factor_is_critical(self):
+        breakdown = v2_breakdown(5.9, {"access": 0.5})
+        del breakdown["v2"]["factors"]["wind"]
+        report = self.run_validator(buildings=[building(index=5.9, breakdown=breakdown)])
+        self.assertIn("missing_v2_factor", self.codes(report, "critical"))
 
 
 class TestWarnings(ValidatorTestCase):

@@ -35,6 +35,7 @@ DATA_DIR = ROOT / "web" / "public" / "data"
 BUILDINGS = DATA_DIR / "presnya_buildings.geojson"
 TILES_DIR = DATA_DIR / "tiles"
 INDEX = DATA_DIR / "buildings-index.json"
+DISTRICTS_DIR = ROOT / "data" / "districts"
 
 DOCKER_IMAGE = "karta-tippecanoe:2.79.0"
 TIPPECANOE_VERSION = "2.79.0"
@@ -44,15 +45,36 @@ LAYER = "buildings"
 # objects, so it travels as a JSON string.
 TILE_ATTRS = ("id", "index", "height", "address", "year")
 
+# Compact v2 breakdown for tiles (docs/METHODOLOGY-V2.md):
+#   {v: 2, i: 7.8, f: [transport, industry, access, green, home, density, wind],
+#    fl: ["h:nc"]}   # fl only when non-empty
+# `f` values are 0..1 rounded to 2 decimals in the fixed FACTOR_ORDER below.
+# Legacy base/bonuses/penalties are not written to tiles at all.
+FACTOR_ORDER = ("transport", "industry", "access", "green", "home", "density", "wind")
+BREAKDOWN_MIN_ZOOM = 14
+
+# Flags become short codes: "<factor letter>[:<type>]:<status>"
+# e.g. "home:not_classified" -> "h:nc", "access:metro:not_classified" -> "a:m:nc".
+FLAG_FACTOR_LETTERS = {
+    "transport": "t", "industry": "i", "access": "a", "green": "g",
+    "home": "h", "density": "d", "wind": "w",
+}
+FLAG_TYPES = {
+    "metro": "m", "school": "sc", "grocery": "gr",
+    "polyclinic": "pc", "kindergarten": "kd",
+}
+FLAG_STATUS = {"not_classified": "nc", "unknown_status": "us"}
+
 # Tiles-B: единый feature-filter (tippecanoe применяет к слою только его).
-# TILES-SEAMLESS: maxzoom теперь z14, поэтому breakdown пишем с z13, а дома
-# ниже 9 м прореживаем только на настоящем обзоре (z9-12): на z13-14 нужны
-# все 100% зданий, иначе при перелёте с z13 на z14 из пустоты выскакивают
-# мелкие дома и кварталы выглядят «плешивыми».
+# TILES-SEAMLESS: maxzoom теперь z14. Breakdown нужен только на z14: выбор
+# дома идёт на z14.1+ и берёт данные из z14-тайла, а z13 работает по
+# overzoom, поэтому атрибут там не дублируем. Дома ниже 9 м прореживаем
+# только на обзоре (z9-12): на z13-14 нужны все 100% зданий, иначе при
+# перелёте с z13 на z14 из пустоты выскакивают мелкие дома.
 TILE_FILTER = json.dumps({
     "*": [
         "all",
-        ["attribute-filter", "breakdown", [">=", "$zoom", 13]],
+        ["attribute-filter", "breakdown", [">=", "$zoom", BREAKDOWN_MIN_ZOOM]],
         ["any", [">=", "$zoom", 13], [">=", "height", 9]],
     ]
 }, separators=(",", ":"))
@@ -207,12 +229,56 @@ def build_index(features: list[dict]) -> list[list]:
 # tippecanoe
 # --------------------------------------------------------------------------- #
 
+def short_flag(flag: str) -> str:
+    """Turn a v2 flag name into its tile code (see FLAG_* tables)."""
+    parts = [part for part in flag.split(":") if part]
+    if not parts:
+        return ""
+    out = [FLAG_FACTOR_LETTERS.get(parts[0], parts[0][:1])]
+    for index, part in enumerate(parts[1:], start=1):
+        last = index == len(parts) - 1
+        table = FLAG_STATUS if last else FLAG_TYPES
+        out.append(table.get(part, part[:2]))
+    return ":".join(out)
+
+
+def compact_breakdown(breakdown: dict | None) -> dict | None:
+    """v2 breakdown -> compact tile schema {v,i,f,fl}.
+
+    Returns None when the source has no v2 block: the legacy buckets are no
+    longer mirrored into tiles.
+    """
+    if not breakdown:
+        return None
+    v2 = breakdown.get("v2")
+    if not isinstance(v2, dict):
+        return None
+    factors = v2.get("factors") or {}
+    values = []
+    for name in FACTOR_ORDER:
+        value = (factors.get(name) or {}).get("value")
+        values.append(None if value is None else round(float(value), 2))
+    index = v2.get("index")
+    if index is None:
+        index = breakdown.get("index")
+    out: dict = {
+        "v": 2,
+        "i": None if index is None else round(float(index), 1),
+        "f": values,
+    }
+    flags = [short_flag(item) for item in (v2.get("flags") or [])]
+    flags = [item for item in flags if item]
+    if flags:
+        out["fl"] = flags
+    return out
+
+
 def write_ndjson(features: list[dict], path: Path, with_breakdown: bool = True) -> int:
     with path.open("w", encoding="utf-8", newline="\n") as fh:
         for feature in features:
             props = feature["properties"]
             out = {key: props.get(key) for key in TILE_ATTRS}
-            breakdown = props.get("breakdown")
+            breakdown = compact_breakdown(props.get("breakdown"))
             if with_breakdown and breakdown is not None:
                 out["breakdown"] = json.dumps(
                     breakdown, ensure_ascii=False, separators=(",", ":")
@@ -250,10 +316,11 @@ def run_tippecanoe(ndjson: Path, out: Path) -> None:
         # добавляет прореживание по плотности; оба срабатывают только в
         # тайлах сверх лимита. -r1 обязателен: иначе фоновое прореживание
         # по -r2.5 режет ~60% домов даже на z13-z14 (502 КБ → 6 КБ).
-        # TILES-SEAMLESS: лимит поднят 220000 → 450000, чтобы на z12-14
-        # --drop-densest-as-needed не выбивал дома в плотных кварталах центра.
+        # TILES-B2: лимит 350000 — целевой максимум тайла. Срабатывает только
+        # на z9-10 (обзор): z13/z14 после переезда breakdown на z14 далеки от
+        # лимита, поэтому плотные кварталы центра не прореживаются.
         "--drop-smallest-as-needed", "--drop-densest-as-needed", "-r1",
-        "--maximum-tile-bytes", "450000",
+        "--maximum-tile-bytes", "350000",
         "--no-tile-stats",
         "-l", LAYER,
         "--use-attribute-for-id=id",
@@ -369,11 +436,15 @@ def pmtiles_stats(path: Path) -> dict:
 def control_ids(features: list[dict]) -> list[int]:
     picks = [REFERENCE_ID]
     with_height = [f for f in features if f["properties"].get("height") is not None]
-    picks.append(max(with_height, key=lambda f: f["properties"]["height"])["properties"]["id"])
-    picks.append(min(features, key=lambda f: f["properties"]["index"])["properties"]["id"])
-    picks.append(max(features, key=lambda f: f["properties"]["index"])["properties"]["id"])
+    if with_height:
+        picks.append(max(with_height, key=lambda f: f["properties"]["height"])["properties"]["id"])
+    scored = [f for f in features if f["properties"].get("index") is not None]
+    if scored:
+        picks.append(min(scored, key=lambda f: f["properties"]["index"])["properties"]["id"])
+        picks.append(max(scored, key=lambda f: f["properties"]["index"])["properties"]["id"])
     with_year = [f for f in features if f["properties"].get("year") is not None]
-    picks.append(min(with_year, key=lambda f: f["properties"]["year"])["properties"]["id"])
+    if with_year:
+        picks.append(min(with_year, key=lambda f: f["properties"]["year"])["properties"]["id"])
 
     # keep order, drop duplicates
     seen, ordered = set(), []
@@ -452,9 +523,10 @@ def verify(pmtiles: Path, features: list[dict],
                 elif a != b:
                     diffs.append(f"{key}: {a!r} != {b!r}")
             breakdown = got.get("breakdown")
-            if check_breakdown and src.get("breakdown") is not None:
+            expected = compact_breakdown(src.get("breakdown"))
+            if check_breakdown and expected is not None:
                 try:
-                    if json.loads(breakdown) != src["breakdown"]:
+                    if json.loads(breakdown) != expected:
                         diffs.append("breakdown: JSON differs")
                 except (TypeError, ValueError):
                     diffs.append("breakdown: not valid JSON")
@@ -472,6 +544,40 @@ def verify(pmtiles: Path, features: list[dict],
 
 
 # --------------------------------------------------------------------------- #
+# city tiles (data/buildings.pmtiles)
+# --------------------------------------------------------------------------- #
+
+def load_city_features() -> list[dict]:
+    """All district buildings, one feature per id (border houses live twice)."""
+    features: dict[int, dict] = {}
+    for summary_path in sorted(DISTRICTS_DIR.glob("*/summary.json")):
+        if not summary_path.parent.name.isdigit():
+            continue  # рабочие копии вроде 1275551_fix — не районы
+        path = summary_path.parent / "buildings.geojson"
+        if not path.exists():
+            continue
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        for feature in payload["features"]:
+            features[int(feature["properties"]["id"])] = feature
+    return list(features.values())
+
+
+def build_city_buildings(out: Path) -> list[dict]:
+    """Rebuild data/buildings.pmtiles from data/districts/*/buildings.geojson."""
+    features = load_city_features()
+    if not features:
+        raise SystemExit(f"нет buildings.geojson в {DISTRICTS_DIR}")
+    staged = out.parent / ".buildings.ndjson"
+    staged.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        write_ndjson(features, staged)
+        run_tippecanoe(staged, out)
+    finally:
+        staged.unlink(missing_ok=True)
+    return features
+
+
+# --------------------------------------------------------------------------- #
 # main
 # --------------------------------------------------------------------------- #
 
@@ -482,6 +588,10 @@ def human_size(size: int) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--geojson", type=Path, default=BUILDINGS)
+    parser.add_argument(
+        "--city", action="store_true",
+        help="rebuild data/buildings.pmtiles from data/districts/*/buildings.geojson",
+    )
     parser.add_argument("--no-verify", action="store_true")
     parser.add_argument(
         "--without-breakdown", action="store_true",
@@ -490,6 +600,28 @@ def main() -> int:
     args = parser.parse_args()
 
     started = time.perf_counter()
+    if args.city:
+        out = ROOT / "data" / "buildings.pmtiles"
+        features = build_city_buildings(out)
+        pmtiles_bytes = out.stat().st_size
+        stats = pmtiles_stats(out)
+        print(f"city  : {len(features):,} buildings -> {out.relative_to(ROOT)}")
+        print(f"  size : {human_size(pmtiles_bytes)} ({pmtiles_bytes:,} B)")
+        print(f"  tiles: {stats['tiles']:,} (z{stats['min_zoom']}-z{stats['max_zoom']})")
+        for zoom, item in stats["per_zoom"].items():
+            print(f"  z{zoom:<3}: {item['count']:>5} tiles, "
+                  f"{human_size(item['bytes'])}, max {item['max']:,} B")
+        ok = True
+        if not args.no_verify:
+            rows, summary = verify(out, features)
+            ok = summary["ok"]
+            print(f"  verify: {'OK' if ok else 'FAIL'} "
+                  f"({summary['features_in_tiles']:,} features decoded)")
+            for row in rows:
+                if not row["ok"]:
+                    print(f"    FAIL {row['id']}: {', '.join(row['diffs'])}")
+        return 0 if ok else 1
+
     source = args.geojson.resolve()
     if not source.exists():
         raise SystemExit(f"missing input: {source} (copy it from karta-web, see docstring)")

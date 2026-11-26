@@ -1,0 +1,60 @@
+{
+  "meta": {
+    "title": "Роза ветров Москвы, 16 румбов",
+    "source": "ERA5 (ECMWF Reanalysis v5) via Open-Meteo Archive API, hourly wind_direction_10m / wind_speed_10m",
+    "source_url": "https://archive-api.open-meteo.com/v1/archive",
+    "point": {
+      "lat": 55.7558,
+      "lon": 37.6173,
+      "name": "Москва (центр)"
+    },
+    "grid_point": {
+      "lat": 55.782074,
+      "lon": 37.576374,
+      "elevation_m": 140.0
+    },
+    "period": "2015-01-01 .. 2025-12-31",
+    "fetched_at": "2026-11-26",
+    "timezone": "Europe/Moscow",
+    "method": "Доля часов по 16 секторам по 22.5°, сектор центрирован на румбе (N = 348.75..11.25°). Направление — метеорологическое (откуда дует). Часы со скоростью < 0.5 м/с (штиль) исключены.",
+    "hours_used": 95893,
+    "hours_calm": 539,
+    "license": "ERA5: Copernicus Climate Change Service (C3S), CC BY 4.0; Open-Meteo: CC BY 4.0"
+  },
+  "order": [
+    "N",
+    "NNE",
+    "NE",
+    "ENE",
+    "E",
+    "ESE",
+    "SE",
+    "SSE",
+    "S",
+    "SSW",
+    "SW",
+    "WSW",
+    "W",
+    "WNW",
+    "NW",
+    "NNW"
+  ],
+  "shares": {
+    "N": 0.051088,
+    "NNE": 0.03994,
+    "NE": 0.03823,
+    "ENE": 0.036468,
+    "E": 0.038053,
+    "ESE": 0.044289,
+    "SE": 0.059222,
+    "SSE": 0.066574,
+    "S": 0.073384,
+    "SSW": 0.069943,
+    "SW": 0.086284,
+    "WSW": 0.09351,
+    "W": 0.094001,
+    "WNW": 0.076074,
+    "NW": 0.073603,
+    "NNW": 0.059337
+  }
+}
