@@ -62,6 +62,9 @@ def main(argv: list[str] | None = None) -> int:
         green = scoring.collect_v2_green(cur, scope, [ids], cfg)
         home = scoring.collect_v2_home(cur, scope, [ids], cfg)
         density = scoring.collect_v2_density(cur, scope, [ids], cfg)
+        wind = scoring.collect_v2_wind(
+            cur, scope, [ids], cfg, scoring.load_wind_rose()
+        )
 
     empty_transport = {"value": 0.0, "status": "outside", "class": None}
     empty_industry = scoring_v2.industry_pressure([], cfg)
@@ -71,18 +74,22 @@ def main(argv: list[str] | None = None) -> int:
     empty_green = scoring_v2.green_quality([], cfg)
     empty_home = scoring_v2.home_quality(None, None, None, cfg)
     empty_density = scoring_v2.density_pressure(None, cfg)
+    empty_wind = scoring_v2.wind_pressure([], scoring.load_wind_rose(), cfg)
 
     after: list[float] = []
     without_industry: list[float] = []
     deltas: list[float] = []
     factor_values = {"transport": [], "industry": [], "access": [], "green": [],
-                     "home": [], "density": []}
+                     "home": [], "density": [], "wind": []}
     flags = {"transport:not_classified": 0, "industry:not_classified": 0,
              "industry:unknown_status": 0,
              "access:not_classified": 0, "green:not_classified": 0,
-             "home:not_classified": 0, "density:not_classified": 0}
+             "home:not_classified": 0, "density:not_classified": 0,
+             "wind:not_classified": 0}
     industry_penalized = 0
+    wind_positive = 0
     for osm_id in ids:
+        wind_entry = wind.get(osm_id, empty_wind)
         block = scoring_v2.build_v2_block(
             transport.get(osm_id, empty_transport),
             access.get(osm_id, empty_access),
@@ -91,6 +98,7 @@ def main(argv: list[str] | None = None) -> int:
             density.get(osm_id, empty_density),
             cfg,
             industry=industry.get(osm_id, empty_industry),
+            wind=wind_entry,
         )
         reference = scoring_v2.build_v2_block(
             transport.get(osm_id, empty_transport),
@@ -99,6 +107,7 @@ def main(argv: list[str] | None = None) -> int:
             home.get(osm_id, empty_home),
             density.get(osm_id, empty_density),
             cfg,
+            wind=wind_entry,
         )
         value = float(block["index"])
         after.append(value)
@@ -106,6 +115,8 @@ def main(argv: list[str] | None = None) -> int:
         deltas.append(abs(value - before[osm_id]))
         if block["factors"]["industry"]["value"] > 0:
             industry_penalized += 1
+        if block["factors"]["wind"]["value"] > 0:
+            wind_positive += 1
         for name, entry in block["factors"].items():
             factor_values[name].append(float(entry["value"]))
         for flag in block["flags"]:
@@ -127,9 +138,11 @@ def main(argv: list[str] | None = None) -> int:
     legacy_share = sum(1 for flag in legacy_industrial.values() if flag) / len(ids)
     print(f"штраф v1 landuse=industrial: {legacy_share * 100:.1f}% домов")
     print(f"v2 industry value > 0: {industry_penalized / len(ids) * 100:.1f}% домов")
+    print(f"v2 wind value > 0: {wind_positive / len(ids) * 100:.1f}% домов")
     moved = sum(1 for delta in deltas if delta > 1.0)
     print(f"delta v1->v2 > 1 пункта: {moved:,} ({moved / len(ids) * 100:.1f}%)")
     print(f"медиана |delta|: {statistics.median(deltas):.2f}")
+    print(f"max |delta|: {max(deltas):.2f}; delta != 0: {sum(1 for d in deltas if d > 1e-9):,}")
     print("среднее value: " + ", ".join(
         f"{name} {statistics.mean(values):.3f}"
         for name, values in factor_values.items()))

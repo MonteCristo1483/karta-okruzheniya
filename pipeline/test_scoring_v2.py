@@ -9,7 +9,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from scoring_v2 import (  # noqa: E402
+    SECTOR_LABELS,
     access_quality,
+    bearing_between,
     best_transport_quality,
     build_v2_block,
     dec,
@@ -20,10 +22,15 @@ from scoring_v2 import (  # noqa: E402
     industry_pressure,
     transport_quality_cfg,
     v2_index,
+    wind_pressure,
+    wind_sector,
 )
 
 CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "scoring.json"
 CFG = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+ROSE_PATH = Path(__file__).resolve().parent.parent / "config" / "wind_rose.json"
+ROSE = json.loads(ROSE_PATH.read_text(encoding="utf-8"))
+UNIFORM_ROSE = {"shares": {label: 1.0 / 16 for label in SECTOR_LABELS}}
 
 
 class TestWeights(unittest.TestCase):
@@ -33,8 +40,15 @@ class TestWeights(unittest.TestCase):
     def test_all_factors_present(self):
         self.assertEqual(
             set(CFG["v2"]["weights"]),
-            {"transport", "industry", "access", "green", "home", "density"},
+            {"transport", "industry", "access", "green", "home", "density", "wind"},
         )
+
+    def test_wind_weight_is_10_and_others_scaled(self):
+        weights = CFG["v2"]["weights"]
+        self.assertEqual(weights["wind"], 10)
+        for name, old in {"transport": 30, "industry": 20, "access": 20,
+                          "green": 15, "home": 10, "density": 5}.items():
+            self.assertAlmostEqual(weights[name], old * 0.9, places=6, msg=name)
 
     def test_access_type_weights_sum_to_one(self):
         weights = [
@@ -368,7 +382,7 @@ class TestIndustry(unittest.TestCase):
     def test_max_industry_penalty(self):
         values = {"transport": 0, "industry": 1.0, "access": 0, "green": 0,
                   "home": 0, "density": 0}
-        self.assertEqual(v2_index(values, CFG), dec("3.0"))
+        self.assertEqual(v2_index(values, CFG), dec("3.2"))
 
 
 SOURCES_PATH = Path(__file__).resolve().parent.parent / "config" / "industry_sources.json"
@@ -431,6 +445,111 @@ class TestIndustrySources(unittest.TestCase):
         self.assertEqual(industry["unknown_statuses"], ["unknown"])
 
 
+class TestWind(unittest.TestCase):
+    def test_rose_has_16_sectors_and_sums_to_one(self):
+        self.assertEqual(len(ROSE["shares"]), 16)
+        self.assertEqual(set(ROSE["shares"]), set(SECTOR_LABELS))
+        self.assertAlmostEqual(sum(ROSE["shares"].values()), 1.0, places=5)
+
+    def test_top_three_sectors_are_westerly(self):
+        top = sorted(ROSE["shares"].items(), key=lambda item: item[1], reverse=True)[:3]
+        self.assertEqual({name for name, _ in top}, {"W", "WSW", "SW"})
+
+    def test_sector_boundaries(self):
+        self.assertEqual(wind_sector(0), "N")
+        self.assertEqual(wind_sector(359.9), "N")
+        self.assertEqual(wind_sector(348.75), "N")
+        self.assertEqual(wind_sector(348.74), "NNW")
+        self.assertEqual(wind_sector(11.24), "N")
+        self.assertEqual(wind_sector(11.25), "NNE")
+        self.assertEqual(wind_sector(22.5), "NNE")
+        self.assertEqual(wind_sector(33.75), "NE")
+        self.assertEqual(wind_sector(45), "NE")
+        self.assertEqual(wind_sector(90), "E")
+        self.assertEqual(wind_sector(180), "S")
+        self.assertEqual(wind_sector(270), "W")
+
+    def test_bearing_between_cardinal_directions(self):
+        self.assertAlmostEqual(bearing_between(0, 0, 1, 0), 0.0, places=3)
+        self.assertAlmostEqual(bearing_between(0, 0, 0, 1), 90.0, places=3)
+        self.assertAlmostEqual(bearing_between(1, 0, 0, 0), 180.0, places=3)
+        self.assertAlmostEqual(bearing_between(0, 1, 0, 0), 270.0, places=3)
+
+    def source(self, bearing_deg, distance_m=0.0, hazard_class="I",
+               status="operating"):
+        return {
+            "id": "x", "name": "тест", "hazard_class": hazard_class,
+            "status": status, "distance_m": distance_m,
+            "bearing_deg": bearing_deg,
+        }
+
+    def test_source_to_north_uses_southerly_wind(self):
+        # Дом к северу от источника: выброс несёт южный ветер (180°).
+        entry = wind_pressure([self.source(0)], UNIFORM_ROSE, CFG)
+        self.assertEqual(entry["sector"], "S")
+        self.assertEqual(entry["value"], 1.0)
+
+    def test_half_radius_uses_power_1_5(self):
+        entry = wind_pressure([self.source(0, 500)], UNIFORM_ROSE, CFG)
+        self.assertAlmostEqual(entry["value"], 0.5 ** 1.5, places=4)
+
+    def test_wind_value_matches_rose_share(self):
+        entry = wind_pressure([self.source(180)], ROSE, CFG)
+        # bearing 180 -> ветер с севера; нормировка на максимум румба.
+        expected = ROSE["shares"]["N"] / max(ROSE["shares"].values())
+        self.assertAlmostEqual(entry["value"], expected, places=4)
+
+    def test_no_sources_is_exactly_zero(self):
+        entry = wind_pressure([], ROSE, CFG)
+        self.assertEqual(entry["value"], 0)
+        self.assertEqual(entry["status"], "known_zero")
+        self.assertEqual(entry["sources"], 0)
+
+    def test_non_operating_source_does_not_penalize(self):
+        entry = wind_pressure(
+            [self.source(0, status="conservation")], ROSE, CFG
+        )
+        self.assertEqual(entry["value"], 0)
+        self.assertEqual(entry["status"], "known_zero")
+
+    def test_source_outside_radius_is_zero(self):
+        entry = wind_pressure([self.source(0, 1000)], ROSE, CFG)
+        self.assertEqual(entry["value"], 0)
+        self.assertEqual(entry["status"], "known_zero")
+
+    def test_zero_rose_with_source_is_not_classified(self):
+        zero = {"shares": {label: 0.0 for label in SECTOR_LABELS}}
+        entry = wind_pressure([self.source(0)], zero, CFG)
+        self.assertEqual(entry["value"], 0)
+        self.assertEqual(entry["status"], "not_classified")
+        self.assertEqual(entry["reason"], "empty_wind_rose")
+
+    def test_multiple_sources_sum_and_clamp(self):
+        sources = [self.source(0), self.source(90), self.source(180)]
+        entry = wind_pressure(sources, UNIFORM_ROSE, CFG)
+        self.assertEqual(entry["sources"], 3)
+        self.assertEqual(entry["value"], 1.0)
+
+    def test_max_wind_penalty(self):
+        values = {"transport": 0, "industry": 0, "access": 0, "green": 0,
+                  "home": 0, "density": 0, "wind": 1.0}
+        self.assertEqual(v2_index(values, CFG), dec("4.0"))
+
+    def test_no_sources_keeps_neutral_index(self):
+        block = build_v2_block(
+            {"value": 0.0, "status": "outside", "class": None},
+            {"value": 0.0, "status": "known_zero", "types": {}, "missing": []},
+            {"value": 0.0, "status": "known_zero"},
+            {"value": 0.0, "status": "ok"},
+            {"value": 0.0, "status": "ok"},
+            CFG,
+            wind=wind_pressure([], ROSE, CFG),
+        )
+        self.assertEqual(block["factors"]["wind"]["value"], 0.0)
+        self.assertEqual(block["index"], CFG["index"]["base"])
+        self.assertNotIn("wind:not_classified", block["flags"])
+
+
 class TestIndex(unittest.TestCase):
     def test_all_unknown_stays_neutral(self):
         values = {name: 0.0 for name in CFG["v2"]["weights"]}
@@ -439,22 +558,22 @@ class TestIndex(unittest.TestCase):
     def test_best_quality(self):
         values = {"transport": 0.0, "industry": 0.0, "access": 0.0,
                   "green": 1.0, "home": 1.0, "density": 0.0}
-        self.assertEqual(v2_index(values, CFG), dec("7.5"))
+        self.assertEqual(v2_index(values, CFG), dec("7.3"))
 
     def test_max_transport_penalty(self):
         values = {"transport": 1.0, "industry": 0, "access": 0, "green": 0,
                   "home": 0, "density": 0}
-        self.assertEqual(v2_index(values, CFG), dec("2.0"))
+        self.assertEqual(v2_index(values, CFG), dec("2.3"))
 
     def test_max_access_bonus(self):
         values = {"transport": 0, "industry": 0, "access": 1.0, "green": 0,
                   "home": 0, "density": 0}
-        self.assertEqual(v2_index(values, CFG), dec("7.0"))
+        self.assertEqual(v2_index(values, CFG), dec("6.8"))
 
     def test_max_density_penalty(self):
         values = {"transport": 0, "industry": 0, "access": 0, "green": 0,
                   "home": 0, "density": 1.0}
-        self.assertEqual(v2_index(values, CFG), dec("4.5"))
+        self.assertEqual(v2_index(values, CFG), dec("4.6"))
 
     def test_unknown_factor_adds_flag(self):
         block = build_v2_block(
@@ -466,8 +585,8 @@ class TestIndex(unittest.TestCase):
             CFG,
         )
         self.assertIn("green:not_classified", block["flags"])
-        self.assertEqual(block["factors"]["transport"]["contribution"], -1.5)
-        self.assertEqual(block["index"], 3.6)
+        self.assertEqual(block["factors"]["transport"]["contribution"], -1.35)
+        self.assertEqual(block["index"], 3.7)
 
     def test_missing_access_layer_adds_flags(self):
         block = build_v2_block(

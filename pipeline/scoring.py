@@ -33,6 +33,7 @@ import scoring_v2
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = ROOT / "config" / "scoring.json"
+WIND_ROSE_PATH = ROOT / "config" / "wind_rose.json"
 from db import DB_DSN
 BATCH_SIZE = 5_000
 # Осторожный знаменатель для bbox-префильтра: на широте Москвы 1° долготы
@@ -138,6 +139,19 @@ JOIN industry_sources s
  AND ST_Distance(b.geometry::geography, s.geometry::geography) <= %s
 """
 
+# Ветер: источник -> дом, пеленг и расстояние. Румб считается в Python по
+# направлению bearing+180° (метеорологическое «откуда дует») и розе ветров.
+V2_WIND = """
+SELECT b.osm_id, s.id, s.name, s.hazard_class, s.status,
+       ST_Distance(b.geometry::geography, s.geometry::geography),
+       s.lat, s.lon,
+       ST_Y(ST_PointOnSurface(b.geometry)), ST_X(ST_PointOnSurface(b.geometry))
+FROM {scope} b
+JOIN industry_sources s
+  ON s.geometry && ST_Expand(b.geometry, %s)
+ AND ST_Distance(b.geometry::geography, s.geometry::geography) <= %s
+"""
+
 V2_INDUSTRY_INSIDE = """
 SELECT DISTINCT b.osm_id
 FROM {scope} b
@@ -182,6 +196,16 @@ def dec(value) -> Decimal:
 
 def load_config() -> dict:
     return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+
+
+def load_wind_rose() -> dict:
+    """Роза ветров 16 румбов; доли должны суммироваться к 1."""
+    payload = json.loads(WIND_ROSE_PATH.read_text(encoding="utf-8"))
+    shares = payload.get("shares") or {}
+    total = sum(float(value) for value in shares.values())
+    if abs(total - 1.0) > 0.001:
+        raise ValueError(f"wind rose shares sum to {total}, expected 1.0")
+    return payload
 
 
 def round_dec(value: Decimal, places: int = 1) -> Decimal:
@@ -424,6 +448,40 @@ def collect_v2_industry(cur, scope: str, scope_params: list, cfg: dict) -> dict:
     return result
 
 
+def collect_v2_wind(
+    cur, scope: str, scope_params: list, cfg: dict, rose: dict
+) -> dict:
+    """Ветер со стороны источника: доля времени по румбу, нормированная 0..1."""
+    spec = cfg["v2"]["wind"]
+    industry = cfg["v2"]["industry"]
+    max_radius = max(float(item["radius_m"]) for item in industry["classes"].values())
+    pad = max_radius / METERS_PER_DEGREE * 1.2
+    cur.execute(
+        V2_WIND.format(scope=scope),
+        [*scope_params, pad, max_radius + 1],
+    )
+    per_building: dict[int, list[dict]] = {}
+    for (
+        osm_id, source_id, name, hazard_class, status, distance,
+        src_lat, src_lon, home_lat, home_lon,
+    ) in cur.fetchall():
+        bearing = scoring_v2.bearing_between(
+            float(src_lat), float(src_lon), float(home_lat), float(home_lon)
+        )
+        per_building.setdefault(osm_id, []).append({
+            "id": source_id,
+            "name": name,
+            "hazard_class": hazard_class,
+            "status": status,
+            "distance_m": float(distance),
+            "bearing_deg": bearing,
+        })
+    return {
+        osm_id: scoring_v2.wind_pressure(sources, rose, cfg)
+        for osm_id, sources in per_building.items()
+    }
+
+
 def collect_v2_density(cur, scope: str, scope_params: list, cfg: dict) -> dict:
     radius = float(cfg["v2"]["density"]["radius_m"])
     pad = radius / METERS_PER_DEGREE * 1.5
@@ -463,12 +521,14 @@ def run(scope: str, scope_params: list, cfg: dict) -> int:
 
         v2_enabled = bool(cfg.get("v2", {}).get("enabled", False))
         if v2_enabled:
+            wind_rose = load_wind_rose()
             v2_transport = collect_v2_transport(cur, scope, scope_params, cfg)
             v2_industry = collect_v2_industry(cur, scope, scope_params, cfg)
             v2_access = collect_v2_access(cur, scope, scope_params, cfg)
             v2_green = collect_v2_green(cur, scope, scope_params, cfg)
             v2_home = collect_v2_home(cur, scope, scope_params, cfg)
             v2_density = collect_v2_density(cur, scope, scope_params, cfg)
+            v2_wind = collect_v2_wind(cur, scope, scope_params, cfg, wind_rose)
 
         # Нет дороги в пределах максимального R — это известный ноль, не unknown.
         empty_transport = {"value": 0.0, "status": "outside", "class": None}
@@ -479,6 +539,7 @@ def run(scope: str, scope_params: list, cfg: dict) -> int:
         empty_green = scoring_v2.green_quality([], cfg)
         empty_home = scoring_v2.home_quality(None, None, None, cfg)
         empty_density = scoring_v2.density_pressure(None, cfg)
+        empty_wind = scoring_v2.wind_pressure([], wind_rose, cfg)
 
         buffer: list[tuple] = []
         for osm_id in building_ids:
@@ -502,6 +563,7 @@ def run(scope: str, scope_params: list, cfg: dict) -> int:
                     v2_density.get(osm_id, empty_density),
                     cfg,
                     industry=v2_industry.get(osm_id, empty_industry),
+                    wind=v2_wind.get(osm_id, empty_wind),
                 )
                 breakdown["version"] = 2
                 breakdown["v2"] = v2_block

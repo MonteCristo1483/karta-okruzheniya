@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Скоринг v2 (docs/METHODOLOGY-V2.md): пять факторов.
+"""Скоринг v2 (docs/METHODOLOGY-V2.md): семь факторов.
 
 Чистые функции без БД — их проверяют юнит-тесты. Все числа (веса, радиусы,
 пороги, значения) берутся из config/scoring.json, блок `v2`.
@@ -10,7 +10,9 @@
   access    — пешая доступность POI (1 = всё вплотную, bonus);
   green     — парк >= 0,5 га целиком в радиусе 300 м (1 = бонус);
   home      — под-индекс по году + серии + материалу (1 = новостройка);
-  density   — давление плотности (1 = переуплотнение, penalty).
+  density   — давление плотности (1 = переуплотнение, penalty);
+  wind      — ветер со стороны источника (1 = источник вплотную и ветер
+              всегда с его стороны, penalty).
 
 index = clamp(index.base + сумма sign * weight / scale * value, 0, 10).
 Неизвестное -> value 0 и флаг not_classified. Никаких средних значений.
@@ -178,6 +180,133 @@ def industry_pressure(
         }
     return {"value": 0.0, "status": "known_zero",
             "distance_m": None, "hazard_class": None, "name": None}
+
+
+SECTOR_LABELS = (
+    "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+    "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW",
+)
+
+
+def wind_sector(bearing_deg: float, sector_degrees: float = 22.5) -> str:
+    """Румб по метеорологическому направлению (откуда дует), 16 секторов.
+
+    Сектор центрирован на румбе: N = 348.75..11.25°. bearing_deg — градусы
+    от севера по часовой стрелке.
+    """
+    sector_count = len(SECTOR_LABELS)
+    if abs(float(sector_degrees) - 360.0 / sector_count) > 1e-9:
+        # Поддерживаем только равные секторы, иначе индекс румба неоднозначен.
+        raise ValueError("sector_degrees must be 360/16")
+    half = float(sector_degrees) / 2.0
+    normalized = (float(bearing_deg) % 360.0 + 360.0) % 360.0
+    index = int(math.floor(((normalized + half) % 360.0) // float(sector_degrees)))
+    return SECTOR_LABELS[index % sector_count]
+
+
+def bearing_between(
+    lat1: float, lon1: float, lat2: float, lon2: float
+) -> float:
+    """Начальный пеленг от точки 1 к точке 2, градусы от севера (0..360)."""
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dlon = math.radians(lon2 - lon1)
+    x = math.sin(dlon) * math.cos(phi2)
+    y = (math.cos(phi1) * math.sin(phi2)
+         - math.sin(phi1) * math.cos(phi2) * math.cos(dlon))
+    return (math.degrees(math.atan2(x, y)) + 360.0) % 360.0
+
+
+def wind_pressure(
+    sources: list[dict], rose: dict, cfg: dict
+) -> dict:
+    """Ветер со стороны источника: доля времени, нормированная в 0..1.
+
+    sources — [{"hazard_class": "I".."V", "distance_m": м,
+    "bearing_deg": пеленг источник→дом, "status": ..., "id": ..., "name": ...}].
+    Ветер переносит выброс к дому, когда дует ОТ источника, поэтому румб
+    считается по направлению bearing+180° (метеорологическое «откуда»).
+    Вклад источника = w_class * (1 - d/R)^exponent * P(румб).
+    Сумма делится на максимальную долю румба: фактор 0..1.
+    Нет работающих источников в радиусе -> 0 (known_zero, без флага).
+    Пустая роза при наличии источников -> 0 + not_classified.
+    """
+    spec = _cfg(cfg)["wind"]
+    industry = _cfg(cfg)["industry"]
+    classes = industry["classes"]
+    exponent = dec(spec["exponent"])
+    penalizing = set(industry.get("penalizing_statuses") or ["operating"])
+    shares = (rose or {}).get("shares") or {}
+    max_share = max((float(v) for v in shares.values()), default=0.0)
+    sector_degrees = float(spec.get("sector_degrees", 22.5))
+
+    raw = 0.0
+    considered = 0
+    strongest: dict | None = None
+    for source in sources:
+        if source.get("status", "unknown") not in penalizing:
+            continue
+        hazard_class = source.get("hazard_class")
+        if hazard_class not in classes:
+            continue
+        distance = dec(source["distance_m"])
+        radius = dec(classes[hazard_class]["radius_m"])
+        if distance < 0 or distance >= radius:
+            continue
+        wind_from = (float(source["bearing_deg"]) + 180.0) % 360.0
+        sector = wind_sector(wind_from, sector_degrees)
+        share = float(shares.get(sector, 0.0))
+        ratio = Decimal(1) - distance / radius
+        contribution = (
+            dec(classes[hazard_class]["weight"])
+            * (ratio ** exponent)
+            * dec(share)
+        )
+        raw += float(contribution)
+        considered += 1
+        detail = {
+            "id": source.get("id"),
+            "name": source.get("name"),
+            "hazard_class": hazard_class,
+            "distance_m": float(round_dec(distance)),
+            "radius_m": float(radius),
+            "bearing_from_source_deg": float(round_dec(dec(source["bearing_deg"]))),
+            "wind_from_deg": float(round_dec(dec(wind_from))),
+            "sector": sector,
+            "share": round(share, 6),
+            "contribution": round(float(contribution), 6),
+        }
+        if strongest is None or detail["contribution"] > strongest["contribution"]:
+            strongest = detail
+
+    if considered == 0:
+        return {
+            "value": 0.0,
+            "status": "known_zero",
+            "sources": 0,
+            "raw": 0.0,
+            "normalizer": round(max_share, 6),
+            "sector": None,
+        }
+    if max_share <= 0:
+        return {
+            "value": 0.0,
+            "status": "not_classified",
+            "reason": "empty_wind_rose",
+            "sources": considered,
+            "raw": round(raw, 6),
+            "normalizer": 0.0,
+            "sector": None,
+        }
+    value = min(1.0, raw / max_share)
+    return {
+        "value": round(value, 4),
+        "status": "ok",
+        "sources": considered,
+        "raw": round(raw, 6),
+        "normalizer": round(max_share, 6),
+        "sector": strongest["sector"] if strongest else None,
+        "strongest": strongest,
+    }
 
 
 def green_quality(parks: list[dict], cfg: dict) -> dict:
@@ -369,12 +498,15 @@ def build_v2_block(
     density: dict,
     cfg: dict,
     industry: dict | None = None,
+    wind: dict | None = None,
 ) -> dict:
     """Собирает breakdown.v2 + список флагов not_classified."""
     v2 = _cfg(cfg)
     if industry is None:
         industry = {"value": 0.0, "status": "known_zero", "distance_m": None,
                     "hazard_class": None, "name": None}
+    if wind is None:
+        wind = {"value": 0.0, "status": "known_zero", "sources": 0}
     values = {
         "transport": transport["value"],
         "industry": industry["value"],
@@ -382,6 +514,7 @@ def build_v2_block(
         "green": green["value"],
         "home": home["value"],
         "density": density["value"],
+        "wind": wind["value"],
     }
     factors = {}
     flags: list[str] = []
@@ -392,6 +525,7 @@ def build_v2_block(
         ("green", green),
         ("home", home),
         ("density", density),
+        ("wind", wind),
     ):
         weight = float(v2["weights"][name])
         sign = -1.0 if v2["signs"][name] == "penalty" else 1.0
