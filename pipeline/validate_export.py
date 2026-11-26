@@ -176,6 +176,84 @@ def expected_penalty(name: str, entry: dict, cfg: dict) -> Decimal | None:
     return dec(penalty_cfg["max"]) * weight * (1 - distance / radius)
 
 
+def check_v2_block(
+    block: object,
+    cfg: dict,
+    report: Report,
+    building_id: int | None,
+    address: str | None,
+) -> Decimal | None:
+    """Проверить breakdown.v2 и вернуть ожидаемый индекс (сумма факторов).
+
+    Числа берутся только из конфига (v2.weights / v2.signs / v2.scale) и из
+    самого breakdown — в коде нет зашитых весов, как и требует правило
+    «скоринг живёт в config/scoring.json».
+    """
+    settings = cfg.get("v2")
+    if not isinstance(settings, dict) or not isinstance(settings.get("weights"), dict):
+        report.add("critical", "no_v2_config", "в конфиге нет v2.weights",
+                   building_id, address)
+        return None
+    if not isinstance(block, dict):
+        report.add("critical", "bad_v2_breakdown", "breakdown.v2 не объект",
+                   building_id, address)
+        return None
+    weights = settings["weights"]
+    signs = settings.get("signs") or {}
+    scale = dec(settings.get("scale") or 10)
+    factors = block.get("factors")
+    if not isinstance(factors, dict):
+        report.add("critical", "bad_v2_factors", "breakdown.v2.factors не объект",
+                   building_id, address)
+        return None
+    flags = block.get("flags")
+    if not isinstance(flags, list) or any(not isinstance(flag, str) for flag in flags):
+        report.add("critical", "bad_v2_flags",
+                   "breakdown.v2.flags должен быть списком строк", building_id, address)
+
+    total = dec(cfg["index"]["base"])
+    for name, weight in weights.items():
+        entry = factors.get(name)
+        if not isinstance(entry, dict):
+            report.add("critical", "missing_v2_factor", f"нет фактора {name}",
+                       building_id, address)
+            continue
+        value = entry.get("value")
+        if not isinstance(value, (int, float)):
+            report.add("critical", "bad_v2_value", f"{name}: value={value!r}",
+                       building_id, address)
+            continue
+        value = dec(value)
+        if value < 0 or value > 1:
+            report.add("critical", "v2_value_out_of_range",
+                       f"{name}: value {value} вне 0..1", building_id, address)
+        sign = Decimal(-1) if signs.get(name) == "penalty" else Decimal(1)
+        contribution = entry.get("contribution")
+        expected_contribution = round_half_up(sign * dec(weight) * value / scale, 3)
+        if not isinstance(contribution, (int, float)):
+            report.add("critical", "bad_v2_contribution",
+                       f"{name}: contribution={contribution!r}", building_id, address)
+        elif abs(dec(contribution) - expected_contribution) > Decimal("0.001"):
+            report.add("critical", "v2_contribution_mismatch",
+                       f"{name}: contribution {contribution} ≠ {expected_contribution}",
+                       building_id, address)
+        if entry.get("weight") != weight:
+            report.add("critical", "v2_weight_mismatch",
+                       f"{name}: вес {entry.get('weight')} ≠ конфиг {weight}",
+                       building_id, address)
+        if entry.get("sign") != signs.get(name):
+            report.add("critical", "v2_sign_mismatch",
+                       f"{name}: знак {entry.get('sign')} ≠ конфиг {signs.get(name)}",
+                       building_id, address)
+        total += sign * dec(weight) * value / scale
+
+    extra = set(factors) - set(weights)
+    if extra:
+        report.add("warning", "unknown_v2_factor",
+                   f"лишние факторы v2: {', '.join(sorted(extra))}", building_id, address)
+    return total
+
+
 def check_buildings(features: list[dict], cfg: dict, report: Report) -> None:
     base = dec(cfg["index"]["base"])
     low = dec(cfg["index"]["min"])
@@ -322,7 +400,17 @@ def check_buildings(features: list[dict], cfg: dict, report: Report) -> None:
 
         if index is None:
             continue
-        clamped = min(max(total, low), high)
+        # v2: индекс считается по факторам breakdown.v2 (base + Σ sign·weight·value/scale),
+        # legacy-ключи bonuses/penalties остаются для карточки и проверяются выше,
+        # но в сумму индекса не входят.
+        v2_block = breakdown.get("v2")
+        if isinstance(v2_block, dict) or breakdown.get("version") == 2:
+            expected_total = check_v2_block(v2_block, cfg, report, building_id, address)
+            if expected_total is None:
+                continue
+        else:
+            expected_total = total
+        clamped = min(max(expected_total, low), high)
         expected_index = round_half_up(clamped, places)
         if abs(expected_index - dec(index)) > Decimal("0.001"):
             report.add("critical", "sum_mismatch",
@@ -330,7 +418,7 @@ def check_buildings(features: list[dict], cfg: dict, report: Report) -> None:
                        building_id, address)
         elif abs(clamped - dec(index)) > Decimal("0.06"):
             report.add("warning", "rounding_gap",
-                       f"разбивка {total} → индекс {index} (расхождение округления)",
+                       f"разбивка {expected_total} → индекс {index} (расхождение округления)",
                        building_id, address)
 
     total = len(features)
