@@ -2,9 +2,10 @@
 """Импорт линейных объектов (дороги, ж/д) из data/raw/moscow.osm.pbf в PostGIS.
 
 Таблица linear:
-  kind = 'road'     — highway=trunk/primary/secondary (классы из SPEC §3,
-                      прокси шума и выбросов; веса trunk×1.0, primary×0.7,
-                      secondary×0.4 подставляются на этапе скоринга);
+  kind = 'road'     — highway=trunk/primary/secondary/tertiary (классы из
+                      SPEC §3 и METHODOLOGY-V2, прокси шума и выбросов; веса
+                      и радиусы подставляются на этапе скоринга из
+                      config/scoring.json — v2.transport.classes);
   kind = 'railway'  — любой railway=* (way).
 
 Геометрия — линии в WGS84 (EPSG:4326).
@@ -23,7 +24,7 @@ import psycopg
 
 PBF_PATH = "data/raw/moscow.osm.pbf"
 from db import DB_DSN
-ROAD_CLASSES = ("trunk", "primary", "secondary")
+ROAD_CLASSES = ("trunk", "primary", "secondary", "tertiary")
 BATCH_SIZE = 10_000
 REPORT_EVERY = 50_000
 
