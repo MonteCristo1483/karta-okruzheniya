@@ -8,13 +8,13 @@
   "poi": 121,
   "redzones": 248,
   "geojson_bytes": {
-    "buildings": 578332,
+    "buildings": 1027218,
     "poi": 19082,
     "redzones": 54533,
     "district": 2756
   },
   "index_rows": 338,
-  "index_bytes": 35730,
+  "index_bytes": 35421,
   "tiles": null,
-  "seconds": 0.1
+  "seconds": 3.7
 }

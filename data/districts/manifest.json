@@ -4,7 +4,7 @@
     "role": "index",
     "path": "data/index.json.gz",
     "bytes": 2053079,
-    "sha256": "69c8a259bfcc15ee3920111fb9cc6903fd6b01f2e9eb95ab44030d9293380f22"
+    "sha256": "56593ac08b9bb6c92fb306cc4ea0e7d677322457f1f6fe32b5e33448a6904690"
   },
   "districts": [
     {
@@ -20,14 +20,14 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1250526/buildings.geojson",
-          "bytes": 907942,
-          "sha256": "9e7cbd9ad64feb50bb8e9c3ab242ddf29a6cd95acd755818ea1cccaeb09f1de2"
+          "bytes": 1632023,
+          "sha256": "202930e6fe135146e1a17ca1a7bc895ffcad049c0013bcb4ff99047c30d23dfd"
         },
         {
           "role": "index",
           "path": "data/index.json.gz",
           "bytes": 2053079,
-          "sha256": "69c8a259bfcc15ee3920111fb9cc6903fd6b01f2e9eb95ab44030d9293380f22"
+          "sha256": "56593ac08b9bb6c92fb306cc4ea0e7d677322457f1f6fe32b5e33448a6904690"
         },
         {
           "role": "routes",
@@ -268,8 +268,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1250618/buildings.geojson",
-          "bytes": 549220,
-          "sha256": "42c8af4fe47101545d9bdd25e7c4b3549bbe5a997499a47d6502cb957b2ab3cf"
+          "bytes": 961888,
+          "sha256": "b1a8a6dcf4450dc8d764ac26cab8727b5edb22193a73385476a5b0ed6857ed3c"
         },
         {
           "role": "routes",
@@ -510,8 +510,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1250619/buildings.geojson",
-          "bytes": 1354877,
-          "sha256": "dfca3a3c8939f794b58c13d1c5e44545c1c10cc3dccb8222bee004b4d711e7af"
+          "bytes": 2210634,
+          "sha256": "8d37f7b33c429c7747de6767842a73cc57158ad97ed3ac89c2c78f14763ef262"
         },
         {
           "role": "routes",
@@ -752,8 +752,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1250724/buildings.geojson",
-          "bytes": 425117,
-          "sha256": "8bb25d86fec2be37f56584de0067ce873a3229530fa6f33ad23daff84db90d5c"
+          "bytes": 714174,
+          "sha256": "d5b03209a8f77bdc29772ac75c0c25bbeb2c2385372964c9d6990e6ac9441bf3"
         },
         {
           "role": "routes",
@@ -994,8 +994,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1252407/buildings.geojson",
-          "bytes": 871703,
-          "sha256": "1ff012c438c70be460db1ed8f9667b96790265b6a1d560346b9aa6a82dfab8d7"
+          "bytes": 1475969,
+          "sha256": "5c09743410fe5307b6ef13cf5ffdfedafc3713c3ba732e45d41233273d4ec462"
         },
         {
           "role": "routes",
@@ -1236,8 +1236,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1252424/buildings.geojson",
-          "bytes": 810813,
-          "sha256": "b838b309e3edd9ba241860fc465a1537c4c8c6c44ae1c9e1837fcbc51affcd35"
+          "bytes": 1380329,
+          "sha256": "97aab13ac8ac7a1710ea54c910826597355eb6b35edea549da023daa48bb0d7c"
         },
         {
           "role": "routes",
@@ -1478,8 +1478,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1252448/buildings.geojson",
-          "bytes": 680517,
-          "sha256": "ff4356c08d2bb4231b3a3135632612e1c07ff2dba351357098698b79c4569d01"
+          "bytes": 1259615,
+          "sha256": "5f9d4e9b322da349d8e239eac2595271c7e9a16b8998a78cf5303ce3d4c204f3"
         },
         {
           "role": "routes",
@@ -1720,8 +1720,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1252465/buildings.geojson",
-          "bytes": 912206,
-          "sha256": "5c21a276519b8e51ac29f99334fa6ca86a67a0bceba67a96fc0fba9d4a00e238"
+          "bytes": 1723898,
+          "sha256": "e535e180511126462b12fdcf0933074e35a346bdbba8dd89f81c85cfc5b0617d"
         },
         {
           "role": "routes",
@@ -1962,8 +1962,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1255563/buildings.geojson",
-          "bytes": 1114405,
-          "sha256": "44095f1dc8813c660bc4cd03e0ab41beba8a863b66afece8ec6274ab592d5fe5"
+          "bytes": 2100229,
+          "sha256": "6f72a21ffe485621145b88918fb2786883d6735d4c982280e00a7e021eed8dcc"
         },
         {
           "role": "routes",
@@ -2204,8 +2204,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1255576/buildings.geojson",
-          "bytes": 2248649,
-          "sha256": "5e37ceaa3b449d576b2b358fdf969bc6802a43b14721c97c826f53ee1af36b87"
+          "bytes": 4591176,
+          "sha256": "a3be730ac98fcfec99cbabeaff1884843b7a986547644ec421f1fcfa3aff28e8"
         },
         {
           "role": "routes",
@@ -2446,8 +2446,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1255577/buildings.geojson",
-          "bytes": 550892,
-          "sha256": "284a6c9820e74407c78bdd3ca30627e9bb7247d2ccf02879e40a3d7ac0dc9a63"
+          "bytes": 978875,
+          "sha256": "0ebc2d3ace208d2e22f2221ebfbef2f5cc4100807d9fa666f8db0031cfed343b"
         },
         {
           "role": "routes",
@@ -2688,8 +2688,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1255602/buildings.geojson",
-          "bytes": 432538,
-          "sha256": "af288b73ef8fcff8f4a5ede23439778cbafbfd6b01421b1f484da638970803aa"
+          "bytes": 768391,
+          "sha256": "56c64667998efed681574126124d2251c1c9ba76fa70c3fa79685118939aa77b"
         },
         {
           "role": "routes",
@@ -2930,8 +2930,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1255680/buildings.geojson",
-          "bytes": 590302,
-          "sha256": "a5642690238eff93475ded1df19f41ee6ef6b1037f1ebf66b97244f205d42a9b"
+          "bytes": 1118875,
+          "sha256": "688ff15b63061b600fbc93093f56c8c751bdd613de7e568684aa708a216f5494"
         },
         {
           "role": "routes",
@@ -3172,8 +3172,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1255704/buildings.geojson",
-          "bytes": 461537,
-          "sha256": "c55d2308a02c6591ff6f980e0cb139b03847e066b88302ad2fa2f96427757e96"
+          "bytes": 886208,
+          "sha256": "cfd4afc398e08de9c76276e7fe233b706ed61e28673f365ed01c194cc637a315"
         },
         {
           "role": "routes",
@@ -3414,8 +3414,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1255775/buildings.geojson",
-          "bytes": 349987,
-          "sha256": "fce31be12fb616eec69c22bb31f51563c7ae38a110b4b36618840baaf896928f"
+          "bytes": 699688,
+          "sha256": "58d8dd77068870ab47264d113d6f07b571c67e33eee19d140c00307525e169a4"
         },
         {
           "role": "routes",
@@ -3656,8 +3656,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1255942/buildings.geojson",
-          "bytes": 1605141,
-          "sha256": "36acbdc60fec5ff0159f61b0594115bcc61271b9430296d5dba788be43fbb43f"
+          "bytes": 2862498,
+          "sha256": "480ead49c78261ba5e60dfe957be7ce806768538dc9937aaf0cdd1d782616a58"
         },
         {
           "role": "routes",
@@ -3898,8 +3898,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1255987/buildings.geojson",
-          "bytes": 2522142,
-          "sha256": "d9a1512d1a6266ce3688e8266124abfbadb6788cbb499f9e52786ce7ff06b0a8"
+          "bytes": 4486937,
+          "sha256": "9e51f68e4828128f8562f6a446491d34968c11c57a7ac39300aabe606326701a"
         },
         {
           "role": "routes",
@@ -4140,8 +4140,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1257218/buildings.geojson",
-          "bytes": 1228550,
-          "sha256": "7add7ac9b53375ccb592a706163ef70279c1e35e5c5a7b1e18a4fdb4dec8b397"
+          "bytes": 2025010,
+          "sha256": "aa20a928fba546f3ca449cf95b26cbf73959f0ed98e474cefc96fe2f05b8d0a1"
         },
         {
           "role": "routes",
@@ -4382,8 +4382,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1257403/buildings.geojson",
-          "bytes": 2549653,
-          "sha256": "2d702ec933287542a8183937db60e73767b3054cf371b21a42482d8206cbebfa"
+          "bytes": 5036525,
+          "sha256": "b511af635b3620691bad880a09dd4b3d4fcdeb39e377a93f0dba99868f8fde00"
         },
         {
           "role": "routes",
@@ -4624,8 +4624,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1257455/buildings.geojson",
-          "bytes": 510225,
-          "sha256": "2082a548e0560800bd3796fbfac41b71cde2e0aae1d3154239ccf022af1bfbfb"
+          "bytes": 940352,
+          "sha256": "8a12b615cbe4c5734de5561e41e866447facea05be4c279d6da87a55336be49c"
         },
         {
           "role": "routes",
@@ -4866,8 +4866,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1257472/buildings.geojson",
-          "bytes": 1649071,
-          "sha256": "3382db2044944411e188640785851a816c81a09ff444ac85ff3ba16547a61d45"
+          "bytes": 3074658,
+          "sha256": "0cbd28e0dfb434f4f3e5047f5a5d3c43e3fd0ea10290934fc7c0e22ecfcac55b"
         },
         {
           "role": "routes",
@@ -5108,8 +5108,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1257484/buildings.geojson",
-          "bytes": 855297,
-          "sha256": "7b3465ad297b6a31d1547f49778ea4ba566bad671bdf7504b9328ad095b7c5f5"
+          "bytes": 1534497,
+          "sha256": "84859ea93794c3eed872b535977cf9b267a0b42367761e0c4542ffe0a33dd9f9"
         },
         {
           "role": "buildings_pmtiles",
@@ -5368,8 +5368,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1257786/buildings.geojson",
-          "bytes": 2923828,
-          "sha256": "cc5312cead21b31490dceadb45fedcba39e2aa645f9bfc51850cbbd66e04e290"
+          "bytes": 4838764,
+          "sha256": "3b4f1c5b04ebf32bb971f9e0c30f7f750e3fca47e106d5fa013ae1d45ae4e934"
         },
         {
           "role": "buildings_pmtiles",
@@ -5628,8 +5628,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1275551/buildings.geojson",
-          "bytes": 2929603,
-          "sha256": "2b5275c997ec194c363e12b0f1010e1d39094bc1d8a19c21cfa34d960df93c46"
+          "bytes": 5194758,
+          "sha256": "c21eea07bb0333d5788cbfd3514773f88172c8db935bfa5d68383e548f4de101"
         },
         {
           "role": "buildings_pmtiles",
@@ -5888,8 +5888,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1275608/buildings.geojson",
-          "bytes": 2237638,
-          "sha256": "8cde4e78053d459d14b267f317f94c2fd9ef551a8074902f4f7ada8cc17cb9eb"
+          "bytes": 3992691,
+          "sha256": "320312998a23d32e6bc68036c18ee123b53349ae770e18ad66140079502cf246"
         },
         {
           "role": "routes",
@@ -6130,8 +6130,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1275627/buildings.geojson",
-          "bytes": 1148434,
-          "sha256": "d093749e7207a6a19197540ff1303ea84f849cef23da8335dc88394b84b58042"
+          "bytes": 2028772,
+          "sha256": "7c96363c4cf30105577c3fceaf572066385d6e9a55c768459511906a51e88a3e"
         },
         {
           "role": "routes",
@@ -6372,8 +6372,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1278046/buildings.geojson",
-          "bytes": 1300220,
-          "sha256": "6baf755a16976c74acc9482063ee1c06f1cb5e72eeac91c19026e3bb6eeceea1"
+          "bytes": 2435366,
+          "sha256": "80040cd9ec2f7bfe44e766932ffc8e6f245ec37304a4e20c0491a8c0d4d447a1"
         },
         {
           "role": "routes",
@@ -6614,8 +6614,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1278064/buildings.geojson",
-          "bytes": 1707919,
-          "sha256": "f94b7ce9a79ea2a96ed6fe1d78800468a6ba238d11b9287a7903bdbdaff9fab7"
+          "bytes": 3163125,
+          "sha256": "e9a3c20647e06579a77075ea77a1b174621c592a854f375990bfb25224f783b2"
         },
         {
           "role": "routes",
@@ -6856,8 +6856,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1278096/buildings.geojson",
-          "bytes": 639048,
-          "sha256": "1d881d6aee8771b4f41d64edca79807fb6a25c4421b41759f91499494454bacb"
+          "bytes": 1107869,
+          "sha256": "9b800d37e37d079d208d869593a4130f4bc1aef49459c3836f4f1db2a82abf6b"
         },
         {
           "role": "routes",
@@ -7098,8 +7098,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1281209/buildings.geojson",
-          "bytes": 1788312,
-          "sha256": "78bdfe165b2eb3a611c56e7f3539d1ade935469701cf2c6ce28bc1f0404fb23e"
+          "bytes": 3033415,
+          "sha256": "25df67d24638084dec0eb9e921fa62331ce02647d1d3e0ff76d563cb77271843"
         },
         {
           "role": "routes",
@@ -7340,8 +7340,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1281220/buildings.geojson",
-          "bytes": 987260,
-          "sha256": "4141d4a5c405518e642fe85727e274a0cd176aecdb6c6a789e270fcf1f1d2242"
+          "bytes": 1873567,
+          "sha256": "7192dc86749b64364298af8a23a128001a9811df83147c45efc874b0abaa5d0e"
         },
         {
           "role": "routes",
@@ -7582,8 +7582,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1281263/buildings.geojson",
-          "bytes": 751680,
-          "sha256": "f16d334b66383af99a9a4b8a4e4226720dcab4c4078503078d5dd87e1f8984fd"
+          "bytes": 1361258,
+          "sha256": "40c3169836c4362dc16c38921c136e00fa2871ce7e0a111dc3437b61293c3235"
         },
         {
           "role": "routes",
@@ -7824,8 +7824,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1281648/buildings.geojson",
-          "bytes": 578332,
-          "sha256": "1616f9f48989c5352a8f75aa335c054f9f7310f7db64890518768ae2b6678cab"
+          "bytes": 1027218,
+          "sha256": "e72193428e4458cc63f06540e7bf3e7efb45c6a79c907c4925bd267609cbbba1"
         },
         {
           "role": "routes",
@@ -8066,8 +8066,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1281702/buildings.geojson",
-          "bytes": 467299,
-          "sha256": "7d009851de50d22ef700bc28487ff3112e98e1a55c888ef3a038e6d568484922"
+          "bytes": 844800,
+          "sha256": "70a60e60cfc9ef06ee23d07bc165f49cfbb11d8bc824f2352f4c5a2d9c0d7a79"
         },
         {
           "role": "routes",
@@ -8308,8 +8308,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1292211/buildings.geojson",
-          "bytes": 488371,
-          "sha256": "e69b6e0eb703e16f047f0173a2a25b758a081ba7687862449dd3677cd70310c9"
+          "bytes": 927881,
+          "sha256": "37ff3141c92cc163f0ab677cbfbd6849fa2c324d7cb3d3bf1423ab2887236596"
         },
         {
           "role": "routes",
@@ -8550,8 +8550,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1292286/buildings.geojson",
-          "bytes": 766855,
-          "sha256": "46f01608cdc3412f7b3ac2da95e28a58329c30bbc7e8be437db364828e51695b"
+          "bytes": 1472948,
+          "sha256": "62d75407862c4e4100b04535c14b6aa9567cdcfc03e4391644ed612d434f5556"
         },
         {
           "role": "routes",
@@ -8792,8 +8792,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1292499/buildings.geojson",
-          "bytes": 657885,
-          "sha256": "6543d8bcd567fb918e880f30a74ba5b5235af516c16e703f16d819527e85c663"
+          "bytes": 1158843,
+          "sha256": "f7dde4f63bd7708d0190d08d006833df7e19bc40d0e24c351b620b590147df32"
         },
         {
           "role": "routes",
@@ -9034,8 +9034,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1292679/buildings.geojson",
-          "bytes": 445307,
-          "sha256": "781ac66423d0025db69ac11d0638da0a86acf928bf9be9007a8336dd60692f29"
+          "bytes": 799630,
+          "sha256": "99c9ca0e1df059c287b289ccde6bd0c15a980ad56c528022129a6ce6acdf796c"
         },
         {
           "role": "routes",
@@ -9276,8 +9276,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1292731/buildings.geojson",
-          "bytes": 743554,
-          "sha256": "75bb9886dc9591db9a7e827bab3196a2f633e51b3ea67a9c2336994d63abed37"
+          "bytes": 1247780,
+          "sha256": "bfb134779a953dee55e68e3580d1293611d170371794aac51326cc74ee91d40e"
         },
         {
           "role": "routes",
@@ -9518,8 +9518,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1292749/buildings.geojson",
-          "bytes": 1463913,
-          "sha256": "d1eba05043a1b413fc6fc538ae729a9b2599650b614f42a1117603ca7a777936"
+          "bytes": 2619814,
+          "sha256": "1ba4fa784257786da2496290768dcd98cdc0aa877db48626bd92152813357a95"
         },
         {
           "role": "routes",
@@ -9760,8 +9760,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1298976/buildings.geojson",
-          "bytes": 751131,
-          "sha256": "c2209b40824a6a336546d96b81e3c1b42688c892ad13de937d0fe66e8449f29d"
+          "bytes": 1456296,
+          "sha256": "ca1e25d8fb12ed17c8bc76d8049cd20079b0642152838bf192f9e64bc67ee5ba"
         },
         {
           "role": "routes",
@@ -10002,8 +10002,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1299013/buildings.geojson",
-          "bytes": 1817023,
-          "sha256": "00272eb1d8ded730fc220fa67afa7e0a3dc78abecca68e3309047c3710a4057b"
+          "bytes": 3578710,
+          "sha256": "eb30ccc1823cc15a9daa169dbcfeafe123e45279f68615b96ee62b5adde58ab1"
         },
         {
           "role": "routes",
@@ -10244,8 +10244,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1299031/buildings.geojson",
-          "bytes": 1562519,
-          "sha256": "e2d5a8dfedde00714134213c3e70d0bedda6a1c67b1b66d0bf38cd1260d2708b"
+          "bytes": 2919876,
+          "sha256": "1d8fd68a8804c0c8e0dce29c5d887e689a2912fe721345a94709eb512d92a1db"
         },
         {
           "role": "routes",
@@ -10486,8 +10486,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1299106/buildings.geojson",
-          "bytes": 1084338,
-          "sha256": "d1aed31b86893300d152cff97b6d87b97d8440f039b0003adc7ec22a2a4764cb"
+          "bytes": 1876368,
+          "sha256": "bc69ed0d89b7373ffcbdcc83be5956c642b4a4ff018a8b94dbe5af651f909591"
         },
         {
           "role": "routes",
@@ -10728,8 +10728,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1319060/buildings.geojson",
-          "bytes": 998998,
-          "sha256": "622d2fc1c8710017dd4af6cc6e5adc1d49e0b85837aa1c2e6fc13f8c8247c5e9"
+          "bytes": 1826266,
+          "sha256": "54882354881eca7f4afdb9a5f33aecdf4c139a6e1c6a2e11733a94b377e29ecf"
         },
         {
           "role": "routes",
@@ -10970,8 +10970,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1319078/buildings.geojson",
-          "bytes": 526149,
-          "sha256": "b0797a5bb9f6c2ccd25d4bae079e1723926befccd0a846d82ab483fdf069393e"
+          "bytes": 882364,
+          "sha256": "14f12b5c6c2fdfc4c2472b891d0ddc9f938dc560e0296e175d5fa4bd32a62d64"
         },
         {
           "role": "routes",
@@ -11212,8 +11212,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1319142/buildings.geojson",
-          "bytes": 994367,
-          "sha256": "a48de3c6e4681d836420b3b99f3efbd50714120b8965cdbade9860d8b4c3e35e"
+          "bytes": 1708041,
+          "sha256": "2f3da41fd66fc903a7aaa55b58bff1ace670efe68fe323c48b08727abecc98db"
         },
         {
           "role": "routes",
@@ -11454,8 +11454,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1319245/buildings.geojson",
-          "bytes": 1038151,
-          "sha256": "e775bb35e7b6cc6e60885d8f6cda1e18502319ae719d745a1d45e5daff85e468"
+          "bytes": 1904794,
+          "sha256": "84e58d280cc6e4286b2d3faa4501dbbea6cad74477dff464cbf954cf017922ea"
         },
         {
           "role": "routes",
@@ -11696,8 +11696,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1319263/buildings.geojson",
-          "bytes": 614945,
-          "sha256": "1886d199d399869321334f08e050c9d988f90e7c5ebbf8993db790d80c7f722c"
+          "bytes": 1090639,
+          "sha256": "a06a0c1911326846bcf7679783bb1b3537d68f983d56cae8c58806b458e53410"
         },
         {
           "role": "routes",
@@ -11938,8 +11938,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1320371/buildings.geojson",
-          "bytes": 1496777,
-          "sha256": "650d9758237a32e0d20374675d8a31d82863f56423888ec66c39efc22e04b25e"
+          "bytes": 2832863,
+          "sha256": "07d45b37274ecfae56f4a0c97008b33398d61ce283a7e1ac7b4db3d2241a2d51"
         },
         {
           "role": "routes",
@@ -12180,8 +12180,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1320424/buildings.geojson",
-          "bytes": 375475,
-          "sha256": "846da2a12df6eb702324f914f2246e467e9b9c541c04e1d2f9a391a2694bf613"
+          "bytes": 729172,
+          "sha256": "dd2be1d6efa862403259f724debd9f7e272496d716228530d34ad588d2995ef0"
         },
         {
           "role": "routes",
@@ -12422,8 +12422,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1320510/buildings.geojson",
-          "bytes": 767613,
-          "sha256": "f7f2cbefe59b184f24e7646b284fe2b71ec091ce5992b729f603cb6e5d730d79"
+          "bytes": 1527566,
+          "sha256": "e1ed6d44ae9ae3c1a9db5bfbc79470e2e5de3dbc9f516dbd71abd349a88e0498"
         },
         {
           "role": "routes",
@@ -12664,8 +12664,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1320566/buildings.geojson",
-          "bytes": 455901,
-          "sha256": "2ffccb15cdc96db9db693543707f18aa18cf76610a11e0c83419bfe83ed5970d"
+          "bytes": 843916,
+          "sha256": "8228fddf01a9205785409e0a5af93eccd7e719d47de8b678109193d32f0316f1"
         },
         {
           "role": "routes",
@@ -12906,8 +12906,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1320570/buildings.geojson",
-          "bytes": 466619,
-          "sha256": "f55d118e98a67e31f231f8445773649be91f1c31bc8cef0eb70cf5d17b223d91"
+          "bytes": 847888,
+          "sha256": "58220081873d040c4ea4ce49085d91bb00c044c9aa5c7b6361e4440061ee5865"
         },
         {
           "role": "routes",
@@ -13148,8 +13148,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1693596/buildings.geojson",
-          "bytes": 9505721,
-          "sha256": "dc53e6a6879863a6c84a2cc2cf8fa2ae13eebb5c0ace577b0290deb22fd13ee5"
+          "bytes": 19496927,
+          "sha256": "b4904f5405f23bcc3182971d0e6c46429dd048ceb2a0133bad6e1f05e516ce6e"
         },
         {
           "role": "routes",
@@ -13390,8 +13390,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1703093/buildings.geojson",
-          "bytes": 12378430,
-          "sha256": "e6d6c2f02229e085f75146c64251d399d98f14fb65ec435742acf63b69dae050"
+          "bytes": 23854544,
+          "sha256": "3d460212fb33c347ecb5a217b7975cdd6a35e7dfd46ee2bb1757f628737f1414"
         },
         {
           "role": "routes",
@@ -13632,8 +13632,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/1703095/buildings.geojson",
-          "bytes": 14957678,
-          "sha256": "ca1b7a27478df000d74a1c2b5d26811414b28641ffe32de158c07985a155e5da"
+          "bytes": 31186467,
+          "sha256": "8d9b0b6d4d5e96e30f690b9b37a600e1bab4c30a044810a60e246f2db040ddc7"
         },
         {
           "role": "routes",
@@ -13874,8 +13874,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/2092922/buildings.geojson",
-          "bytes": 8595405,
-          "sha256": "ba57aad1b8ed6dc2123b1c4b867426e69667418db4d0c7d513fe919d31b433e2"
+          "bytes": 14808375,
+          "sha256": "b17b1c0f97d4e5f0f49df07983d9ae7586b6f8025e7ee0f165fb47e1ead48313"
         },
         {
           "role": "routes",
@@ -14116,8 +14116,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/2092925/buildings.geojson",
-          "bytes": 9584650,
-          "sha256": "8c5714c11f2a2258061b80727f2b78462ce2b9a05476fb884bd5697e3e436ddf"
+          "bytes": 17897611,
+          "sha256": "658903b87791f379efc8c48054890e5f6c4c2bd8167fbdfdc58a163923181927"
         },
         {
           "role": "routes",
@@ -14358,8 +14358,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/2162195/buildings.geojson",
-          "bytes": 3320518,
-          "sha256": "591ca8e99e83881915b97ba9b8376274b341d7c81a797adfe692c2a059b17ef1"
+          "bytes": 5868142,
+          "sha256": "0889405118ecfcc0d2bb757522f3d13f9c05db7f448a2cf9fbaedaaa13784bda"
         },
         {
           "role": "routes",
@@ -14600,8 +14600,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/226927/buildings.geojson",
-          "bytes": 1734054,
-          "sha256": "b8c29b03d08abf6af7b4e1dd54cb2aa048e06e0760e9458818344d860678640b"
+          "bytes": 3254838,
+          "sha256": "96fac05a547fa98cb5b15f9c19ef229d0d567718be2d18c3465e3057671de600"
         },
         {
           "role": "routes",
@@ -14842,8 +14842,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/240229/buildings.geojson",
-          "bytes": 858331,
-          "sha256": "2a89a60e147a7c70ff436aaf8dbc467161d59f0dda251290b0e2d2a5bdd6c3d9"
+          "bytes": 1477192,
+          "sha256": "74ad4e148c61e5fe606751e0c840b44e8e68a392ebec8cfc655cfbebcf0b7c1e"
         },
         {
           "role": "routes",
@@ -15084,8 +15084,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/364001/buildings.geojson",
-          "bytes": 1314408,
-          "sha256": "5fee7a8a83cbeed8ad8c6b859e590bcdd0cf743223e2d58d4e83ece7c84716d7"
+          "bytes": 2249501,
+          "sha256": "dfe4d0db05382f7f74b0fa86ee6d7666e16da07641be93307b1cbd6aaf121f4e"
         },
         {
           "role": "routes",
@@ -15326,8 +15326,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/364551/buildings.geojson",
-          "bytes": 1058141,
-          "sha256": "cbb70b90fad92b16afbec01b9b74da976493f698a69ea61abd903303bbab807a"
+          "bytes": 1708144,
+          "sha256": "7702d6edc26a0f79d0a0033828dc78f298cc086c548256cc4e50e9e8ed96d277"
         },
         {
           "role": "routes",
@@ -15568,8 +15568,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/380704/buildings.geojson",
-          "bytes": 13431787,
-          "sha256": "2a4a49a6b13c015cdadb9c0e128e0044338603cfa1cf3797c3705079d84090a1"
+          "bytes": 25517229,
+          "sha256": "9502c3f3ad849543b9931bc7de9ed65d14e83f01fc0d885e021ef3bcc81b7574"
         },
         {
           "role": "routes",
@@ -15810,8 +15810,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/380705/buildings.geojson",
-          "bytes": 16640570,
-          "sha256": "0b689ccc14f287854ca3260e806b5c3ef628839812963b3807e5e0d3d5c6d6c0"
+          "bytes": 32387616,
+          "sha256": "5c63d71ec1b8f770248d9eb2ff781a1abcc5f87a7f90b91afceba589b4ff5a28"
         },
         {
           "role": "routes",
@@ -16052,8 +16052,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/380708/buildings.geojson",
-          "bytes": 19358897,
-          "sha256": "7d22fa6ee15865acac3e9413296cd0bd0da3fcbe912bc55a0539a9002c833de4"
+          "bytes": 36776927,
+          "sha256": "95d9a199b810eca5f64eaf87afeda7d68bcd3ae560d5ee14110d2db691e7f7b9"
         },
         {
           "role": "routes",
@@ -16294,8 +16294,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/428431/buildings.geojson",
-          "bytes": 2207761,
-          "sha256": "d2b106886fc450b6248b95d4d71b927faadd2a535e435bce813c3db9511c823d"
+          "bytes": 4095229,
+          "sha256": "bc5c6bcb4aeda58437fee6ad1d9b5fa50b38632831e15dd3ea9add84577647f2"
         },
         {
           "role": "routes",
@@ -16536,8 +16536,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/431464/buildings.geojson",
-          "bytes": 1628205,
-          "sha256": "0084bc0b3f8af24635845ce316468d1d3fbf872e32d783d2dc185b4994e788bc"
+          "bytes": 3024866,
+          "sha256": "f4d0c87f3785be5fffbaded9320a2c1b5d55712ce97fc02484b543c34e19b621"
         },
         {
           "role": "routes",
@@ -16778,8 +16778,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/434560/buildings.geojson",
-          "bytes": 1154010,
-          "sha256": "fe2ed2cf13beb084fdaa90be585d65ab006bfccd7e402e8202563a3c8982af50"
+          "bytes": 2137503,
+          "sha256": "1083e24453bd8dc81f695c9bee07e6448192778477f8aa1dc32b59d31cbdbc15"
         },
         {
           "role": "routes",
@@ -17020,8 +17020,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/442733/buildings.geojson",
-          "bytes": 1354548,
-          "sha256": "34ce8d13322b7e689acd07e05e8fb3b8e2e4dd09943fa4e0671524da0b746667"
+          "bytes": 2220520,
+          "sha256": "2c0e806e190699fd8c484e31cebaa14d0ec71328bbd03f710c42377f8e6c9d71"
         },
         {
           "role": "routes",
@@ -17262,8 +17262,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/442741/buildings.geojson",
-          "bytes": 1063166,
-          "sha256": "2de5a6d49997b9c58509ee08074e8b000a7e1f1b6b55a90028e9f8981daa836a"
+          "bytes": 2075288,
+          "sha256": "cf37cc6d6fb08ef532e59175c710efbff66bf733a2d6ef6166d7be3faa5db3a8"
         },
         {
           "role": "routes",
@@ -17504,8 +17504,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/444812/buildings.geojson",
-          "bytes": 887593,
-          "sha256": "bbc4aa5ff5f3dfb493e3abce47cb22c691e02fd9c12fd7b6f56d2a5c37f9fc16"
+          "bytes": 1716642,
+          "sha256": "34be7117423168f3b75afa05d0d5bb3b1032de23047c1e3a4f90f8d8194d8dc2"
         },
         {
           "role": "routes",
@@ -17746,8 +17746,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/444908/buildings.geojson",
-          "bytes": 1065038,
-          "sha256": "9f3a357c3f59d4d7d80e1bf93ab7f00459e552b961082a92ea86a478d2e4cddb"
+          "bytes": 1895438,
+          "sha256": "240c1422770d75918313e2edc3ed6542af0532b05aecd6f7e5313259e2114f27"
         },
         {
           "role": "routes",
@@ -17988,8 +17988,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/445273/buildings.geojson",
-          "bytes": 550220,
-          "sha256": "9430b48a0e093b828fa305c92af367389cd5d3aa5a957e18014f53aca016f091"
+          "bytes": 929868,
+          "sha256": "1ac644409341a242c024830dd7d1a8917f630f00b7503b5ef3aff9d457cdd24f"
         },
         {
           "role": "routes",
@@ -18230,8 +18230,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/445274/buildings.geojson",
-          "bytes": 691823,
-          "sha256": "9ec09bc27124adb6131a54114da672e80e573b4a92cfb60f47d0bd2038334048"
+          "bytes": 1192104,
+          "sha256": "b6842b06ded6c37a880d02a23a50a7077de53f8d581a7ba0f55ababa3d08de95"
         },
         {
           "role": "routes",
@@ -18472,8 +18472,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/445275/buildings.geojson",
-          "bytes": 832175,
-          "sha256": "483f93ce677e62c22a57a011b94e0294c6d2e5254471cddbaa46f8255569268f"
+          "bytes": 1475796,
+          "sha256": "580e7eb24f989d4902d0d2a5f520f6ba509822a14418641f866cd33fa8a5fda6"
         },
         {
           "role": "routes",
@@ -18714,8 +18714,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/445276/buildings.geojson",
-          "bytes": 981927,
-          "sha256": "4c0f653be39af27c068af0e7f1272b6e63883625fde2d70d1560f7d9bd963196"
+          "bytes": 1772414,
+          "sha256": "064202b652022ec34132dd0ee568cb43f98f7fc0fcd76c482c6c63c632ad29df"
         },
         {
           "role": "routes",
@@ -18956,8 +18956,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/445277/buildings.geojson",
-          "bytes": 969844,
-          "sha256": "d74bef676a58a665328a6cf95e606e0a8a0a9e5e78abaef13d24ba4f73b69956"
+          "bytes": 1783410,
+          "sha256": "39c776d01244a17581952c132aec0aba7a71c8d8155d99c1308c2e901a68cf1a"
         },
         {
           "role": "routes",
@@ -19198,8 +19198,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/445278/buildings.geojson",
-          "bytes": 847523,
-          "sha256": "9a5e8061dbd0f218fadc5aaf0dcd9b211a94c34a3d60b4346aa18820dfdbfc7f"
+          "bytes": 1514687,
+          "sha256": "4f26092077fdaa7f4a9578366eeb7aeabc248030585fdfc22e7f2dee3db6de7d"
         },
         {
           "role": "routes",
@@ -19440,8 +19440,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/445279/buildings.geojson",
-          "bytes": 788279,
-          "sha256": "d152070323592f739081363df5d09c6b8f166c68568c91636d62c9ab1c0476e5"
+          "bytes": 1338756,
+          "sha256": "f860590f07ae0e9ef207963e2864907f76d9a4ec3875297fdebbcc6592664d33"
         },
         {
           "role": "routes",
@@ -19682,8 +19682,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/445280/buildings.geojson",
-          "bytes": 799454,
-          "sha256": "8f1085a531d3fb2f25d732b156af3dd86816948250216c20f2c6b2693b2d90c3"
+          "bytes": 1504285,
+          "sha256": "86d4d43d8bd4d5d6b4e92466fc2c99a99635422ede3c41380b2a4b54c8d2fceb"
         },
         {
           "role": "routes",
@@ -19924,8 +19924,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/445281/buildings.geojson",
-          "bytes": 658035,
-          "sha256": "90711b0203c2cb701e98439534b1dba1896c4b8f9943f67fdaf1f05d66e6f5ed"
+          "bytes": 1158832,
+          "sha256": "8f36c1bf5fea540547c8ef370444c2d2d16e747bd8d697807dbc07cead5c512d"
         },
         {
           "role": "routes",
@@ -20166,8 +20166,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/445282/buildings.geojson",
-          "bytes": 1102201,
-          "sha256": "6cf1a394f3b987e43cd4796e8617a8fb3548bff5ea28678a00adeab42a0ad8eb"
+          "bytes": 1909957,
+          "sha256": "3a422e63d09fdae98aa3b79571bc2cea999f757cb003699ad2e643a29a44b7d7"
         },
         {
           "role": "routes",
@@ -20408,8 +20408,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/445283/buildings.geojson",
-          "bytes": 1476331,
-          "sha256": "cb8639185ccafbdeb687fb85f17521a8b52c0b5e08260ccd5398ac2bc44f52a1"
+          "bytes": 2940224,
+          "sha256": "fd5e1ce65e041c8ee3526d1886d775cfb7170a0707c39a1919aca709152a1970"
         },
         {
           "role": "routes",
@@ -20650,8 +20650,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/445284/buildings.geojson",
-          "bytes": 1243318,
-          "sha256": "d0cb36cafcfb45af955ba77b8d2d21e075d88a474a2826b6f15b3d2962266e74"
+          "bytes": 2483373,
+          "sha256": "7e44b944080ffaafbec5cd2253a82e353e6c8ce9b9e52cd2582ec55aaa61a042"
         },
         {
           "role": "routes",
@@ -20892,8 +20892,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/445285/buildings.geojson",
-          "bytes": 420777,
-          "sha256": "4bb331dbb68037e4ec2d67f37e28c30aba7d701bde343cb78513bddc48863698"
+          "bytes": 720967,
+          "sha256": "0569c643012bf7f4ee5943b443c4b02661d2307ba808e4d96fccb90b57128c16"
         },
         {
           "role": "routes",
@@ -21134,8 +21134,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/445297/buildings.geojson",
-          "bytes": 1209218,
-          "sha256": "1efb6d342123c8aa8825e0a641fe452a18f0d635f90955a38a01c9b8d0e25122"
+          "bytes": 2183365,
+          "sha256": "a755e23f95235b5489d38ec11f14c50f36a18a76ca6ba755362a414212913a90"
         },
         {
           "role": "routes",
@@ -21376,8 +21376,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/445298/buildings.geojson",
-          "bytes": 776700,
-          "sha256": "0e45390221797919db38f271e71f206460510073a08a0b25220f598ece0b7208"
+          "bytes": 1279641,
+          "sha256": "48ca4b06983a8fc012c016840223330a43b3991500bc754f6247d8b2015f8486"
         },
         {
           "role": "routes",
@@ -21618,8 +21618,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/445299/buildings.geojson",
-          "bytes": 1291412,
-          "sha256": "2f113343c466e36ee27afced1760612cdd65734c9a4439377eea18817f07c090"
+          "bytes": 2237376,
+          "sha256": "cabffbec7e3d81e0e285fa5f48ba853b0f7c5b95c6cc2bf4249f988a915dea76"
         },
         {
           "role": "routes",
@@ -21860,8 +21860,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/446078/buildings.geojson",
-          "bytes": 824788,
-          "sha256": "90ce4b22863540355cda27e21aeebe3c70df7f0189e0465c2bcfa45083153fc7"
+          "bytes": 1495824,
+          "sha256": "1105e15535c988e102bed3c67d4f0af52d00a0349ba44814fc6532ddfd594eb4"
         },
         {
           "role": "routes",
@@ -22102,8 +22102,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/446079/buildings.geojson",
-          "bytes": 1054331,
-          "sha256": "27939709c7c51642ec8002b2ed2f56e5540a7ef9f977158cda32c468c4ffe6d4"
+          "bytes": 1815531,
+          "sha256": "27de729a56dc8a19a6a1a60e8744f2fbd15f5dfcb654e14a446b64aab5ec4269"
         },
         {
           "role": "routes",
@@ -22344,8 +22344,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/446080/buildings.geojson",
-          "bytes": 961136,
-          "sha256": "0f787898a69da9bcc9d49a6adefa1a4a4ef864574c573134364043a462f26d56"
+          "bytes": 1630740,
+          "sha256": "5b35525450b8691bb908ab2089dc54358a3ed53815f0a522c7cc778caf2ce205"
         },
         {
           "role": "routes",
@@ -22586,8 +22586,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/446081/buildings.geojson",
-          "bytes": 1163882,
-          "sha256": "24a155bf8be95bcb2b27a0964f3d9ce4bf2578421dbd32f733e1a3509a1bfd43"
+          "bytes": 1993181,
+          "sha256": "16e3f1b15598fadfbbb082b9a21a38a7cc0c5c1d2dc12dbcd850a57fdf89426a"
         },
         {
           "role": "routes",
@@ -22828,8 +22828,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/446082/buildings.geojson",
-          "bytes": 435343,
-          "sha256": "1510d6b3218e111b9cb2fbfdd7dad33c45740d10d2303b87b90f58a5887a8ad6"
+          "bytes": 756158,
+          "sha256": "9c44ba276d65295143490a19c87d577c809c895a4a4b2d62cf10310385867e19"
         },
         {
           "role": "routes",
@@ -23070,8 +23070,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/446083/buildings.geojson",
-          "bytes": 385916,
-          "sha256": "3c59d3461f5521a4ee525a3c37a398d4f869eb88dddd3b883fe5d9c299ffcca8"
+          "bytes": 650509,
+          "sha256": "7d902bb2702cfc4e973d8696a85e39800e5661eb0ce171814a91ff66237a4ee9"
         },
         {
           "role": "routes",
@@ -23312,8 +23312,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/446084/buildings.geojson",
-          "bytes": 922148,
-          "sha256": "6c61ea9956dc8a7cb3ff003a990ff3aba0870539ee96b3088fa9ca5f5cae2ba7"
+          "bytes": 1715928,
+          "sha256": "5b0b4f6471cfd5b780075f935f7be8276009c9a2bf53be7e51469050979077b3"
         },
         {
           "role": "routes",
@@ -23554,8 +23554,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/446085/buildings.geojson",
-          "bytes": 630162,
-          "sha256": "3d3c3ee18f47dff8253390eeb49a67ece3ddf3f0018ce8f7b7a1400c080bee9f"
+          "bytes": 1091066,
+          "sha256": "0ea436faecad5a4608188d5b84326a5d365aaf334ae164b034447790d9d8d207"
         },
         {
           "role": "routes",
@@ -23796,8 +23796,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/446086/buildings.geojson",
-          "bytes": 672351,
-          "sha256": "20df4f28fe4ae610fb335b6dc4aa458e14244627755b62bdff5f3c3023d4bb82"
+          "bytes": 1200734,
+          "sha256": "5a079ca7033e65bd7b33ba7ea3cf92d20b6c7ca28718c667a578ba00b2536eb1"
         },
         {
           "role": "routes",
@@ -24038,8 +24038,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/446087/buildings.geojson",
-          "bytes": 422474,
-          "sha256": "cfe67aecef2ac53f8ce5b106280f61555a9cc484b4a73d9647e9f6a068000504"
+          "bytes": 765504,
+          "sha256": "c86d54edc74495d8720db95135253e1850e534af062ee238e78923a88a736759"
         },
         {
           "role": "routes",
@@ -24280,8 +24280,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/446111/buildings.geojson",
-          "bytes": 756202,
-          "sha256": "049423c56069557ddac9049672a903dddb05aec0ac52eaed4392fffd72a50f74"
+          "bytes": 1416560,
+          "sha256": "821a712e646275d86792a0bd684387b38acc7c22ffb0801493f29baee18f63f4"
         },
         {
           "role": "routes",
@@ -24522,8 +24522,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/446112/buildings.geojson",
-          "bytes": 847872,
-          "sha256": "c737992ff984b1f3446a5bd480f8cf5ffae795eca114ad8dcffa72a8a708f367"
+          "bytes": 1520583,
+          "sha256": "f7630a976f25e57e70324a665b05f08e94c9a5caaa4cc726e753aeedcafe927f"
         },
         {
           "role": "routes",
@@ -24764,8 +24764,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/446114/buildings.geojson",
-          "bytes": 946635,
-          "sha256": "938c15a20e85bff4bfd6caee841b7620078ae846ad31c0dcd4070e92f8ee7f76"
+          "bytes": 1640646,
+          "sha256": "566bd6217d4700f24d0adeb20d9b4e306016e6094ace86a819228de9666df593"
         },
         {
           "role": "routes",
@@ -25006,8 +25006,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/446115/buildings.geojson",
-          "bytes": 1533738,
-          "sha256": "318c48c64d41acbb97c7fbf33e66aed61de666ad728c07f540e87c749368f3da"
+          "bytes": 2682426,
+          "sha256": "745c3458919907540084a638226af400e94a9fd441a1abde91dc02d87c21e770"
         },
         {
           "role": "routes",
@@ -25248,8 +25248,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/446116/buildings.geojson",
-          "bytes": 2534258,
-          "sha256": "eb0b2d34ed39a034b6aec0e94ff4155000ad85cc29b26d7ab22687d9d2dfb7f7"
+          "bytes": 4576225,
+          "sha256": "f7ad57cc9258ccf0dccf312575528ef23c8d0340354f1af690e4977a495a4edd"
         },
         {
           "role": "routes",
@@ -25490,8 +25490,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/446117/buildings.geojson",
-          "bytes": 946459,
-          "sha256": "dadff299f58665520ee670ecb511cc69cad0f506f719f39247183cf606ddccf8"
+          "bytes": 1785923,
+          "sha256": "72824e710e1c5d28cdd73e34e6b8e8e0323e98912251d09559b41437047c1be0"
         },
         {
           "role": "routes",
@@ -25732,8 +25732,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/446271/buildings.geojson",
-          "bytes": 864101,
-          "sha256": "2ee2254965b7aae5c038004c3e4c8c858103ea896b6cc300f4ee84884cd63318"
+          "bytes": 1470795,
+          "sha256": "7bfceba397fd8e64a47f170c9637a25c9186c8c6b890ebee6cc09f720fc9fac4"
         },
         {
           "role": "routes",
@@ -25974,8 +25974,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/446272/buildings.geojson",
-          "bytes": 574062,
-          "sha256": "467bbf7066eebd6bb31c0c0ea14bafbdc9cfb0f51489865e2ddd4e6f3ed3bf67"
+          "bytes": 999535,
+          "sha256": "6cdb6430c7e13b2979881ad7fe3a5c160c469d62f2d4ddd07680432280df5996"
         },
         {
           "role": "routes",
@@ -26216,8 +26216,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/455184/buildings.geojson",
-          "bytes": 778560,
-          "sha256": "8ca3aac253fb44ae978f5b8dc76a08a884cd42ba0f79023a6111734e3ee2aae1"
+          "bytes": 1490353,
+          "sha256": "1554a94f7b2ec07c0b8c85f394e828616419db6fbc3ca2e337ec03653a04b39c"
         },
         {
           "role": "routes",
@@ -26458,8 +26458,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/455203/buildings.geojson",
-          "bytes": 1340931,
-          "sha256": "528e2d8e2ca7b14568fa668983d692392c738153d49d57af689289af1a6ec0b7"
+          "bytes": 2303650,
+          "sha256": "05fd82217c63d94b402ca3aae34a4270f16d722b758861a49b72972f28ed8908"
         },
         {
           "role": "routes",
@@ -26700,8 +26700,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/455208/buildings.geojson",
-          "bytes": 478126,
-          "sha256": "eacb8094fd5a7078cd8303a5b5e264e2a5220c03d53590ca0e2ea8bc1974db4c"
+          "bytes": 759462,
+          "sha256": "8a6cf95c1fbb6e5def3ad839a14824db14870b01fc9608da421bb612472156b5"
         },
         {
           "role": "routes",
@@ -26942,8 +26942,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/455222/buildings.geojson",
-          "bytes": 1121867,
-          "sha256": "ac3b2017f507f0fe855c32e0da94a9bb3dc377aa0274e025bdb7a67134d93358"
+          "bytes": 1866332,
+          "sha256": "e7fde653e563e2fa924209b19019991f39c9fd447be39f7c8ff7035c4fb8dd6c"
         },
         {
           "role": "routes",
@@ -27184,8 +27184,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/455451/buildings.geojson",
-          "bytes": 1713454,
-          "sha256": "6487ee86757a8c32a86eceb5dbfad6a299f2d92598454274cb0ba25e9e04e728"
+          "bytes": 3143935,
+          "sha256": "13c10f5b40044ca90b9d982e48c8fde9cde8dfd5ca98d470a8a48e53810e27cb"
         },
         {
           "role": "routes",
@@ -27426,8 +27426,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/455460/buildings.geojson",
-          "bytes": 635680,
-          "sha256": "24233ac5f9421224ae44c491930c5a313ceb3ac62fb98b09629dcc729bbb8696"
+          "bytes": 1135619,
+          "sha256": "94c5d131425bbe4b4c1510cf26fc466673078359e4da5f741c879879fbf25143"
         },
         {
           "role": "routes",
@@ -27668,8 +27668,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/455528/buildings.geojson",
-          "bytes": 812564,
-          "sha256": "953bb73101ee32409834fb47d2b1eade0952182bca4d6a6a40bf540f5352c425"
+          "bytes": 1385370,
+          "sha256": "d1db000950712baf2077d256a64af17c3ad0c1badd8b7ab920b969e40a5fee4f"
         },
         {
           "role": "routes",
@@ -27910,8 +27910,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/455539/buildings.geojson",
-          "bytes": 502171,
-          "sha256": "b6169ef8049a10b9639a2003ddd472fd59a0dfd4a616745a18436384bc635350"
+          "bytes": 890577,
+          "sha256": "d503a215ac5775dd93360758ed0a26faeca738bb2a547ec0a90afcd941ccbbb9"
         },
         {
           "role": "routes",
@@ -28152,8 +28152,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/456807/buildings.geojson",
-          "bytes": 618789,
-          "sha256": "9b649a809b851373ec55898b11e636d5cb112fd5f4e6643ea818f44807fc2faf"
+          "bytes": 1056876,
+          "sha256": "c948021cc3171f2b9e9ae38cf4667c824e6c78a1579b03e047e2d9a2f6540914"
         },
         {
           "role": "routes",
@@ -28394,8 +28394,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/531264/buildings.geojson",
-          "bytes": 474052,
-          "sha256": "87612b0385312e8bd00617b8795c8d3de827720ae1bb2561c5f7da7618ce06aa"
+          "bytes": 810730,
+          "sha256": "32c9aa54b8d6d491f4c98cd9903854d7fc5f5e2dcb2004858cf110734728c768"
         },
         {
           "role": "routes",
@@ -28636,8 +28636,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/531287/buildings.geojson",
-          "bytes": 335681,
-          "sha256": "9598fb87eddf615de06fef8dcf3dfa09515a7c7433ee0586ad7658393684bc16"
+          "bytes": 549695,
+          "sha256": "7896a7f41a8ee75e0e0ebee12ac5c54238c5997947b2b587c5f18558ac265eb9"
         },
         {
           "role": "routes",
@@ -28878,8 +28878,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/535655/buildings.geojson",
-          "bytes": 901065,
-          "sha256": "6bc28e59bddd88e6439c52c87ecd0641504ca3979ea1eb77bac7f084e2da4dac"
+          "bytes": 1596230,
+          "sha256": "d51fbbe9215f41be7edecb4f7c2bdc9cdb5b1245a8040f869f9fa05201d87d06"
         },
         {
           "role": "routes",
@@ -29120,8 +29120,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/535662/buildings.geojson",
-          "bytes": 840697,
-          "sha256": "eaa5ec494d5baa1d5037ab6d42c5f5e8ca4fbf5894d81eddc5f380c22edce026"
+          "bytes": 1500335,
+          "sha256": "5e9a498a7b3cbfead8ee7f3b085ef4eb5689a1d72c8ba7f52a7c1f7bc63b4df3"
         },
         {
           "role": "routes",
@@ -29362,8 +29362,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/535680/buildings.geojson",
-          "bytes": 453848,
-          "sha256": "5055d4447a405af4cdc382967f28760a7dd685592ca1c5df21b7b2541359f6ed"
+          "bytes": 789373,
+          "sha256": "5a3223bedb9fd76e0b6673982874beb0e339da7ea0ac167eac4d02e973331a78"
         },
         {
           "role": "routes",
@@ -29604,8 +29604,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/548619/buildings.geojson",
-          "bytes": 1543572,
-          "sha256": "0e9a40a490c5a83995641a15fe9b25c4e437fbd6d8777bf9c60938a8ed80ce4f"
+          "bytes": 2742111,
+          "sha256": "4534e80b83b4e6721e252232110c6cf48986c0c68d12dfbba6cb79791056e08e"
         },
         {
           "role": "routes",
@@ -29846,8 +29846,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/574667/buildings.geojson",
-          "bytes": 783713,
-          "sha256": "ca2c4281c10a336a5b067b5be22acf88b181d1d23d5cfa3eb811d067ea1a2409"
+          "bytes": 1427922,
+          "sha256": "2dc8e6849c3638be7b0654e95273e5ad5425af33a93e7334a72b4f85af5e520c"
         },
         {
           "role": "routes",
@@ -30088,8 +30088,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/950639/buildings.geojson",
-          "bytes": 810952,
-          "sha256": "bb85c64303a62c241fb31ec1cf090612dca79b5357e419fb514776923edd67ee"
+          "bytes": 1477041,
+          "sha256": "10ac234fd4df44540f5bd0a10032bf38e976ad820c91df2dbe40fdf583214bba"
         },
         {
           "role": "routes",
@@ -30330,8 +30330,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/950641/buildings.geojson",
-          "bytes": 897753,
-          "sha256": "a2367ee410bae39a3710c25c7828c51d0520d1e4e3b3394c9f48f967344ca083"
+          "bytes": 1569452,
+          "sha256": "38501df5e774f20819d7a11323a1a027590979931106feb99f9c91f407556c14"
         },
         {
           "role": "routes",
@@ -30572,8 +30572,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/950658/buildings.geojson",
-          "bytes": 610964,
-          "sha256": "eb7746cac8173386db81272add882d913266c84a87383449dd6c961a19915411"
+          "bytes": 1045377,
+          "sha256": "3fe5f1292f9cfef6d722964f53b660e57f16f7430d2bda6b68093abd710311c6"
         },
         {
           "role": "routes",
@@ -30814,8 +30814,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/950664/buildings.geojson",
-          "bytes": 813527,
-          "sha256": "8dc94faa6d7e0c8561e9ccb86aea5ad4dd206e0b678bfbd96f4166f70dd27736"
+          "bytes": 1491764,
+          "sha256": "424e15bb86b4173a18150f699f4e5a068ed6a55f659d5b8b2c3b67dd1b9e6244"
         },
         {
           "role": "routes",
@@ -31056,8 +31056,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/951305/buildings.geojson",
-          "bytes": 553444,
-          "sha256": "ff1c674a8ebb10cf6650ddebb48df46dd5edc5a2453cfcffb73686d02e9a2125"
+          "bytes": 961820,
+          "sha256": "34cb415a9fed55f6725cd2fb5aed6377ca0aaa0ad7900f7232e17b069aeb6b23"
         },
         {
           "role": "routes",
@@ -31298,8 +31298,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/951334/buildings.geojson",
-          "bytes": 809984,
-          "sha256": "31401715affa4b55b4e3501808e8c4e2921c4875c19d39de5a6b0369e0c402c8"
+          "bytes": 1277222,
+          "sha256": "3d0b649fce2f6ac4375db53d8d2cdfad757d63e7b6990db4dfb66fa5a3757c8a"
         },
         {
           "role": "routes",
@@ -31540,8 +31540,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/951336/buildings.geojson",
-          "bytes": 524079,
-          "sha256": "aecfdd2e80522a936638b9341d6d9468c81da98626e14592fa37613e80338f3e"
+          "bytes": 960722,
+          "sha256": "d0587a0a3cdb629e37c8c5da24d0f9a2a24dc052ee5f35e732cfb4bba86e2ccf"
         },
         {
           "role": "routes",
@@ -31782,8 +31782,8 @@
         {
           "role": "buildings_geojson",
           "path": "data/districts/952191/buildings.geojson",
-          "bytes": 816948,
-          "sha256": "071698623231d33c2ac5d16b1bab4559fa9aa3bd574c892d69ce9d33cfe78234"
+          "bytes": 1415917,
+          "sha256": "f86bc9243add92b8f857d1031589108223eb9d99d72d5c7f1fbed5e5d168b815"
         },
         {
           "role": "routes",
