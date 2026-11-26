@@ -137,6 +137,17 @@ type CompactSearchIndex = {
 // его динамический URL (Turbopack и webpack одинаково).
 maplibregl.setWorkerUrl("maplibre-gl-worker.mjs");
 
+// В MapLibre v6 по умолчанию один web-воркер на страницу: декод тайлов всех
+// источников (buildings/basemap/overlays) идёт в очередь. Включаем 4 на
+// десктопе и 2 на мобиле (меньше памяти). Вызывать до создания Map.
+if (typeof window !== "undefined") {
+  const mobile =
+    window.matchMedia("(pointer: coarse)").matches ||
+    window.innerWidth < 768 ||
+    window.devicePixelRatio >= 2;
+  maplibregl.setWorkerCount(mobile ? 2 : Math.min(4, navigator.hardwareConcurrency || 1));
+}
+
 // Палитры карты по темам (мягкие акценты, не неон — SPEC).
 const MAP_THEMES = {
   light: {
