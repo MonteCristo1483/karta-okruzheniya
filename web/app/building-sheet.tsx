@@ -17,11 +17,20 @@ export type PenaltyEntry = {
 } | null;
 
 export type BuildingBreakdown = {
-  base: number;
-  index: number;
-  bonuses: Record<string, BonusEntry>;
-  penalties: Record<string, PenaltyEntry>;
+  v?: number;
+  i?: number | null;
+  /** 7 факторов 0..1: транспорт, промзоны, доступность, зелень, дом, плотность, ветер. */
+  f?: (number | null)[];
+  fl?: string[];
+  base?: number;
+  index?: number;
+  bonuses?: Record<string, BonusEntry>;
+  penalties?: Record<string, PenaltyEntry>;
 };
+
+export function isCompactBreakdown(b: BuildingBreakdown | null): b is BuildingBreakdown & { v: number; f: (number | null)[] } {
+  return b !== null && typeof b.v === "number" && Array.isArray(b.f);
+}
 
 export type Percentiles = Partial<
   Record<"road" | "railway" | "construction" | "industrial", number>
@@ -63,6 +72,56 @@ const PERCENTILE_LABELS: Record<string, string> = {
 // главной причиной. Баллы остаются в config/scoring.json.
 export const RED_FLAG_PENALTY = -0.2;
 export const SEVERE_PENALTY = -0.5;
+
+// Пороги вердикта — тоже презентация: балл считает пайплайн, карточка
+// только называет уровень.
+export const VERDICT_HIGH = 7.0;
+export const VERDICT_MID = 5.0;
+// v2: порядок и веса факторов — только для сортировки причин, не для балла.
+const V2_FACTORS = [
+  { key: "transport", label: "Транспорт", weight: 27, sign: -1, high: "Транспортная нагрузка высокая", mid: "Транспортный фон умеренный", low: "Тихий двор вдали от магистралей" },
+  { key: "industry", label: "Промышленность", weight: 18, sign: -1, high: "Промышленный источник рядом", mid: "Промышленный фон умеренный", low: "Промышленных источников рядом нет" },
+  { key: "access", label: "Доступность", weight: 18, sign: 1, high: "Метро и инфраструктура в пешей доступности", mid: "Часть инфраструктуры в пешей доступности", low: "До метро и инфраструктуры далеко" },
+  { key: "green", label: "Зелень", weight: 13.5, sign: 1, high: "Парк в пешей доступности", mid: "Зелени рядом немного", low: "Зелёных зон рядом нет" },
+  { key: "home", label: "Дом", weight: 9, sign: 1, high: "Дом новый или современной серии", mid: "Дом средней постройки", low: "Дом старый — панель до 1970" },
+  { key: "density", label: "Плотность", weight: 4.5, sign: -1, high: "Плотная застройка", mid: "Плотность застройки средняя", low: "Свободная застройка, мало соседей" },
+  { key: "wind", label: "Ветер", weight: 10, sign: -1, high: "Ветер часто со стороны предприятия", mid: "Ветер иногда со стороны предприятия", low: "Ветер редко приносит выбросы" },
+] as const;
+const V2_FLAG_LETTERS: Record<string, string> = { t: "transport", i: "industry", a: "access", g: "green", h: "home", d: "density", w: "wind" };
+const V2_MISSING: Record<string, string> = { transport: "нет данных по транспорту", industry: "промышленный источник не классифицирован", access: "доступность не рассчитана", green: "нет площади парков", home: "нет данных о доме", density: "нет данных по плотности", wind: "нет данных по ветру" };
+function v2Verdict(score: number | null): string {
+  if (score === null) return "Оценка недоступна";
+  if (score >= VERDICT_HIGH) return "Выше среднего по Москве";
+  if (score >= VERDICT_MID) return "Средний уровень по Москве";
+  return "Ниже среднего по Москве";
+}
+function v2Reasons(compact: BuildingBreakdown, year: number | null) {
+  const missing = new Map<string, string>();
+  for (const flag of compact.fl ?? []) {
+    const [letter, ...parts] = flag.split(":");
+    const factor = V2_FLAG_LETTERS[letter];
+    if (factor && parts.length > 0) {
+      missing.set(factor, parts[parts.length - 1] === "us" ? "статус предприятия неизвестен" : V2_MISSING[factor]);
+    }
+  }
+  if (year === null) missing.set("home", "нет года постройки");
+  const reasons = V2_FACTORS.map((factor, index) => {
+    const raw = compact.f?.[index];
+    const value = typeof raw === "number" ? raw : null;
+    const gap = missing.has(factor.key);
+    const level = value === null ? null : value >= 0.55 ? "high" : value <= 0.25 ? "low" : "mid";
+    const good = level === "high" ? factor.sign > 0 : level === "low" ? factor.sign < 0 : false;
+    return {
+      key: factor.key,
+      gap,
+      impact: value === null ? 0 : Math.abs(value * factor.weight),
+      tone: gap || level === null ? "neutral" : level === "mid" ? "neutral" : good ? "good" : "bad",
+      text: gap ? `${factor.label}: данных нет` : level ? factor[level] : `${factor.label}: данных нет`,
+    };
+  })
+    .sort((a, b) => Number(a.gap) - Number(b.gap) || b.impact - a.impact).slice(0, 3);
+  return { reasons, missing: Array.from(new Set(missing.values())) };
+}
 
 // Публичный URL статического экспорта на GitHub Pages (basePath из next.config).
 const PUBLIC_BASE = "https://montecristo1483.github.io/karta-okruzheniya";
@@ -229,6 +288,9 @@ export default function BuildingSheet({
   }, [building?.id]);
 
   const breakdown = building?.breakdown ?? null;
+  const compact = isCompactBreakdown(breakdown) ? breakdown : null;
+  const score = compact?.i ?? building?.index ?? null;
+  const compactInfo = compact && building ? v2Reasons(compact, building.year) : null;
 
   const penaltyEntries = Object.entries(breakdown?.penalties ?? {})
     .filter((entry): entry is [string, NonNullable<PenaltyEntry>] => entry[1] !== null)
@@ -370,7 +432,7 @@ export default function BuildingSheet({
       )
       .join(", ");
     const text = `${building.address ?? "Дом"} — индекс окружения ${
-      building.index?.toFixed(1) ?? "—"
+      score?.toFixed(1) ?? "—"
     }/10${facts ? `. ${facts}` : ""}. ${url}`;
     try {
       if (!navigator.clipboard?.writeText) throw new Error("clipboard недоступен");
@@ -437,7 +499,7 @@ export default function BuildingSheet({
               <span className="min-w-0 flex-1 truncate text-base font-bold text-slate-800 dark:text-slate-100">
                 {building.address ?? "Адрес не указан"}
               </span>
-              <Ring index={building.index} size={44} />
+              <Ring index={score} size={44} />
             </button>
 
             {/* Полный вид: скрыт в минимальном на мобильном */}
@@ -460,11 +522,11 @@ export default function BuildingSheet({
                       </span>
                     </div>
                   )}
-                  <div className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
-                    Индекс окружения
+                  <div className="mt-1.5 text-lg font-bold leading-tight text-slate-800 dark:text-slate-100">
+                    {compact ? v2Verdict(score) : "Индекс окружения"}
                   </div>
                   <div className="mt-0.5 text-sm font-semibold leading-snug text-slate-800 dark:text-slate-100">
-                    {verdict}
+                    {compact ? `Индекс окружения — ${score === null ? "—" : score.toFixed(1)} из 10` : verdict}
                   </div>
                   {percentileLine && (
                     <div className="mt-1 text-xs leading-snug text-slate-500 dark:text-slate-400">
@@ -473,7 +535,7 @@ export default function BuildingSheet({
                   )}
                 </div>
                 <div className="relative shrink-0 pt-2">
-                  <Ring index={building.index} />
+                  <Ring index={score} />
                   <button
                     type="button"
                     onClick={onClose}
@@ -492,7 +554,23 @@ export default function BuildingSheet({
                 </div>
               </div>
 
-              {scoreChips.length > 0 && (
+              {compactInfo && (
+                <div className="mt-3">
+                  <ul className="space-y-1.5">
+                    {compactInfo.reasons.map((reason) => (
+                      <li key={reason.key} className="flex items-start gap-2 text-sm leading-snug text-slate-700 dark:text-slate-200">
+                        <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${reason.tone === "good" ? "bg-emerald-400" : reason.tone === "bad" ? "bg-red-400" : "bg-slate-300 dark:bg-slate-600"}`} />
+                        <span>{reason.text}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-2 text-[11px] leading-tight text-slate-400 dark:text-slate-500">
+                    {compactInfo.missing.length > 0 ? `Данные: ${compactInfo.missing.join(" · ")}` : "Данные по дому и окружению полные"}
+                  </div>
+                </div>
+              )}
+
+              {!compact && scoreChips.length > 0 && (
                 <div className="mt-3 grid grid-cols-2 gap-1.5">
                   {scoreChips.map((item) => (
                     <ScoreChip
@@ -504,7 +582,7 @@ export default function BuildingSheet({
                   ))}
                 </div>
               )}
-              {hiddenCount > 0 && (
+              {!compact && hiddenCount > 0 && (
                 <div className="mt-1 text-[10px] text-slate-400 dark:text-slate-500">
                   Ещё {hiddenCount} — в «Почему такой балл»
                 </div>
@@ -536,7 +614,7 @@ export default function BuildingSheet({
                 </div>
               </div>
 
-              {breakdown && (
+              {!compact && breakdown && (
                 <details className="group mt-3 rounded-2xl bg-slate-50 px-4 py-3 dark:bg-slate-800/60">
                   <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-semibold text-slate-700 dark:text-slate-200 [&::-webkit-details-marker]:hidden">
                     <span>Почему такой балл</span>
@@ -591,7 +669,7 @@ export default function BuildingSheet({
                 </details>
               )}
 
-              {redFlags.length > 0 ? (
+              {!compact && (redFlags.length > 0 ? (
                 <details className="group mt-3 rounded-2xl bg-red-50 px-4 py-3 dark:bg-red-950/50">
                   <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-bold text-red-700 dark:text-red-300 [&::-webkit-details-marker]:hidden">
                     <span className="flex items-center gap-2">
@@ -642,9 +720,9 @@ export default function BuildingSheet({
                 <div className="mt-3 rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
                   Явных красных флагов рядом нет — но проверьте лично.
                 </div>
-              )}
+              ))}
 
-              {greenFacts.length > 0 && (
+              {!compact && greenFacts.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {greenFacts.map(([kind, entry]) => (
                     <span
@@ -657,7 +735,7 @@ export default function BuildingSheet({
                 </div>
               )}
 
-              {softMinuses.length > 0 && (
+              {!compact && softMinuses.length > 0 && (
                 <div className="mt-2 text-xs leading-snug text-amber-700 dark:text-amber-300">
                   Далеко: {softMinuses.join(" · ")}
                 </div>
@@ -715,9 +793,10 @@ export default function BuildingSheet({
                   />
                 </div>
               )}
-              <p className="mt-2 text-center text-[11px] leading-tight text-slate-400">
-                Справочная информация по открытым данным, не является замером или оценкой
-                стоимости
+              <p className="mt-3 text-center text-[11px] leading-tight text-slate-400 dark:text-slate-500">
+                Справочная расчётная оценка на основе открытых данных. Не является
+                заключением экспертизы и не может использоваться для оценки стоимости
+                недвижимости.
               </p>
             </div>
           </>

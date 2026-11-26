@@ -7,6 +7,7 @@ import type { Feature, FeatureCollection, Geometry, Position } from "geojson";
 import polygonClipping from "polygon-clipping";
 import "maplibre-gl/dist/maplibre-gl.css";
 import BuildingSheet, { RED_FLAG_PENALTY } from "./building-sheet";
+import { isCompactBreakdown } from "./building-sheet";
 import type { BuildingBreakdown, SelectedBuilding } from "./building-sheet";
 import LayersPanel, { DEFAULT_VISIBILITY } from "./layers-panel";
 import type { Visibility } from "./layers-panel";
@@ -3903,7 +3904,7 @@ export default function Map() {
             if (layerKey && !vis[layerKey]) continue;
             const target = nearestPoi(cat, selCenter);
             if (!target) continue;
-            const entry = sel.breakdown?.bonuses[cat];
+            const entry = sel.breakdown?.bonuses?.[cat];
             const minutes = routesRef.current?.[cat]?.minutes ?? entry?.minutes;
             if (minutes == null) continue;
             const type = target.f.properties.type;
@@ -3923,7 +3924,7 @@ export default function Map() {
         if (sel?.breakdown && selCenter) {
           // Ищем по видимым районам и району выбранного дома, а не по всему кэшу города.
           const redzonePool = loadedRedzoneFeatures(sel.id);
-          for (const [key, entry] of Object.entries(sel.breakdown.penalties)) {
+          for (const [key, entry] of Object.entries(sel.breakdown.penalties ?? {})) {
             if (!entry || entry.penalty >= RED_FLAG_PENALTY) continue;
             const kind = PENALTY_TO_KIND[key];
             if (!kind) continue;
@@ -4901,9 +4902,12 @@ export default function Map() {
           // если отдельный тайловый feature не содержит разбивку.
           if (tileMode) {
             const current = selectedRef.current;
+            // v2-компакт из тайла главнее legacy-разбивки из старого шарда.
+            const fromShard = parseBuildingBreakdown(data.breakdown);
             const breakdown =
-              parseBuildingBreakdown(data.breakdown) ??
-              (current?.id === id ? current.breakdown : null);
+              current?.id === id && isCompactBreakdown(current.breakdown)
+                ? current.breakdown
+                : fromShard ?? (current?.id === id ? current.breakdown : null);
             breakdownCacheRef.current[id] = breakdown;
             if (current?.id === id && breakdown) {
               const next: SelectedBuilding = { ...current, breakdown };
