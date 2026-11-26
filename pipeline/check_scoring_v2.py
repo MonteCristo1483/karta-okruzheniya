@@ -40,7 +40,8 @@ def main(argv: list[str] | None = None) -> int:
     params = [] if args.all else [args.sample]
     with psycopg.connect(DB_DSN) as conn, conn.cursor() as cur:
         cur.execute(
-            "SELECT b.osm_id, s.index "
+            "SELECT b.osm_id, s.index, "
+            "(s.breakdown->'penalties'->'industrial') IS NOT NULL "
             "FROM buildings b "
             "JOIN moscow m ON ST_Intersects(b.geometry, m.geometry) "
             "JOIN scores s ON s.building_id = b.osm_id "
@@ -52,15 +53,18 @@ def main(argv: list[str] | None = None) -> int:
         rows = cur.fetchall()
         ids = [row[0] for row in rows]
         before = {row[0]: float(row[1]) for row in rows}
+        legacy_industrial = {row[0]: bool(row[2]) for row in rows}
 
         scope = "(SELECT * FROM buildings WHERE osm_id = ANY(%s))"
         transport = scoring.collect_v2_transport(cur, scope, [ids], cfg)
+        industry = scoring.collect_v2_industry(cur, scope, [ids], cfg)
         access = scoring.collect_v2_access(cur, scope, [ids], cfg)
         green = scoring.collect_v2_green(cur, scope, [ids], cfg)
         home = scoring.collect_v2_home(cur, scope, [ids], cfg)
         density = scoring.collect_v2_density(cur, scope, [ids], cfg)
 
     empty_transport = {"value": 0.0, "status": "outside", "class": None}
+    empty_industry = scoring_v2.industry_pressure([], cfg)
     empty_access = scoring_v2.access_quality(
         {name: None for name in cfg["v2"]["access"]["types"]}, cfg
     )
@@ -69,14 +73,25 @@ def main(argv: list[str] | None = None) -> int:
     empty_density = scoring_v2.density_pressure(None, cfg)
 
     after: list[float] = []
+    without_industry: list[float] = []
     deltas: list[float] = []
-    factor_values = {"transport": [], "access": [], "green": [], "home": [],
-                     "density": []}
-    flags = {"transport:not_classified": 0, "access:not_classified": 0,
-             "green:not_classified": 0, "home:not_classified": 0,
-             "density:not_classified": 0}
+    factor_values = {"transport": [], "industry": [], "access": [], "green": [],
+                     "home": [], "density": []}
+    flags = {"transport:not_classified": 0, "industry:not_classified": 0,
+             "access:not_classified": 0, "green:not_classified": 0,
+             "home:not_classified": 0, "density:not_classified": 0}
+    industry_penalized = 0
     for osm_id in ids:
         block = scoring_v2.build_v2_block(
+            transport.get(osm_id, empty_transport),
+            access.get(osm_id, empty_access),
+            green.get(osm_id, empty_green),
+            home.get(osm_id, empty_home),
+            density.get(osm_id, empty_density),
+            cfg,
+            industry=industry.get(osm_id, empty_industry),
+        )
+        reference = scoring_v2.build_v2_block(
             transport.get(osm_id, empty_transport),
             access.get(osm_id, empty_access),
             green.get(osm_id, empty_green),
@@ -86,7 +101,10 @@ def main(argv: list[str] | None = None) -> int:
         )
         value = float(block["index"])
         after.append(value)
+        without_industry.append(float(reference["index"]))
         deltas.append(abs(value - before[osm_id]))
+        if block["factors"]["industry"]["value"] > 0:
+            industry_penalized += 1
         for name, entry in block["factors"].items():
             factor_values[name].append(float(entry["value"]))
         for flag in block["flags"]:
@@ -102,10 +120,14 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     print(f"Домов: {len(ids):,}")
-    report("до  (v1)", [before[i] for i in ids])
-    report("после (v2)", after)
+    report("до  (v1 scores)", [before[i] for i in ids])
+    report("v2 без промзон", without_industry)
+    report("v2 с промзонами", after)
+    legacy_share = sum(1 for flag in legacy_industrial.values() if flag) / len(ids)
+    print(f"штраф v1 landuse=industrial: {legacy_share * 100:.1f}% домов")
+    print(f"v2 industry value > 0: {industry_penalized / len(ids) * 100:.1f}% домов")
     moved = sum(1 for delta in deltas if delta > 1.0)
-    print(f"delta > 1 пункта: {moved:,} ({moved / len(ids) * 100:.1f}%)")
+    print(f"delta v1->v2 > 1 пункта: {moved:,} ({moved / len(ids) * 100:.1f}%)")
     print(f"медиана |delta|: {statistics.median(deltas):.2f}")
     print("среднее value: " + ", ".join(
         f"{name} {statistics.mean(values):.3f}"

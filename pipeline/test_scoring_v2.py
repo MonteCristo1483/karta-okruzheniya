@@ -17,6 +17,7 @@ from scoring_v2 import (  # noqa: E402
     density_pressure,
     green_quality,
     home_quality,
+    industry_pressure,
     transport_quality_cfg,
     v2_index,
 )
@@ -32,7 +33,7 @@ class TestWeights(unittest.TestCase):
     def test_all_factors_present(self):
         self.assertEqual(
             set(CFG["v2"]["weights"]),
-            {"transport", "access", "green", "home", "density"},
+            {"transport", "industry", "access", "green", "home", "density"},
         )
 
     def test_access_type_weights_sum_to_one(self):
@@ -207,30 +208,143 @@ class TestDensity(unittest.TestCase):
         )
 
 
+class TestIndustry(unittest.TestCase):
+    def test_sanpin_radii(self):
+        classes = CFG["v2"]["industry"]["classes"]
+        self.assertEqual(classes["I"]["radius_m"], 1000)
+        self.assertEqual(classes["II"]["radius_m"], 500)
+        self.assertEqual(classes["III"]["radius_m"], 300)
+        self.assertEqual(classes["IV"]["radius_m"], 100)
+        self.assertEqual(classes["V"]["radius_m"], 50)
+
+    def test_class_i_at_zero_is_full(self):
+        entry = industry_pressure(
+            [{"id": "x", "name": "МНПЗ", "hazard_class": "I", "distance_m": 0}], CFG
+        )
+        self.assertEqual(entry["value"], 1.0)
+        self.assertEqual(entry["status"], "ok")
+
+    def test_half_radius_uses_power_1_5(self):
+        entry = industry_pressure(
+            [{"id": "x", "name": "ТЭЦ", "hazard_class": "III", "distance_m": 150}], CFG
+        )
+        weight = CFG["v2"]["industry"]["classes"]["III"]["weight"]
+        self.assertAlmostEqual(entry["value"], weight * 0.5 ** 1.5, places=3)
+
+    def test_service_near_190m_does_not_penalize(self):
+        entry = industry_pressure(
+            [{"id": "x", "name": "автосервис", "hazard_class": "V", "distance_m": 190}],
+            CFG,
+        )
+        self.assertEqual(entry["value"], 0)
+        self.assertEqual(entry["status"], "outside")
+
+    def test_unknown_class_is_not_classified(self):
+        entry = industry_pressure(
+            [{"id": "x", "name": "склад", "hazard_class": "VI", "distance_m": 20}], CFG
+        )
+        self.assertEqual(entry["value"], 0)
+        self.assertEqual(entry["status"], "not_classified")
+
+    def test_no_sources_is_known_zero(self):
+        entry = industry_pressure([], CFG)
+        self.assertEqual(entry["value"], 0)
+        self.assertEqual(entry["status"], "known_zero")
+
+    def test_inside_unclassified_polygon_is_zero_with_flag(self):
+        entry = industry_pressure([], CFG, inside_unclassified_polygon=True)
+        self.assertEqual(entry["value"], 0)
+        self.assertEqual(entry["status"], "not_classified")
+        block = build_v2_block(
+            {"value": 0.0, "status": "outside", "class": None},
+            {"value": 0.0, "status": "known_zero"},
+            {"value": 0.0, "status": "known_zero"},
+            {"value": 0.0, "status": "known_zero"},
+            {"value": 0.0, "status": "known_zero"},
+            CFG,
+            industry=entry,
+        )
+        self.assertIn("industry:not_classified", block["flags"])
+        self.assertEqual(block["index"], CFG["index"]["base"])
+
+    def test_inside_polygon_with_far_source_is_still_not_classified(self):
+        entry = industry_pressure(
+            [{"id": "x", "name": "ТЭЦ", "hazard_class": "III", "distance_m": 900}],
+            CFG,
+            inside_unclassified_polygon=True,
+        )
+        self.assertEqual(entry["value"], 0)
+        self.assertEqual(entry["status"], "not_classified")
+
+    def test_strictest_source_wins(self):
+        entry = industry_pressure(
+            [
+                {"id": "a", "name": "котельная", "hazard_class": "IV", "distance_m": 20},
+                {"id": "b", "name": "ТЭЦ", "hazard_class": "III", "distance_m": 100},
+            ],
+            CFG,
+        )
+        self.assertEqual(entry["hazard_class"], "III")
+        self.assertGreater(entry["value"], 0)
+
+    def test_max_industry_penalty(self):
+        values = {"transport": 0, "industry": 1.0, "access": 0, "green": 0,
+                  "home": 0, "density": 0}
+        self.assertEqual(v2_index(values, CFG), dec("3.0"))
+
+
+SOURCES_PATH = Path(__file__).resolve().parent.parent / "config" / "industry_sources.json"
+SOURCES = json.loads(SOURCES_PATH.read_text(encoding="utf-8"))["sources"]
+
+
+class TestIndustrySources(unittest.TestCase):
+    def test_manual_list_size(self):
+        self.assertGreaterEqual(len(SOURCES), 20)
+        self.assertLessEqual(len(SOURCES), 40)
+
+    def test_classes_are_valid(self):
+        classes = set(CFG["v2"]["industry"]["classes"])
+        for source in SOURCES:
+            self.assertIn(source["hazard_class"], classes, source["id"])
+
+    def test_ids_are_unique(self):
+        ids = [source["id"] for source in SOURCES]
+        self.assertEqual(len(ids), len(set(ids)))
+
+    def test_coordinates_inside_moscow_region(self):
+        for source in SOURCES:
+            self.assertTrue(55.5 <= source["lat"] <= 56.0, source["id"])
+            self.assertTrue(37.3 <= source["lon"] <= 38.0, source["id"])
+
+    def test_coordinates_are_verifiable_osm(self):
+        for source in SOURCES:
+            self.assertRegex(source["source"], r"OSM (node|way|relation) \d+")
+
+
 class TestIndex(unittest.TestCase):
     def test_all_unknown_stays_neutral(self):
         values = {name: 0.0 for name in CFG["v2"]["weights"]}
         self.assertEqual(v2_index(values, CFG), CFG["index"]["base"])
 
     def test_best_quality(self):
-        values = {"transport": 0.0, "access": 0.0, "green": 1.0,
-                  "home": 1.0, "density": 0.0}
-        self.assertEqual(v2_index(values, CFG), dec("8.1"))
-
-    def test_max_transport_penalty(self):
-        values = {"transport": 1.0, "access": 0, "green": 0,
-                  "home": 0, "density": 0}
-        self.assertEqual(v2_index(values, CFG), dec("1.2"))
-
-    def test_max_access_bonus(self):
-        values = {"transport": 0, "access": 1.0, "green": 0,
-                  "home": 0, "density": 0}
+        values = {"transport": 0.0, "industry": 0.0, "access": 0.0,
+                  "green": 1.0, "home": 1.0, "density": 0.0}
         self.assertEqual(v2_index(values, CFG), dec("7.5"))
 
+    def test_max_transport_penalty(self):
+        values = {"transport": 1.0, "industry": 0, "access": 0, "green": 0,
+                  "home": 0, "density": 0}
+        self.assertEqual(v2_index(values, CFG), dec("2.0"))
+
+    def test_max_access_bonus(self):
+        values = {"transport": 0, "industry": 0, "access": 1.0, "green": 0,
+                  "home": 0, "density": 0}
+        self.assertEqual(v2_index(values, CFG), dec("7.0"))
+
     def test_max_density_penalty(self):
-        values = {"transport": 0, "access": 0, "green": 0,
+        values = {"transport": 0, "industry": 0, "access": 0, "green": 0,
                   "home": 0, "density": 1.0}
-        self.assertEqual(v2_index(values, CFG), dec("4.4"))
+        self.assertEqual(v2_index(values, CFG), dec("4.5"))
 
     def test_unknown_factor_adds_flag(self):
         block = build_v2_block(
@@ -242,8 +356,8 @@ class TestIndex(unittest.TestCase):
             CFG,
         )
         self.assertIn("green:not_classified", block["flags"])
-        self.assertEqual(block["factors"]["transport"]["contribution"], -1.9)
-        self.assertEqual(block["index"], 3.2)
+        self.assertEqual(block["factors"]["transport"]["contribution"], -1.5)
+        self.assertEqual(block["index"], 3.6)
 
     def test_missing_access_layer_adds_flags(self):
         block = build_v2_block(

@@ -126,6 +126,27 @@ WHERE ST_DWithin(b.geometry::geography, g.geometry::geography, %s)
                      ST_Transform(g.geometry, {srid})) <= %s
 """
 
+# Промышленный источник: все объекты из industry_sources в пределах
+# максимального радиуса класса (1000 м для I). Сам полигон landuse=industrial
+# не штрафует — он только помечает дом как «промзона без классификации».
+V2_INDUSTRY = """
+SELECT b.osm_id, s.id, s.name, s.hazard_class,
+       ST_Distance(b.geometry::geography, s.geometry::geography)
+FROM {scope} b
+JOIN industry_sources s
+  ON s.geometry && ST_Expand(b.geometry, %s)
+ AND ST_Distance(b.geometry::geography, s.geometry::geography) <= %s
+"""
+
+V2_INDUSTRY_INSIDE = """
+SELECT DISTINCT b.osm_id
+FROM {scope} b
+JOIN zones z
+  ON z.kind = 'industrial'
+ AND z.geometry && b.geometry
+ AND ST_Intersects(b.geometry, z.geometry)
+"""
+
 # Дом: ближайшая запись реестра (год, серия, материал) в радиусе match_radius.
 V2_HOME = """
 SELECT b.osm_id, y.building_year, y.series, y.material
@@ -371,6 +392,37 @@ def collect_v2_home(cur, scope: str, scope_params: list, cfg: dict) -> dict:
     }
 
 
+def collect_v2_industry(cur, scope: str, scope_params: list, cfg: dict) -> dict:
+    """Промышленные источники: value по классу опасности; полигон — только флаг."""
+    spec = cfg["v2"]["industry"]
+    max_radius = max(float(item["radius_m"]) for item in spec["classes"].values())
+    pad = max_radius / METERS_PER_DEGREE * 1.2
+    cur.execute(
+        V2_INDUSTRY.format(scope=scope),
+        [*scope_params, pad, max_radius + 1],
+    )
+    per_building: dict[int, list[dict]] = {}
+    for osm_id, source_id, name, hazard_class, distance in cur.fetchall():
+        per_building.setdefault(osm_id, []).append({
+            "id": source_id,
+            "name": name,
+            "hazard_class": hazard_class,
+            "distance_m": float(distance),
+        })
+    cur.execute(V2_INDUSTRY_INSIDE.format(scope=scope), scope_params)
+    inside = {row[0] for row in cur.fetchall()}
+    result = {
+        osm_id: scoring_v2.industry_pressure(
+            sources, cfg, inside_unclassified_polygon=osm_id in inside
+        )
+        for osm_id, sources in per_building.items()
+    }
+    # Дом внутри промзоны без единого источника в 1000 м — тоже неизвестность.
+    for osm_id in inside - set(per_building):
+        result[osm_id] = scoring_v2.industry_pressure([], cfg, True)
+    return result
+
+
 def collect_v2_density(cur, scope: str, scope_params: list, cfg: dict) -> dict:
     radius = float(cfg["v2"]["density"]["radius_m"])
     pad = radius / METERS_PER_DEGREE * 1.5
@@ -411,6 +463,7 @@ def run(scope: str, scope_params: list, cfg: dict) -> int:
         v2_enabled = bool(cfg.get("v2", {}).get("enabled", False))
         if v2_enabled:
             v2_transport = collect_v2_transport(cur, scope, scope_params, cfg)
+            v2_industry = collect_v2_industry(cur, scope, scope_params, cfg)
             v2_access = collect_v2_access(cur, scope, scope_params, cfg)
             v2_green = collect_v2_green(cur, scope, scope_params, cfg)
             v2_home = collect_v2_home(cur, scope, scope_params, cfg)
@@ -418,6 +471,7 @@ def run(scope: str, scope_params: list, cfg: dict) -> int:
 
         # Нет дороги в пределах максимального R — это известный ноль, не unknown.
         empty_transport = {"value": 0.0, "status": "outside", "class": None}
+        empty_industry = scoring_v2.industry_pressure([], cfg)
         empty_access = scoring_v2.access_quality(
             {name: None for name in cfg["v2"]["access"]["types"]}, cfg
         )
@@ -446,6 +500,7 @@ def run(scope: str, scope_params: list, cfg: dict) -> int:
                     v2_home.get(osm_id, empty_home),
                     v2_density.get(osm_id, empty_density),
                     cfg,
+                    industry=v2_industry.get(osm_id, empty_industry),
                 )
                 breakdown["version"] = 2
                 breakdown["v2"] = v2_block

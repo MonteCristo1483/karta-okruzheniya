@@ -6,6 +6,7 @@
 
 Факторы (value 0..1):
   transport — давление близости транспорта (1 = дорога вплотную, penalty);
+  industry  — промышленный источник по классу опасности (1 = вплотную, penalty);
   access    — пешая доступность POI (1 = всё вплотную, bonus);
   green     — парк >= 0,5 га целиком в радиусе 300 м (1 = бонус);
   home      — под-индекс по году + серии + материалу (1 = новостройка);
@@ -69,6 +70,85 @@ def best_transport_quality(per_class: dict[str, float], cfg: dict) -> dict:
         key=lambda entry: entry["value"],
     )
     return best
+
+
+def industry_pressure(
+    sources: list[dict],
+    cfg: dict,
+    inside_unclassified_polygon: bool = False,
+) -> dict:
+    """Промышленный источник: value = max w_cls * (1 - d/R)^exp по объектам.
+
+    sources — [{"hazard_class": "I".."V", "distance_m": м, "name": ...}, ...].
+    Радиус и вес — по классу опасности из cfg["v2"]["industry"]. d >= R -> 0.
+
+    Неизвестный класс объекта -> value 0 + not_classified (никаких средних).
+    Нет объектов, но дом внутри полигона landuse=industrial, который не
+    классифицирован -> value 0 + not_classified (флаг ставит build_v2_block).
+    Полигон сам по себе никогда не штрафует.
+    """
+    spec = _cfg(cfg)["industry"]
+    classes = spec["classes"]
+    exponent = dec(spec["exponent"])
+    best: dict | None = None
+    nearest: dict | None = None
+    unknown_class = False
+    for source in sources:
+        hazard_class = source.get("hazard_class")
+        distance = dec(source["distance_m"])
+        if nearest is None or distance < dec(nearest["distance_m"]):
+            nearest = {
+                "distance_m": float(round_dec(distance)),
+                "hazard_class": hazard_class,
+                "name": source.get("name"),
+            }
+        if hazard_class not in classes:
+            unknown_class = True
+            continue
+        radius = dec(classes[hazard_class]["radius_m"])
+        if distance >= radius:
+            continue
+        ratio = Decimal(1) - distance / radius
+        value = dec(classes[hazard_class]["weight"]) * (ratio ** exponent)
+        if best is None or value > dec(best["value"]):
+            best = {
+                "value": float(round_dec(value, 4)),
+                "distance_m": float(round_dec(distance)),
+                "radius_m": float(radius),
+                "hazard_class": hazard_class,
+                "name": source.get("name"),
+                "id": source.get("id"),
+            }
+    if best is not None:
+        return {"status": "ok", **best}
+    if unknown_class:
+        return {
+            "value": 0.0,
+            "status": "not_classified",
+            "reason": "unknown_class",
+            "distance_m": nearest["distance_m"] if nearest else None,
+            "hazard_class": nearest["hazard_class"] if nearest else None,
+            "name": nearest["name"] if nearest else None,
+        }
+    if inside_unclassified_polygon:
+        return {
+            "value": 0.0,
+            "status": "not_classified",
+            "reason": "unclassified_polygon",
+            "distance_m": nearest["distance_m"] if nearest else None,
+            "hazard_class": None,
+            "name": None,
+        }
+    if nearest is not None:
+        return {
+            "value": 0.0,
+            "status": "outside",
+            "distance_m": nearest["distance_m"],
+            "hazard_class": nearest["hazard_class"],
+            "name": nearest["name"],
+        }
+    return {"value": 0.0, "status": "known_zero",
+            "distance_m": None, "hazard_class": None, "name": None}
 
 
 def green_quality(parks: list[dict], cfg: dict) -> dict:
@@ -259,11 +339,16 @@ def build_v2_block(
     home: dict,
     density: dict,
     cfg: dict,
+    industry: dict | None = None,
 ) -> dict:
     """Собирает breakdown.v2 + список флагов not_classified."""
     v2 = _cfg(cfg)
+    if industry is None:
+        industry = {"value": 0.0, "status": "known_zero", "distance_m": None,
+                    "hazard_class": None, "name": None}
     values = {
         "transport": transport["value"],
+        "industry": industry["value"],
         "access": access["value"],
         "green": green["value"],
         "home": home["value"],
@@ -273,6 +358,7 @@ def build_v2_block(
     flags: list[str] = []
     for name, entry in (
         ("transport", transport),
+        ("industry", industry),
         ("access", access),
         ("green", green),
         ("home", home),
