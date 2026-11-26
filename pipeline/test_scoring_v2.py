@@ -9,6 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from scoring_v2 import (  # noqa: E402
+    access_quality,
     best_transport_quality,
     build_v2_block,
     dec,
@@ -31,8 +32,14 @@ class TestWeights(unittest.TestCase):
     def test_all_factors_present(self):
         self.assertEqual(
             set(CFG["v2"]["weights"]),
-            {"transport", "green", "home", "density"},
+            {"transport", "access", "green", "home", "density"},
         )
+
+    def test_access_type_weights_sum_to_one(self):
+        weights = [
+            spec["weight"] for spec in CFG["v2"]["access"]["types"].values()
+        ]
+        self.assertAlmostEqual(sum(weights), 1.0, places=6)
 
 
 class TestTransport(unittest.TestCase):
@@ -92,6 +99,52 @@ class TestGreen(unittest.TestCase):
     def test_park_smaller_than_min_area_is_zero(self):
         entry = green_quality([{"area_m2": 4000.0, "distance_m": 10.0}], CFG)
         self.assertEqual(entry["value"], 0)
+
+    def test_polygon_fully_inside_gives_bonus(self):
+        entry = green_quality(
+            [{"area_m2": 8000.0, "distance_m": 120.0, "max_distance_m": 299.0}],
+            CFG,
+        )
+        self.assertEqual(entry["value"], 1.0)
+        self.assertEqual(entry["status"], "ok")
+
+    def test_polygon_far_vertex_outside_radius_is_zero(self):
+        entry = green_quality(
+            [{"area_m2": 8000.0, "distance_m": 120.0, "max_distance_m": 310.0}],
+            CFG,
+        )
+        self.assertEqual(entry["value"], 0)
+
+
+class TestAccess(unittest.TestCase):
+    def distances(self, share: float) -> dict[str, float]:
+        return {
+            name: spec["radius_m"] * share
+            for name, spec in CFG["v2"]["access"]["types"].items()
+        }
+
+    def test_all_close_is_full(self):
+        entry = access_quality(self.distances(0.0), CFG)
+        self.assertEqual(entry["value"], 1.0)
+        self.assertEqual(entry["status"], "ok")
+
+    def test_at_radius_is_zero_but_known(self):
+        entry = access_quality(self.distances(1.0), CFG)
+        self.assertEqual(entry["value"], 0.0)
+        self.assertEqual(entry["status"], "ok")
+        self.assertEqual(entry["missing"], [])
+
+    def test_half_radius_is_half(self):
+        entry = access_quality(self.distances(0.5), CFG)
+        self.assertAlmostEqual(entry["value"], 0.5, places=3)
+
+    def test_missing_layer_renormalizes_and_flags(self):
+        distances = self.distances(0.0)
+        distances["polyclinic"] = None
+        entry = access_quality(distances, CFG)
+        self.assertEqual(entry["value"], 1.0)
+        self.assertIn("polyclinic", entry["missing"])
+        self.assertEqual(entry["status"], "not_classified")
 
 
 class TestHome(unittest.TestCase):
@@ -160,28 +213,50 @@ class TestIndex(unittest.TestCase):
         self.assertEqual(v2_index(values, CFG), CFG["index"]["base"])
 
     def test_best_quality(self):
-        values = {"transport": 0.0, "green": 1.0, "home": 1.0, "density": 0.0}
-        self.assertEqual(v2_index(values, CFG), dec("9.7"))
+        values = {"transport": 0.0, "access": 0.0, "green": 1.0,
+                  "home": 1.0, "density": 0.0}
+        self.assertEqual(v2_index(values, CFG), dec("8.1"))
 
     def test_max_transport_penalty(self):
-        values = {"transport": 1.0, "green": 0, "home": 0, "density": 0}
-        self.assertEqual(v2_index(values, CFG), 1.0)
+        values = {"transport": 1.0, "access": 0, "green": 0,
+                  "home": 0, "density": 0}
+        self.assertEqual(v2_index(values, CFG), dec("1.2"))
+
+    def test_max_access_bonus(self):
+        values = {"transport": 0, "access": 1.0, "green": 0,
+                  "home": 0, "density": 0}
+        self.assertEqual(v2_index(values, CFG), dec("7.5"))
 
     def test_max_density_penalty(self):
-        values = {"transport": 0, "green": 0, "home": 0, "density": 1.0}
-        self.assertEqual(v2_index(values, CFG), dec("3.7"))
+        values = {"transport": 0, "access": 0, "green": 0,
+                  "home": 0, "density": 1.0}
+        self.assertEqual(v2_index(values, CFG), dec("4.4"))
 
     def test_unknown_factor_adds_flag(self):
         block = build_v2_block(
             {"value": 0.5, "status": "ok", "class": "primary", "distance_m": 20},
+            {"value": 0.0, "status": "ok", "types": {}, "missing": []},
             {"value": 0.0, "status": "not_classified", "distance_m": 120},
             {"value": 0.6, "status": "ok", "rule": "panel_1970_1990", "year": 1985},
             {"value": 1.0, "status": "ok", "density_m2_per_ha": 5000},
             CFG,
         )
         self.assertIn("green:not_classified", block["flags"])
-        self.assertEqual(block["factors"]["transport"]["contribution"], -2.0)
-        self.assertEqual(block["index"], 2.9)
+        self.assertEqual(block["factors"]["transport"]["contribution"], -1.9)
+        self.assertEqual(block["index"], 3.2)
+
+    def test_missing_access_layer_adds_flags(self):
+        block = build_v2_block(
+            {"value": 0.0, "status": "outside", "class": None},
+            {"value": 0.7, "status": "not_classified", "types": {},
+             "missing": ["polyclinic"]},
+            {"value": 1.0, "status": "ok"},
+            {"value": 0.6, "status": "ok"},
+            {"value": 0.0, "status": "ok"},
+            CFG,
+        )
+        self.assertIn("access:not_classified", block["flags"])
+        self.assertIn("access:polyclinic:not_classified", block["flags"])
 
 
 if __name__ == "__main__":

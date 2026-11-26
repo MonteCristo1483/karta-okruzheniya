@@ -38,6 +38,8 @@ BATCH_SIZE = 5_000
 # Осторожный знаменатель для bbox-префильтра: на широте Москвы 1° долготы
 # ≈ 62 км, поэтому 60 км/° не даёт пропустить объект восточнее/западнее.
 METERS_PER_DEGREE = 60_000.0
+# UTM 37N: метрическая проекция для Москвы, чтобы мерить max до полигона в м.
+MOSCOW_UTM_SRID = 32637
 
 CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS scores (
@@ -107,16 +109,21 @@ JOIN linear l
 GROUP BY b.osm_id, l.class
 """
 
-# Зелень: ближайший парк в радиусе (площадь в данных не хранится -> NULL).
+# Зелень: парки-полигоны >= min_area, целиком в радиусе (max d до вершин <= R).
+# near_m — геодезическое расстояние; far_m — максимальное расстояние до
+# полигона в метрах через UTM 37N (Москва), чтобы не гонять вершины в цикле.
 V2_GREEN = """
-SELECT b.osm_id,
-       MIN(ST_Distance(b.geometry::geography, p.geometry::geography))
+SELECT b.osm_id, g.area_m2,
+       ST_Distance(b.geometry::geography, g.geometry::geography) AS near_m,
+       ST_MaxDistance(ST_Transform(b.geometry, {srid}),
+                      ST_Transform(g.geometry, {srid})) AS far_m
 FROM {scope} b
-JOIN poi p
-  ON p.type = 'park'
- AND p.geometry && ST_Expand(b.geometry, %s)
- AND ST_Distance(b.geometry::geography, p.geometry::geography) <= %s
-GROUP BY b.osm_id
+JOIN green_areas g
+  ON g.area_m2 >= %s
+ AND g.geometry && ST_Expand(b.geometry, %s)
+WHERE ST_DWithin(b.geometry::geography, g.geometry::geography, %s)
+  AND ST_MaxDistance(ST_Transform(b.geometry, {srid}),
+                     ST_Transform(g.geometry, {srid})) <= %s
 """
 
 # Дом: ближайшая запись реестра (год, серия, материал) в радиусе match_radius.
@@ -313,15 +320,45 @@ def collect_v2_transport(cur, scope: str, scope_params: list, cfg: dict) -> dict
 def collect_v2_green(cur, scope: str, scope_params: list, cfg: dict) -> dict:
     green = cfg["v2"]["green"]
     radius = float(green["radius_m"])
+    min_area = float(green["min_area_ha"]) * 10_000.0
     pad = radius / METERS_PER_DEGREE * 1.2
-    cur.execute(V2_GREEN.format(scope=scope), [*scope_params, pad, radius])
-    per_building: dict[int, dict] = {}
-    for osm_id, distance in cur.fetchall():
-        # Площадь парка в poi не хранится: честно помечаем unknown.
-        per_building[osm_id] = scoring_v2.green_quality(
-            [{"area_m2": None, "distance_m": float(distance)}], cfg
+    srid = MOSCOW_UTM_SRID
+    cur.execute(
+        V2_GREEN.format(scope=scope, srid=srid),
+        [*scope_params, min_area, pad, radius, radius],
+    )
+    per_building: dict[int, list[dict]] = {}
+    for osm_id, area_m2, near_m, far_m in cur.fetchall():
+        per_building.setdefault(osm_id, []).append({
+            "area_m2": float(area_m2),
+            "distance_m": float(near_m),
+            "max_distance_m": float(far_m),
+        })
+    return {
+        osm_id: scoring_v2.green_quality(parks, cfg)
+        for osm_id, parks in per_building.items()
+    }
+
+
+def collect_v2_access(cur, scope: str, scope_params: list, cfg: dict) -> dict:
+    """Ближайший POI каждого типа доступности; отсутствующий тип -> missing."""
+    types = cfg["v2"]["access"]["types"]
+    per_building: dict[int, dict[str, float]] = {}
+    for name, spec in types.items():
+        subtypes = spec.get("subtypes")
+        subtype_clause = "AND p.subtype = ANY(%s)" if subtypes else ""
+        params = [*scope_params, spec["poi_types"]]
+        if subtypes:
+            params.append(subtypes)
+        cur.execute(NEAREST_POI.format(scope=scope, subtype_clause=subtype_clause), params)
+        for osm_id, dist in cur.fetchall():
+            per_building.setdefault(osm_id, {})[name] = float(dist)
+    return {
+        osm_id: scoring_v2.access_quality(
+            {name: distances.get(name) for name in types}, cfg
         )
-    return per_building
+        for osm_id, distances in per_building.items()
+    }
 
 
 def collect_v2_home(cur, scope: str, scope_params: list, cfg: dict) -> dict:
@@ -374,12 +411,16 @@ def run(scope: str, scope_params: list, cfg: dict) -> int:
         v2_enabled = bool(cfg.get("v2", {}).get("enabled", False))
         if v2_enabled:
             v2_transport = collect_v2_transport(cur, scope, scope_params, cfg)
+            v2_access = collect_v2_access(cur, scope, scope_params, cfg)
             v2_green = collect_v2_green(cur, scope, scope_params, cfg)
             v2_home = collect_v2_home(cur, scope, scope_params, cfg)
             v2_density = collect_v2_density(cur, scope, scope_params, cfg)
 
         # Нет дороги в пределах максимального R — это известный ноль, не unknown.
         empty_transport = {"value": 0.0, "status": "outside", "class": None}
+        empty_access = scoring_v2.access_quality(
+            {name: None for name in cfg["v2"]["access"]["types"]}, cfg
+        )
         empty_green = scoring_v2.green_quality([], cfg)
         empty_home = scoring_v2.home_quality(None, None, None, cfg)
         empty_density = scoring_v2.density_pressure(None, cfg)
@@ -400,6 +441,7 @@ def run(scope: str, scope_params: list, cfg: dict) -> int:
             if v2_enabled:
                 v2_block = scoring_v2.build_v2_block(
                     v2_transport.get(osm_id, empty_transport),
+                    v2_access.get(osm_id, empty_access),
                     v2_green.get(osm_id, empty_green),
                     v2_home.get(osm_id, empty_home),
                     v2_density.get(osm_id, empty_density),

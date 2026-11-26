@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Скоринг v2 (docs/METHODOLOGY-V2.md): четыре фактора.
+"""Скоринг v2 (docs/METHODOLOGY-V2.md): пять факторов.
 
 Чистые функции без БД — их проверяют юнит-тесты. Все числа (веса, радиусы,
 пороги, значения) берутся из config/scoring.json, блок `v2`.
 
 Факторы (value 0..1):
   transport — давление близости транспорта (1 = дорога вплотную, penalty);
+  access    — пешая доступность POI (1 = всё вплотную, bonus);
   green     — парк >= 0,5 га целиком в радиусе 300 м (1 = бонус);
   home      — под-индекс по году + серии + материалу (1 = новостройка);
   density   — давление плотности (1 = переуплотнение, penalty).
@@ -71,11 +72,16 @@ def best_transport_quality(per_class: dict[str, float], cfg: dict) -> dict:
 
 
 def green_quality(parks: list[dict], cfg: dict) -> dict:
-    """Парки: [{area_m2: float|None, distance_m: float}].
+    """Парки: [{area_m2, distance_m, max_distance_m?}].
+
+    distance_m — минимальное расстояние до полигона, max_distance_m — до самой
+    дальней вершины (полигон целиком в радиусе, если max_distance_m <= R).
+    Для старых данных без полигона max_distance_m нет -> сравниваем
+    distance_m + эквивалентный радиус sqrt(area/pi) <= R.
 
     Полный бонус, если известная площадь >= min_area_ha и парк целиком внутри
-    радиуса (distance + эквивалентный радиус <= R). Неизвестная площадь
-    парка в радиусе -> not_classified (0). Нет парка в радиусе -> 0 (known).
+    радиуса. Неизвестная площадь парка в радиусе -> not_classified (0).
+    Нет парка в радиусе -> 0 (known_zero), ближайший дальше радиуса -> outside.
     """
     green = _cfg(cfg)["green"]
     radius = float(green["radius_m"])
@@ -95,8 +101,12 @@ def green_quality(parks: list[dict], cfg: dict) -> dict:
             continue
         if float(area) < min_area:
             continue
-        equivalent_radius = math.sqrt(float(area) / math.pi)
-        if distance + equivalent_radius <= radius:
+        if park.get("max_distance_m") is not None:
+            inside = float(park["max_distance_m"]) <= radius
+        else:
+            equivalent_radius = math.sqrt(float(area) / math.pi)
+            inside = distance + equivalent_radius <= radius
+        if inside:
             best = 1.0
     if best > 0:
         status = "ok"
@@ -108,6 +118,44 @@ def green_quality(parks: list[dict], cfg: dict) -> dict:
         "value": best * float(green["value"]),
         "status": status,
         "distance_m": round(nearest, 1) if nearest is not None else None,
+    }
+
+
+def access_quality(distances: dict[str, float | None], cfg: dict) -> dict:
+    """Доступность: сумма weight * max(0, 1 - d/R) по типам, веса в сумме 1.
+
+    distances — {тип: расстояние до ближайшего POI | None, если слоя нет}.
+    Если слоя типа нет в данных, его вес не участвует: веса нормируются на
+    доступные типы, чтобы отсутствие данных не штрафовало всех. Такие типы
+    попадают в `missing` и дают флаг access:<type>:not_classified.
+    """
+    access = _cfg(cfg)["access"]
+    total_weight = 0.0
+    total = 0.0
+    per_type: dict[str, dict] = {}
+    missing: list[str] = []
+    for name, spec in access["types"].items():
+        weight = float(spec["weight"])
+        distance = distances.get(name)
+        if distance is None:
+            missing.append(name)
+            continue
+        radius = float(spec["radius_m"])
+        component = max(0.0, min(1.0, 1.0 - float(distance) / radius))
+        total += weight * component
+        total_weight += weight
+        per_type[name] = {
+            "distance_m": round(float(distance), 1),
+            "radius_m": radius,
+            "component": round(component, 4),
+            "weight": weight,
+        }
+    value = total / total_weight if total_weight > 0 else 0.0
+    return {
+        "value": round(value, 4),
+        "status": "ok" if not missing else "not_classified",
+        "types": per_type,
+        "missing": missing,
     }
 
 
@@ -206,6 +254,7 @@ def v2_index(factor_values: dict[str, float], cfg: dict) -> Decimal:
 
 def build_v2_block(
     transport: dict,
+    access: dict,
     green: dict,
     home: dict,
     density: dict,
@@ -215,6 +264,7 @@ def build_v2_block(
     v2 = _cfg(cfg)
     values = {
         "transport": transport["value"],
+        "access": access["value"],
         "green": green["value"],
         "home": home["value"],
         "density": density["value"],
@@ -223,6 +273,7 @@ def build_v2_block(
     flags: list[str] = []
     for name, entry in (
         ("transport", transport),
+        ("access", access),
         ("green", green),
         ("home", home),
         ("density", density),
@@ -238,7 +289,12 @@ def build_v2_block(
             ),
             **{key: value for key, value in entry.items() if key != "value"},
         }
-        if entry.get("status") == "not_classified":
+        if name == "access":
+            for missing in entry.get("missing") or []:
+                flags.append(f"access:{missing}:not_classified")
+            if entry.get("status") == "not_classified":
+                flags.append("access:not_classified")
+        elif entry.get("status") == "not_classified":
             flags.append(f"{name}:not_classified")
     return {
         "index": float(v2_index(values, cfg)),

@@ -55,23 +55,30 @@ def main(argv: list[str] | None = None) -> int:
 
         scope = "(SELECT * FROM buildings WHERE osm_id = ANY(%s))"
         transport = scoring.collect_v2_transport(cur, scope, [ids], cfg)
+        access = scoring.collect_v2_access(cur, scope, [ids], cfg)
         green = scoring.collect_v2_green(cur, scope, [ids], cfg)
         home = scoring.collect_v2_home(cur, scope, [ids], cfg)
         density = scoring.collect_v2_density(cur, scope, [ids], cfg)
 
     empty_transport = {"value": 0.0, "status": "outside", "class": None}
+    empty_access = scoring_v2.access_quality(
+        {name: None for name in cfg["v2"]["access"]["types"]}, cfg
+    )
     empty_green = scoring_v2.green_quality([], cfg)
     empty_home = scoring_v2.home_quality(None, None, None, cfg)
     empty_density = scoring_v2.density_pressure(None, cfg)
 
     after: list[float] = []
     deltas: list[float] = []
-    factor_values = {"transport": [], "green": [], "home": [], "density": []}
-    flags = {"transport:not_classified": 0, "green:not_classified": 0,
-             "home:not_classified": 0, "density:not_classified": 0}
+    factor_values = {"transport": [], "access": [], "green": [], "home": [],
+                     "density": []}
+    flags = {"transport:not_classified": 0, "access:not_classified": 0,
+             "green:not_classified": 0, "home:not_classified": 0,
+             "density:not_classified": 0}
     for osm_id in ids:
         block = scoring_v2.build_v2_block(
             transport.get(osm_id, empty_transport),
+            access.get(osm_id, empty_access),
             green.get(osm_id, empty_green),
             home.get(osm_id, empty_home),
             density.get(osm_id, empty_density),

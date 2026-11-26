@@ -1,6 +1,6 @@
 {
   "generated_at": "2026-11-26",
-  "note": "Golden v2: 18 якорей четырёх факторов METHODOLOGY-V2. Источники: OSM/linear (класс и расстояние), реестр годов, OSM/footprints (плотность), OSM/poi parks (площадь парка в данных не хранится -> not_classified).",
+  "note": "Golden v2: 18 якорей четырёх факторов METHODOLOGY-V2. Источники: OSM/linear (класс и расстояние), реестр годов, OSM/footprints (плотность), OSM/green_areas (полигон и площадь парка в м²).",
   "facts": [
     {
       "building_id": 822220756,
@@ -226,18 +226,17 @@
       "retrieved_at": "2026-11-26"
     },
     {
-      "building_id": 1065235,
-      "address": "улица Талалихина, 33 с1",
+      "building_id": 77667110,
+      "address": "к819",
       "factor": "green",
       "type": "factor",
-      "expect": "zero",
-      "distance_m": 244.6,
+      "expect": "positive",
+      "distance_m": 22.8,
       "tolerance_m": 5.0,
       "check_distance": true,
-      "source": "osm/poi parks",
-      "confidence": "medium",
-      "retrieved_at": "2026-11-26",
-      "flag": "green:not_classified"
+      "source": "osm/green_areas",
+      "confidence": "high",
+      "retrieved_at": "2026-11-26"
     }
   ]
 }

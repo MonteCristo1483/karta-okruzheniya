@@ -6,7 +6,8 @@
 Факты проверяются `check_golden.py` по breakdown.v2.factors.
 
   18 фактов: транспорт 10 (6 «есть», 4 «нет»), дом 5 (3 с годом,
-  2 без года), плотность 2 (высокая/низкая), зелень 1 (площадь неизвестна).
+  2 без года), плотность 2 (высокая/низкая), зелень 1 (полигон ≥0,5 га
+  целиком в 300 м — positive, если такой дом есть, иначе zero).
 
   python pipeline/build_golden_v2.py
 """
@@ -172,16 +173,25 @@ def build(cur) -> list[dict]:
     if low:
         add(low[0], "density", "zero", 0, "osm/footprints", "medium", False)
 
-    # 4. Зелень: парк в 300 м, площадь неизвестна -> not_classified.
+    # 4. Зелень: полигон >= 0,5 га целиком в 300 м. Есть положительный
+    # пример — якорим его; иначе дом без парка (known_zero/outside).
     green = scoring.collect_v2_green(
         cur, "(SELECT * FROM buildings WHERE osm_id = ANY(%s))", [ids], CONFIG
     )
-    flagged = [by_id[osm_id] | {"entry": entry}
-               for osm_id, entry in green.items()
-               if entry["status"] == "not_classified"]
-    if flagged:
-        add(flagged[0], "green", "zero", flagged[0]["entry"]["distance_m"],
-            "osm/poi parks", "medium", True, flag="green:not_classified")
+    positive_green = [by_id[osm_id] | {"entry": entry}
+                      for osm_id, entry in green.items()
+                      if entry["status"] == "ok"]
+    zero_green = [by_id[osm_id] | {"entry": entry}
+                  for osm_id, entry in green.items()
+                  if entry["status"] in ("known_zero", "outside")]
+    if positive_green:
+        building = positive_green[0]
+        add(building, "green", "positive", building["entry"]["distance_m"],
+            "osm/green_areas", "high", True)
+    elif zero_green:
+        building = zero_green[0]
+        add(building, "green", "zero", building["entry"]["distance_m"],
+            "osm/green_areas", "high", True)
 
     return facts
 
@@ -196,8 +206,8 @@ def main() -> int:
         "generated_at": date.today().isoformat(),
         "note": ("Golden v2: 18 якорей четырёх факторов METHODOLOGY-V2. "
                  "Источники: OSM/linear (класс и расстояние), реестр годов, "
-                 "OSM/footprints (плотность), OSM/poi parks (площадь парка "
-                 "в данных не хранится -> not_classified)."),
+                 "OSM/footprints (плотность), OSM/green_areas (полигон и "
+                 "площадь парка в м²)."),
         "facts": facts,
     }
     OUT.parent.mkdir(parents=True, exist_ok=True)
